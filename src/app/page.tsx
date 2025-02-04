@@ -1,6 +1,6 @@
-"use client"
+// "use client"
 
-import { useState } from "react"
+// import { useState } from "react"
 import {
   ChevronDown,
   Clock,
@@ -22,48 +22,81 @@ import {
   HelpCircle,
   UserCircle,
   Settings,
-} from "lucide-react"
-import { Button } from "~/components/ui/button"
-import { Input } from "~/components/ui/input"
+} from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { db } from "~/server/db";
 
 const mockData = [
-  { id: 1, name: "John Doe", email: "john@example.com", date: "2023-05-01", status: "Active" },
-  { id: 2, name: "Jane Smith", email: "jane@example.com", date: "2023-05-02", status: "Inactive" },
-  { id: 3, name: "Bob Johnson", email: "bob@example.com", date: "2023-05-03", status: "Active" },
-  { id: 4, name: "Alice Brown", email: "alice@example.com", date: "2023-05-04", status: "Pending" },
-  { id: 5, name: "Charlie Davis", email: "charlie@example.com", date: "2023-05-05", status: "Active" },
-]
+  {
+    id: 1,
+    name: "John Doe",
+    email: "john@example.com",
+    date: "2023-05-01",
+    status: "Active",
+  },
+  {
+    id: 2,
+    name: "Jane Smith",
+    email: "jane@example.com",
+    date: "2023-05-02",
+    status: "Inactive",
+  },
+  {
+    id: 3,
+    name: "Bob Johnson",
+    email: "bob@example.com",
+    date: "2023-05-03",
+    status: "Active",
+  },
+  {
+    id: 4,
+    name: "Alice Brown",
+    email: "alice@example.com",
+    date: "2023-05-04",
+    status: "Pending",
+  },
+  {
+    id: 5,
+    name: "Charlie Davis",
+    email: "charlie@example.com",
+    date: "2023-05-05",
+    status: "Active",
+  },
+];
 
 const columns = [
   { id: "name", label: "Name", width: 200 },
   { id: "email", label: "Email", width: 250 },
   { id: "date", label: "Date", width: 150 },
   { id: "status", label: "Status", width: 150 },
-]
+];
 
-export default function AirtableClone() {
-  const [data, setData] = useState(mockData)
-  const [selectedCell, setSelectedCell] = useState<{ rowId: number | null; colId: string | null }>({
-    rowId: null,
-    colId: null,
-  })
-  const [selectedView, setSelectedView] = useState("grid")
+export default async function Page() {
+  const data = await db.query.posts.findMany();
+  console.log(data);
+  // const [data, setData] = useState(mockData)
+  // const [selectedCell, setSelectedCell] = useState<{ rowId: number | null; colId: string | null }>({
+  //   rowId: null,
+  //   colId: null,
+  // })
+  // const [selectedView, setSelectedView] = useState("grid")
 
-  const handleCellClick = (rowId: number, colId: string) => {
-    setSelectedCell({ rowId, colId })
-  }
+  // const handleCellClick = (rowId: number, colId: string) => {
+  //   setSelectedCell({ rowId, colId })
+  // }
 
-  const handleCellChange = (rowId: number, colId: string, value: string) => {
-    const newData = data.map((row) => (row.id === rowId ? { ...row, [colId]: value } : row))
-    setData(newData)
-  }
+  // const handleCellChange = (rowId: number, colId: string, value: string) => {
+  //   const newData = data.map((row) => (row.id === rowId ? { ...row, [colId]: value } : row))
+  //   setData(newData)
+  // }
 
   return (
     <div className="flex h-screen flex-col bg-white">
       {/* Top Navigation */}
       <nav className="flex items-center border-b px-4 py-2">
         <div className="flex items-center gap-8">
-          <Button variant="ghost" className="font-semibold gap-2">
+          <Button variant="ghost" className="gap-2 font-semibold">
             First
             <ChevronDown className="h-4 w-4" />
           </Button>
@@ -94,7 +127,7 @@ export default function AirtableClone() {
       {/* Secondary Navigation */}
       <div className="flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" className="font-semibold gap-2">
+          <Button variant="ghost" className="gap-2 font-semibold">
             Table 1
             <ChevronDown className="h-4 w-4" />
           </Button>
@@ -122,8 +155,13 @@ export default function AirtableClone() {
             </Button>
           </div>
           <div className="mb-4">
-            <Input type="text" placeholder="Find a view" className="h-8 bg-gray-50" />
+            <Input
+              type="text"
+              placeholder="Find a view"
+              className="h-8 bg-gray-50"
+            />
           </div>
+          {/* Views 
           <div className="space-y-1">
             <Button
               variant={selectedView === "grid" ? "secondary" : "ghost"}
@@ -134,8 +172,11 @@ export default function AirtableClone() {
               Grid view
             </Button>
           </div>
+          */}
           <div className="mt-8">
-            <div className="mb-2 text-sm font-medium text-gray-500">Create...</div>
+            <div className="mb-2 text-sm font-medium text-gray-500">
+              Create...
+            </div>
             <div className="space-y-1">
               <Button variant="ghost" className="w-full justify-start gap-2">
                 <Grid className="h-4 w-4" />
@@ -236,7 +277,10 @@ export default function AirtableClone() {
 
               {/* Rows */}
               {[1, 2, 3].map((row) => (
-                <div key={row} className="grid grid-cols-5 border-b hover:bg-blue-50/50">
+                <div
+                  key={row}
+                  className="grid grid-cols-5 border-b hover:bg-blue-50/50"
+                >
                   <div className="flex items-center border-r p-2">
                     <div className="mr-2 w-6 text-gray-400">{row}</div>
                   </div>
@@ -261,6 +305,5 @@ export default function AirtableClone() {
         </div>
       </div>
     </div>
-  )
+  );
 }
-
