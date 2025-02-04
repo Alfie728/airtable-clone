@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 
 export async function GET(
   request: Request,
-  { params }: { params: { baseId: string } },
+  { params }: { params: Record<string, string | string[]> },
 ) {
   try {
     const { userId } = await auth();
@@ -14,8 +14,9 @@ export async function GET(
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
+    const baseId = params.baseId as string;
     const base = await db.query.bases.findFirst({
-      where: eq(bases.id, params.baseId),
+      where: eq(bases.id, baseId),
     });
 
     if (!base) {
