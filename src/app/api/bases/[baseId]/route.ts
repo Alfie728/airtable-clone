@@ -4,13 +4,10 @@ import { db } from "~/server/db";
 import { bases } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 
-type Props = {
-  params: {
-    baseId: string;
-  };
-};
-
-export async function GET(request: Request, context: Props) {
+export async function GET(
+  request: Request,
+  { params }: { params: { baseId: string } },
+) {
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -18,7 +15,7 @@ export async function GET(request: Request, context: Props) {
     }
 
     const base = await db.query.bases.findFirst({
-      where: eq(bases.id, context.params.baseId),
+      where: eq(bases.id, params.baseId),
     });
 
     if (!base) {
