@@ -93,6 +93,9 @@ export default async function Page() {
 
   return (
     <div className="flex h-screen flex-col bg-white">
+      {data.map((post) => (
+        <div key={post.id}>{post.name}</div>
+      ))}
       {/* Top Navigation */}
       <nav className="flex items-center border-b px-4 py-2">
         <div className="flex items-center gap-8">
