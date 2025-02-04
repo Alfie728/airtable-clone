@@ -3,12 +3,18 @@
 import { ChevronDown, Clock, HelpCircle, UserCircle } from "lucide-react";
 import { Button } from "~/components/ui/button";
 
-export function TopNavigation() {
+interface TopNavigationProps {
+  baseName?: string;
+}
+
+export function TopNavigation({
+  baseName = "Untitled Base",
+}: TopNavigationProps) {
   return (
     <nav className="flex items-center border-b px-4 py-2">
       <div className="flex items-center gap-8">
         <Button variant="ghost" className="gap-2 font-semibold">
-          First
+          {baseName}
           <ChevronDown className="h-4 w-4" />
         </Button>
         <div className="flex items-center gap-4">

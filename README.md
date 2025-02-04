@@ -8,14 +8,13 @@
 - [ ] Set up authentication with Clerk
 
 ## Database Schema & Models
-- [ ] Implement base model
-- [ ] Implement table model
-- [ ] Implement column model
-- [ ] Implement row model
-- [ ] Implement cell model
-- [ ] Implement view model
-- [ ] Set up database indexes
-- [ ] Configure database migrations
+- [x] Implement base model
+- [x] Implement table model
+- [x] Implement column model
+- [x] Implement row model
+- [x] Implement cell model
+- [x] Implement view model
+- [x] Set up database indexes
 
 ## Authentication & Authorization
 - [ ] Set up user authentication flow
