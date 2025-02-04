@@ -13,6 +13,8 @@ const mockData = [
     id: 1,
     name: "John Doe",
     email: "john@example.com",
+    notes:
+      "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
     date: "2023-05-01",
     status: "Active",
   },
@@ -20,6 +22,8 @@ const mockData = [
     id: 2,
     name: "Jane Smith",
     email: "jane@example.com",
+    notes:
+      "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
     date: "2023-05-02",
     status: "Inactive",
   },
@@ -27,6 +31,8 @@ const mockData = [
     id: 3,
     name: "Bob Johnson",
     email: "bob@example.com",
+    notes:
+      "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
     date: "2023-05-03",
     status: "Active",
   },
@@ -34,6 +40,8 @@ const mockData = [
     id: 4,
     name: "Alice Brown",
     email: "alice@example.com",
+    notes:
+      "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
     date: "2023-05-04",
     status: "Pending",
   },
@@ -41,6 +49,8 @@ const mockData = [
     id: 5,
     name: "Charlie Davis",
     email: "charlie@example.com",
+    notes:
+      "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
     date: "2023-05-05",
     status: "Active",
   },
@@ -54,8 +64,7 @@ const mockData = [
 // ];
 
 export default async function Page() {
-  const data = await db.query.posts.findMany();
-  console.log(data);
+  // const data = await db.query.posts.findMany();
 
   return (
     <div className="flex h-screen flex-col bg-white">

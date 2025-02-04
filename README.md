@@ -2,11 +2,10 @@
 
 ## Project Setup
 - [x] Initialize T3 Stack project
-- [ ] Set up PostgreSQL database with Neon
-- [ ] Configure Drizzle ORM
+- [x] Set up PostgreSQL database with Neon
+- [x] Configure Drizzle ORM
+- [x] Configure deployment on Vercel
 - [ ] Set up authentication with Clerk
-- [ ] Configure deployment on Vercel
-- [ ] Configure GitHub Actions for CI/CD
 
 ## Database Schema & Models
 - [ ] Implement base model

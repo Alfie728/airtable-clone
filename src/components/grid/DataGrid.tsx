@@ -9,6 +9,7 @@ interface DataGridProps {
     id: number;
     name: string;
     email: string;
+    notes: string;
     date: string;
     status: string;
   }[];
@@ -45,19 +46,19 @@ export function DataGrid({ data: initialData }: DataGridProps) {
           <ChevronDown className="h-4 w-4" />
         </div>
         <div className="flex items-center gap-2 border-r p-2">
+          Email
+          <ChevronDown className="h-4 w-4" />
+        </div>
+        <div className="flex items-center gap-2 border-r p-2">
           Notes
           <ChevronDown className="h-4 w-4" />
         </div>
         <div className="flex items-center gap-2 border-r p-2">
-          Assignee
-          <ChevronDown className="h-4 w-4" />
-        </div>
-        <div className="flex items-center gap-2 border-r p-2">
-          Status
+          Date
           <ChevronDown className="h-4 w-4" />
         </div>
         <div className="flex items-center gap-2 p-2">
-          Notes 2
+          Status
           <ChevronDown className="h-4 w-4" />
         </div>
       </div>
@@ -69,10 +70,10 @@ export function DataGrid({ data: initialData }: DataGridProps) {
           className="grid grid-cols-5 border-b hover:bg-blue-50/50"
         >
           <div className="flex items-center border-r p-2">
-            <div className="mr-2 w-6 text-gray-400">{row.id}</div>
+            <div className="mr-2">{row.name}</div>
           </div>
-          <div className="border-r p-2">{row.name}</div>
           <div className="border-r p-2">{row.email}</div>
+          <div className="border-r p-2">{row.notes}</div>
           <div className="border-r p-2">{row.date}</div>
           <div className="p-2">{row.status}</div>
         </div>
