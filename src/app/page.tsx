@@ -9,6 +9,7 @@ import { SecondaryNavigation } from "~/components/layout/SecondaryNavigation";
 import { Sidebar } from "~/components/layout/Sidebar";
 import { GridControls } from "~/components/grid/GridControls";
 import { DataGrid } from "~/components/grid/DataGrid";
+import { auth } from "@clerk/nextjs/server";
 
 interface GridRow {
   id: string;
@@ -100,6 +101,7 @@ async function getBaseData(baseId: string): Promise<TableData[] | null> {
 }
 
 export default async function Page() {
+  const { userId: clerkId } = await auth();
   // For now, we'll use the first base in the database
   const [firstBase] = await db.select().from(tables).limit(1);
   if (!firstBase) {
