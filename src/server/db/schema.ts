@@ -33,6 +33,7 @@ export const users = createTable(
   "users",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    clerkId: text("clerk_id").notNull().unique(),
     email: text("email").notNull().unique(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
@@ -43,6 +44,7 @@ export const users = createTable(
   },
   (users) => ({
     emailIndex: uniqueIndex("email_idx").on(users.email),
+    clerkIdIndex: uniqueIndex("clerk_id_idx").on(users.clerkId),
   }),
 );
 
@@ -126,7 +128,7 @@ export const columns = createTable(
     isSortable: boolean("is_sortable").default(true).notNull(),
     isVisible: boolean("is_visible").default(true).notNull(),
     defaultValue: text("default_value"),
-    validation: jsonb("validation").default({}).notNull(), // JSON validation rules
+    validation: jsonb("validation").default({}).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),
@@ -169,14 +171,14 @@ export const cells = createTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     value: text("value").notNull(),
-    displayValue: text("display_value"), // Formatted value for display
+    displayValue: text("display_value"),
     rowId: uuid("row_id")
       .references(() => rows.id)
       .notNull(),
     columnId: uuid("column_id")
       .references(() => columns.id)
       .notNull(),
-    searchVector: text("search_vector").notNull().$type<"tsvector">(), // For full text search
+    searchVector: text("search_vector").notNull().$type<"tsvector">(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),
@@ -205,8 +207,8 @@ export const views = createTable(
       .references(() => tables.id)
       .notNull(),
     isDefault: boolean("is_default").default(false).notNull(),
-    columnsOrder: jsonb("columns_order").default([]).notNull(), // Array of column IDs
-    hiddenColumns: jsonb("hidden_columns").default([]).notNull(), // Array of column IDs
+    columnsOrder: jsonb("columns_order").default([]).notNull(),
+    hiddenColumns: jsonb("hidden_columns").default([]).notNull(),
     rowsPerPage: integer("rows_per_page").default(100).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
@@ -261,7 +263,7 @@ export const viewSorts = createTable(
       .references(() => columns.id)
       .notNull(),
     direction: sortDirectionEnum("direction").notNull(),
-    order: integer("order").notNull(), // Priority of sort
+    order: integer("order").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),
@@ -284,7 +286,7 @@ export const auditLogs = createTable("audit_logs", {
     .references(() => users.id)
     .notNull(),
   action: text("action").notNull(),
-  entityType: text("entity_type").notNull(), // 'cell', 'row', 'column', etc.
+  entityType: text("entity_type").notNull(),
   entityId: uuid("entity_id").notNull(),
   oldValue: jsonb("old_value"),
   newValue: jsonb("new_value"),
