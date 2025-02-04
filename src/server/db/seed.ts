@@ -177,6 +177,7 @@ async function seed(baseId?: string) {
       .insert(users)
       .values({
         email: faker.internet.email(),
+        clerkId: faker.string.uuid(),
       })
       .returning();
 
