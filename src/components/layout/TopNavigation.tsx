@@ -1,6 +1,12 @@
 "use client";
 
-import { ChevronDown, Clock, HelpCircle, UserCircle } from "lucide-react";
+import {
+  SignedOut,
+  SignInButton,
+  SignedIn,
+  UserButton,
+} from "@clerk/nextjs";
+import { ChevronDown, Clock, HelpCircle } from "lucide-react";
 import { Button } from "~/components/ui/button";
 
 interface TopNavigationProps {
@@ -35,9 +41,14 @@ export function TopNavigation({
           Share
           <ChevronDown className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon">
-          <UserCircle className="h-5 w-5" />
-        </Button>
+        <div className="flex items-center">
+          <SignedOut>
+            <SignInButton />
+          </SignedOut>
+          <SignedIn>
+            <UserButton />
+          </SignedIn>
+        </div>
       </div>
     </nav>
   );

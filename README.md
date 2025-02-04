@@ -5,7 +5,7 @@
 - [x] Set up PostgreSQL database with Neon
 - [x] Configure Drizzle ORM
 - [x] Configure deployment on Vercel
-- [ ] Set up authentication with Clerk
+- [x] Set up authentication with Clerk
 
 ## Database Schema & Models
 - [x] Implement base model
