@@ -4,19 +4,21 @@ import { db } from "~/server/db";
 import { bases } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 
-export async function GET(
-  request: Request,
-  { params }: { params: Record<string, string | string[]> },
-) {
+type Props = {
+  params: {
+    baseId: string;
+  };
+};
+
+export async function GET(request: Request, context: Props) {
   try {
     const { userId } = await auth();
     if (!userId) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const baseId = params.baseId as string;
     const base = await db.query.bases.findFirst({
-      where: eq(bases.id, baseId),
+      where: eq(bases.id, context.params.baseId),
     });
 
     if (!base) {
