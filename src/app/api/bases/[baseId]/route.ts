@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs";
-import { db } from "@/server/db";
-import { bases } from "@/server/db/schema";
+import { auth } from "@clerk/nextjs/server";
+import { db } from "~/server/db";
+import { bases } from "~/server/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function GET(
@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: { baseId: string } },
 ) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
