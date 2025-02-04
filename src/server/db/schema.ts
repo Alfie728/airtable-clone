@@ -32,7 +32,7 @@ export const filterOperatorEnum = pgEnum("filter_operator", [
 export const users = createTable(
   "users",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: text("id").primaryKey(),
     email: text("email").notNull().unique(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .default(sql`CURRENT_TIMESTAMP`)
@@ -49,7 +49,7 @@ export const users = createTable(
 // User Settings
 export const userSettings = createTable("user_settings", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
+  userId: text("user_id")
     .references(() => users.id)
     .notNull(),
   theme: text("theme").default("light").notNull(),
@@ -70,7 +70,7 @@ export const bases = createTable(
     id: uuid("id").defaultRandom().primaryKey(),
     name: text("name").notNull(),
     description: text("description"),
-    userId: uuid("user_id")
+    userId: text("user_id")
       .references(() => users.id)
       .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -280,7 +280,7 @@ export const viewSorts = createTable(
 // Audit Logs
 export const auditLogs = createTable("audit_logs", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
+  userId: text("user_id")
     .references(() => users.id)
     .notNull(),
   action: text("action").notNull(),
