@@ -102,3 +102,18 @@ export async function createBase(formData: FormData) {
     throw error instanceof Error ? error : new Error("Failed to create base");
   }
 }
+
+export async function getBaseById(baseId: string) {
+  try {
+    const [base] = await db
+      .select()
+      .from(bases)
+      .where(eq(bases.id, baseId))
+      .limit(1);
+
+    return base;
+  } catch (error) {
+    console.error("Error getting base:", error);
+    return null;
+  }
+}

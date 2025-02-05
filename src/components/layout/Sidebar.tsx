@@ -17,10 +17,15 @@ import type { tables } from "~/server/db/schema";
 
 interface SidebarProps {
   tables?: Array<typeof tables.$inferSelect>;
-  onTableClick?: (tableId: string) => void;
+  currentTableId?: string | null;
+  onTableSelect?: (tableId: string) => void;
 }
 
-export function Sidebar({ tables }: SidebarProps) {
+export function Sidebar({
+  tables = [],
+  currentTableId,
+  onTableSelect,
+}: SidebarProps) {
   const [selectedView, setSelectedView] = useState("grid");
 
   return (
@@ -39,14 +44,17 @@ export function Sidebar({ tables }: SidebarProps) {
         />
       </div>
       <div className="space-y-1">
-        <Button
-          variant={selectedView === "grid" ? "secondary" : "ghost"}
-          className="w-full justify-start gap-2"
-          onClick={() => setSelectedView("grid")}
-        >
-          <Grid className="h-4 w-4" />
-          Grid view
-        </Button>
+        {tables.map((table) => (
+          <Button
+            key={table.id}
+            variant={currentTableId === table.id ? "secondary" : "ghost"}
+            className="w-full justify-start gap-2"
+            onClick={() => onTableSelect?.(table.id)}
+          >
+            <Grid className="h-4 w-4" />
+            {table.name}
+          </Button>
+        ))}
       </div>
       <div className="mt-8">
         <div className="mb-2 text-sm font-medium text-gray-500">Create...</div>

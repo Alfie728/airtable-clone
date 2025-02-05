@@ -1,135 +1,129 @@
-import { auth } from "@clerk/nextjs/server";
-import { notFound } from "next/navigation";
-import { db } from "~/server/db";
-import { eq } from "drizzle-orm";
-import { bases, tables, columns, rows, cells } from "~/server/db/schema";
+"use client";
+
+import { useEffect, useState } from "react";
+import { notFound, useParams } from "next/navigation";
+import type { tables } from "~/server/db/schema";
 import { TopNavigation } from "~/components/layout/TopNavigation";
-import { getUserByClerkId } from "~/lib/actions/users.action";
-import { DataGrid } from "~/components/grid/DataGrid";
+import { EnhancedDataGrid } from "~/components/grid/EnhancedDataGrid";
 import { GridControls } from "~/components/grid/GridControls";
 import { Sidebar } from "~/components/layout/Sidebar";
-
-export const dynamic = "force-dynamic";
-
-interface BasePageProps {
-  params: {
-    baseId: string;
-  };
-}
-
-interface GridRow {
-  id: string;
-  [key: string]: string | number;
-}
-
-interface TableColumn {
-  id: string;
-  name: string;
-  type: "text" | "number";
-  order: number;
-  width: number;
-  isSearchable: boolean;
-  isSortable: boolean;
-  isVisible: boolean;
-}
+import { SecondaryNavigation } from "~/components/layout/SecondaryNavigation";
+import { getTables, getTableData } from "~/lib/actions/tables.action";
 
 interface TableData {
   id: string;
   name: string;
-  columns: TableColumn[];
-  data: GridRow[];
+  columns: {
+    id: string;
+    name: string;
+    type: "text" | "number";
+    order: number;
+    width: number;
+    isSearchable: boolean;
+    isSortable: boolean;
+    isVisible: boolean;
+  }[];
+  data: {
+    id: string;
+    [key: string]: string | number;
+  }[];
 }
 
-async function getTableData(
-  tableId: string,
-  tableName: string,
-): Promise<TableData | null> {
-  // Get all columns for this table
-  const tableColumns = await db
-    .select()
-    .from(columns)
-    .where(eq(columns.tableId, tableId))
-    .orderBy(columns.order);
+interface BaseData {
+  id: string;
+  name: string;
+  tables: Array<typeof tables.$inferSelect>;
+  currentTable: TableData | null;
+}
 
-  // Get all rows for this table
-  const tableRows = await db
-    .select()
-    .from(rows)
-    .where(eq(rows.tableId, tableId))
-    .orderBy(rows.order);
+export default function BasePage() {
+  const params = useParams();
+  const [base, setBase] = useState<BaseData | null>(null);
+  const [currentTableId, setCurrentTableId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Get all cells for these rows
-  const tableCells = await Promise.all(
-    tableRows.map(async (row) => {
-      const rowCells = await db
-        .select()
-        .from(cells)
-        .where(eq(cells.rowId, row.id));
-      return rowCells;
-    }),
-  );
+  // Load base and tables
+  useEffect(() => {
+    async function loadBase() {
+      try {
+        const baseId = params.baseId as string;
+        const { success, tables: baseTables } = await getTables(baseId);
 
-  // Transform the data into the format expected by DataGrid
-  const gridData: GridRow[] = tableRows.map((row, rowIndex) => {
-    const rowData: GridRow = { id: row.id };
-    const rowCells = tableCells[rowIndex];
-    if (rowCells) {
-      rowCells.forEach((cell) => {
-        const column = tableColumns.find((col) => col.id === cell.columnId);
-        if (column) {
-          rowData[column.name.toLowerCase().replace(/\s+/g, "_")] = cell.value;
+        if (!success || !baseTables) {
+          notFound();
         }
-      });
+
+        setBase((prev) => ({
+          id: baseId,
+          name: prev?.name ?? "My Base",
+          tables: baseTables,
+          currentTable: prev?.currentTable ?? null,
+        }));
+
+        // Set initial table ID if not set
+        if (!currentTableId && baseTables?.[0]?.id) {
+          setCurrentTableId(baseTables[0].id);
+        }
+      } catch (error) {
+        console.error("Error loading base:", error);
+      } finally {
+        setIsLoading(false);
+      }
     }
-    return rowData;
-  });
 
-  return {
-    id: tableId,
-    name: tableName,
-    columns: tableColumns,
-    data: gridData,
+    void loadBase();
+  }, [params.baseId]);
+
+  // Load table data when table ID changes
+  useEffect(() => {
+    async function loadTableData() {
+      if (!currentTableId || !base) return;
+
+      try {
+        const tableToLoad = base.tables.find((t) => t.id === currentTableId);
+        if (!tableToLoad) return;
+
+        const { success, table: tableData } = await getTableData(
+          tableToLoad.id,
+          tableToLoad.name,
+        );
+
+        if (success && tableData) {
+          setBase((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  currentTable: tableData,
+                }
+              : null,
+          );
+        }
+      } catch (error) {
+        console.error("Error loading table data:", error);
+      }
+    }
+
+    void loadTableData();
+  }, [currentTableId, base?.tables]);
+
+  const handleTableCreated = (newTable: typeof tables.$inferSelect) => {
+    setBase((prev) =>
+      prev
+        ? {
+            ...prev,
+            tables: [...prev.tables, newTable],
+          }
+        : null,
+    );
+    setCurrentTableId(newTable.id);
   };
-}
 
-async function getBase(baseId: string, userId: string) {
-  const { success, user } = await getUserByClerkId(userId);
-  if (!success || !user) return null;
-
-  const [base] = await db
-    .select()
-    .from(bases)
-    .where(eq(bases.id, baseId))
-    .limit(1);
-
-  if (!base || base.userId !== user.id) return null;
-
-  const baseTables = await db
-    .select()
-    .from(tables)
-    .where(eq(tables.baseId, baseId));
-
-  // Get data for the first table if it exists
-  let firstTableData = null;
-  const firstTable = baseTables[0];
-  if (firstTable?.id && firstTable?.name) {
-    firstTableData = await getTableData(firstTable.id, firstTable.name);
+  if (isLoading) {
+    return null;
   }
 
-  return {
-    ...base,
-    tables: baseTables,
-    currentTable: firstTableData,
-  };
-}
-
-export default async function BasePage({ params }: BasePageProps) {
-  const { userId } = await auth();
-  if (!userId) return null;
-  const { baseId } = await Promise.resolve(params);
-  const base = await getBase(baseId, userId);
   if (!base) {
-    notFound();
+    return null;
   }
 
   return (
@@ -137,8 +131,19 @@ export default async function BasePage({ params }: BasePageProps) {
       <TopNavigation showBaseOptions baseName={base.name} />
       <main className="flex-1">
         <div className="flex h-full">
-          <Sidebar tables={base.tables} />
+          <Sidebar
+            tables={base.tables}
+            currentTableId={currentTableId}
+            onTableSelect={setCurrentTableId}
+          />
           <div className="flex-1">
+            <SecondaryNavigation
+              currentTableName={base.currentTable?.name}
+              tables={base.tables}
+              currentTableId={currentTableId}
+              onTableSelect={setCurrentTableId}
+              onTableCreated={handleTableCreated}
+            />
             <GridControls />
             {base.currentTable ? (
               <div className="space-y-8 p-4">
@@ -146,7 +151,10 @@ export default async function BasePage({ params }: BasePageProps) {
                   <h2 className="text-lg font-semibold">
                     {base.currentTable.name}
                   </h2>
-                  <DataGrid data={base.currentTable.data} />
+                  <EnhancedDataGrid
+                    initialData={base.currentTable.data}
+                    initialColumns={base.currentTable.columns}
+                  />
                 </div>
               </div>
             ) : (
