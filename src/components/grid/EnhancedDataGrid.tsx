@@ -38,7 +38,7 @@ export function EnhancedDataGrid({
 }: EnhancedDataGridProps) {
   const [data, setData] = useState<Row[]>(() => {
     if (initialData && initialData.length > 0) return initialData;
-    return generateDefaultRows(initialColumns || generateDefaultColumns());
+    return generateDefaultRows(initialColumns ?? generateDefaultColumns());
   });
 
   const [columns, setColumns] = useState<Column[]>(() => {
@@ -54,65 +54,75 @@ export function EnhancedDataGrid({
   const columnHelper = createColumnHelper<Row>();
 
   const tableColumns = columns.map((col) =>
-    columnHelper.accessor(col.name as any, {
-      id: col.id,
-      header: () => (
-        <div className="flex items-center gap-2">
-          <span>{col.name}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            onClick={() => handleDeleteColumn(col.id)}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      ),
-      cell: (info) => {
-        const value = info.getValue();
-        const isEditing =
-          editingCell.rowId === info.row.original.id &&
-          editingCell.columnId === col.id;
-
-        if (isEditing) {
-          return (
-            <Input
-              autoFocus
-              value={value as string}
-              onChange={(e) =>
-                handleCellChange(info.row.original.id, col.id, e.target.value)
-              }
-              onBlur={() => setEditingCell({ rowId: null, columnId: null })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  setEditingCell({ rowId: null, columnId: null });
-                } else if (e.key === "Tab") {
-                  e.preventDefault();
-                  handleTabNavigation(info.row.original.id, col.id, e.shiftKey);
-                }
-              }}
-              type={col.type === "number" ? "number" : "text"}
-              className="h-8"
-            />
-          );
-        }
-
-        return (
-          <div
-            className="cursor-pointer p-2"
-            onClick={() =>
-              setEditingCell({
-                rowId: info.row.original.id,
-                columnId: col.id,
-              })
-            }
-          >
-            {value}
-          </div>
-        );
+    columnHelper.accessor(
+      (row: Row) => {
+        const value = row[col.name];
+        return typeof value === "undefined" ? "" : value;
       },
-    }),
+      {
+        id: col.id,
+        header: () => (
+          <div className="flex items-center gap-2">
+            <span>{col.name}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto"
+              onClick={() => handleDeleteColumn(col.id)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ),
+        cell: (info) => {
+          const value = info.getValue();
+          const isEditing =
+            editingCell.rowId === info.row.original.id &&
+            editingCell.columnId === col.id;
+
+          if (isEditing) {
+            return (
+              <Input
+                autoFocus
+                value={value as string}
+                onChange={(e) =>
+                  handleCellChange(info.row.original.id, col.id, e.target.value)
+                }
+                onBlur={() => setEditingCell({ rowId: null, columnId: null })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setEditingCell({ rowId: null, columnId: null });
+                  } else if (e.key === "Tab") {
+                    e.preventDefault();
+                    handleTabNavigation(
+                      info.row.original.id,
+                      col.id,
+                      e.shiftKey,
+                    );
+                  }
+                }}
+                type={col.type === "number" ? "number" : "text"}
+                className="h-8"
+              />
+            );
+          }
+
+          return (
+            <div
+              className="cursor-pointer p-2"
+              onClick={() =>
+                setEditingCell({
+                  rowId: info.row.original.id,
+                  columnId: col.id,
+                })
+              }
+            >
+              {value}
+            </div>
+          );
+        },
+      },
+    ),
   );
 
   const table = useReactTable({
@@ -130,16 +140,15 @@ export function EnhancedDataGrid({
   }, [columns, onColumnsChange]);
 
   function handleCellChange(rowId: string, columnId: string, value: string) {
+    const column = columns.find((c) => c.id === columnId);
+    if (!column) return;
+
     setData((prev) =>
       prev.map((row) => {
         if (row.id === rowId) {
-          const column = columns.find((c) => c.id === columnId);
           const newValue =
-            column?.type === "number" ? Number(value) || 0 : value;
-          return {
-            ...row,
-            [column?.name || ""]: newValue,
-          };
+            column.type === "number" ? (Number(value) ?? 0) : value;
+          return { ...row, [column.name]: newValue };
         }
         return row;
       }),
@@ -151,35 +160,51 @@ export function EnhancedDataGrid({
     currentColumnId: string,
     isShiftTab: boolean,
   ) {
+    const currentRow = data.find((row) => row.id === currentRowId);
+    const currentColumn = columns.find((col) => col.id === currentColumnId);
     const currentRowIndex = data.findIndex((row) => row.id === currentRowId);
     const currentColumnIndex = columns.findIndex(
       (col) => col.id === currentColumnId,
     );
 
+    if (
+      !currentRow ||
+      !currentColumn ||
+      currentRowIndex === -1 ||
+      currentColumnIndex === -1
+    )
+      return;
+
     if (isShiftTab) {
-      // Move backwards
-      if (currentColumnIndex > 0) {
+      const prevColumn = columns[currentColumnIndex - 1];
+      const prevRow = data[currentRowIndex - 1];
+      const lastColumn = columns[columns.length - 1];
+
+      if (currentColumnIndex > 0 && prevColumn) {
         setEditingCell({
           rowId: currentRowId,
-          columnId: columns[currentColumnIndex - 1].id,
+          columnId: prevColumn.id,
         });
-      } else if (currentRowIndex > 0) {
+      } else if (currentRowIndex > 0 && prevRow && lastColumn) {
         setEditingCell({
-          rowId: data[currentRowIndex - 1].id,
-          columnId: columns[columns.length - 1].id,
+          rowId: prevRow.id,
+          columnId: lastColumn.id,
         });
       }
     } else {
-      // Move forwards
-      if (currentColumnIndex < columns.length - 1) {
+      const nextColumn = columns[currentColumnIndex + 1];
+      const nextRow = data[currentRowIndex + 1];
+      const firstColumn = columns[0];
+
+      if (currentColumnIndex < columns.length - 1 && nextColumn) {
         setEditingCell({
           rowId: currentRowId,
-          columnId: columns[currentColumnIndex + 1].id,
+          columnId: nextColumn.id,
         });
-      } else if (currentRowIndex < data.length - 1) {
+      } else if (currentRowIndex < data.length - 1 && nextRow && firstColumn) {
         setEditingCell({
-          rowId: data[currentRowIndex + 1].id,
-          columnId: columns[0].id,
+          rowId: nextRow.id,
+          columnId: firstColumn.id,
         });
       }
     }
@@ -205,7 +230,12 @@ export function EnhancedDataGrid({
     if (!column) return;
 
     setColumns(columns.filter((c) => c.id !== columnId));
-    setData((prev) => prev.map(({ [column.name]: _, ...rest }) => rest));
+    setData((prev) =>
+      prev.map((row) => {
+        const { [column.name]: _, ...rest } = row;
+        return { id: row.id, ...rest };
+      }),
+    );
   }
 
   function handleAddRow() {
