@@ -9,11 +9,18 @@ import {
   List,
   TimerIcon as Timeline,
   Eye,
+  Table,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import type { tables } from "~/server/db/schema";
 
-export function Sidebar() {
+interface SidebarProps {
+  tables?: Array<typeof tables.$inferSelect>;
+  onTableClick?: (tableId: string) => void;
+}
+
+export function Sidebar({ tables }: SidebarProps) {
   const [selectedView, setSelectedView] = useState("grid");
 
   return (

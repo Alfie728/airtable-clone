@@ -1,15 +1,25 @@
 import { db } from "~/server/db";
 import { desc, eq } from "drizzle-orm";
-import { tables, columns, rows, cells, views, bases } from "~/server/db/schema";
+import {
+  tables,
+  columns,
+  rows,
+  cells,
+  views,
+  bases,
+  users,
+} from "~/server/db/schema";
+import { auth } from "@clerk/nextjs/server";
+import { TopNavigation } from "~/components/layout/TopNavigation";
+import { Plus } from "lucide-react";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-import { TopNavigation } from "~/components/layout/TopNavigation";
 import { SecondaryNavigation } from "~/components/layout/SecondaryNavigation";
 import { Sidebar } from "~/components/layout/Sidebar";
 import { GridControls } from "~/components/grid/GridControls";
 import { DataGrid } from "~/components/grid/DataGrid";
-import { auth } from "@clerk/nextjs/server";
 
 interface GridRow {
   id: string;
@@ -102,72 +112,90 @@ async function getBaseData(baseId: string): Promise<TableData[] | null> {
 
 export default async function Page() {
   const { userId: clerkId } = await auth();
-  // For now, we'll use the first base in the database
-  const [firstBase] = await db.select().from(tables).limit(1);
-  if (!firstBase) {
-    return (
-      <div className="flex h-screen flex-col bg-white">
-        <TopNavigation />
-        <SecondaryNavigation />
-        <div className="flex flex-1">
-          <Sidebar />
-          <div className="flex-1">
-            <GridControls />
-            <div className="p-4">
-              <p>
-                No tables found. Please run db:seed to populate the database.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+
+  if (!clerkId) {
+    return null;
   }
 
-  // Get base details
-  const [baseDetails] = await db
+  // First get the user's UUID from the users table
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.clerkId, clerkId));
+
+  if (!user) {
+    return null;
+  }
+
+  const userBases = await db
     .select()
     .from(bases)
-    .where(eq(bases.id, firstBase.baseId));
-
-  const baseData = await getBaseData(firstBase.baseId);
-
-  if (!baseData) {
-    return (
-      <div className="flex h-screen flex-col bg-white">
-        <TopNavigation baseName={baseDetails?.name} />
-        <SecondaryNavigation />
-        <div className="flex flex-1">
-          <Sidebar />
-          <div className="flex-1">
-            <GridControls />
-            <div className="p-4">
-              <p>No data found in this base.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+    .where(eq(bases.userId, user.id))
+    .orderBy(desc(bases.createdAt));
 
   return (
-    <div className="flex h-screen flex-col bg-white">
-      <TopNavigation baseName={baseDetails?.name} />
-      <SecondaryNavigation />
-      <div className="flex flex-1">
-        <Sidebar />
-        <div className="flex-1">
-          <GridControls />
-          <div className="space-y-8 p-4">
-            {baseData.map((table) => (
-              <div key={table.id} className="space-y-2">
-                <h2 className="text-lg font-semibold">{table.name}</h2>
-                <DataGrid data={table.data} />
-              </div>
+    <div className="flex min-h-screen flex-col bg-white">
+      <TopNavigation showBaseOptions={false} />
+      <main className="flex-1 p-6">
+        <div className="mx-auto max-w-7xl">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-gray-900">Your bases</h1>
+            <Link
+              href="/new-base"
+              className="inline-flex items-center gap-x-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              <Plus className="h-5 w-5" />
+              Create new base
+            </Link>
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {userBases.map((base) => (
+              <Link
+                key={base.id}
+                href={`/base/${base.id}`}
+                className="group relative flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md"
+              >
+                <div className="flex flex-1 flex-col p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600">
+                    {base.name}
+                  </h3>
+                  {base.description && (
+                    <p className="mt-2 text-sm text-gray-500">
+                      {base.description}
+                    </p>
+                  )}
+                  <div className="mt-4 text-xs text-gray-400">
+                    Created {new Date(base.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+              </Link>
             ))}
+
+            {userBases.length === 0 && (
+              <div className="col-span-full">
+                <div className="rounded-lg border-2 border-dashed border-gray-200 p-12 text-center">
+                  <h3 className="mt-2 text-sm font-semibold text-gray-900">
+                    No bases
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Get started by creating a new base
+                  </p>
+                  <div className="mt-6">
+                    <Link
+                      href="/new-base"
+                      className="inline-flex items-center gap-x-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    >
+                      <Plus className="h-5 w-5" />
+                      Create new base
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
