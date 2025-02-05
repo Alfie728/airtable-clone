@@ -1,25 +1,10 @@
-import { db } from "~/server/db";
-import { desc, eq } from "drizzle-orm";
-import {
-  tables,
-  columns,
-  rows,
-  cells,
-  views,
-  bases,
-  users,
-} from "~/server/db/schema";
 import { auth } from "@clerk/nextjs/server";
 import { TopNavigation } from "~/components/layout/TopNavigation";
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import { getUserWithBasesByClerkId } from "~/lib/actions/users.action";
 
 export const dynamic = "force-dynamic";
-
-import { SecondaryNavigation } from "~/components/layout/SecondaryNavigation";
-import { Sidebar } from "~/components/layout/Sidebar";
-import { GridControls } from "~/components/grid/GridControls";
-import { DataGrid } from "~/components/grid/DataGrid";
 
 interface GridRow {
   id: string;
@@ -44,72 +29,6 @@ interface TableData {
   data: GridRow[];
 }
 
-async function getBaseData(baseId: string): Promise<TableData[] | null> {
-  // Get all tables for this base
-  const baseTables = await db
-    .select()
-    .from(tables)
-    .where(eq(tables.baseId, baseId))
-    .orderBy(tables.createdAt);
-
-  if (baseTables.length === 0) return null;
-
-  // Get data for each table
-  const tablesData = await Promise.all(
-    baseTables.map(async (table) => {
-      // Get all columns for this table
-      const tableColumns = await db
-        .select()
-        .from(columns)
-        .where(eq(columns.tableId, table.id))
-        .orderBy(columns.order);
-
-      // Get all rows for this table
-      const tableRows = await db
-        .select()
-        .from(rows)
-        .where(eq(rows.tableId, table.id))
-        .orderBy(rows.order);
-
-      // Get all cells for these rows
-      const tableCells = await Promise.all(
-        tableRows.map(async (row) => {
-          const rowCells = await db
-            .select()
-            .from(cells)
-            .where(eq(cells.rowId, row.id));
-          return rowCells;
-        }),
-      );
-
-      // Transform the data into the format expected by DataGrid
-      const gridData: GridRow[] = tableRows.map((row, rowIndex) => {
-        const rowData: GridRow = { id: row.id };
-        const rowCells = tableCells[rowIndex];
-        if (rowCells) {
-          rowCells.forEach((cell) => {
-            const column = tableColumns.find((col) => col.id === cell.columnId);
-            if (column) {
-              rowData[column.name.toLowerCase().replace(/\s+/g, "_")] =
-                cell.value;
-            }
-          });
-        }
-        return rowData;
-      });
-
-      return {
-        id: table.id,
-        name: table.name,
-        columns: tableColumns,
-        data: gridData,
-      };
-    }),
-  );
-
-  return tablesData;
-}
-
 export default async function Page() {
   const { userId: clerkId } = await auth();
 
@@ -117,21 +36,13 @@ export default async function Page() {
     return null;
   }
 
-  // First get the user's UUID from the users table
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.clerkId, clerkId));
+  const result = await getUserWithBasesByClerkId(clerkId);
 
-  if (!user) {
+  if (!result.success) {
     return null;
   }
 
-  const userBases = await db
-    .select()
-    .from(bases)
-    .where(eq(bases.userId, user.id))
-    .orderBy(desc(bases.createdAt));
+  const { bases: userBases } = result;
 
   return (
     <div className="flex min-h-screen flex-col bg-white">

@@ -9,6 +9,8 @@ import { DataGrid } from "~/components/grid/DataGrid";
 import { GridControls } from "~/components/grid/GridControls";
 import { Sidebar } from "~/components/layout/Sidebar";
 
+export const dynamic = "force-dynamic";
+
 interface BasePageProps {
   params: {
     baseId: string;
@@ -128,7 +130,7 @@ export default async function BasePage({ params }: BasePageProps) {
   const base = await getBase(baseId, userId);
   if (!base) {
     notFound();
-}
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-white">

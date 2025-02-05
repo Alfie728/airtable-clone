@@ -1,8 +1,25 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db } from "~/server/db";
-import { users } from "~/server/db/schema";
+import { users, bases } from "~/server/db/schema";
+
+interface Base {
+  id: string;
+  name: string;
+  description: string | null;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date | null;
+}
+
+interface User {
+  id: string;
+  clerkId: string;
+  email: string;
+  createdAt: Date;
+  updatedAt: Date | null;
+}
 
 export const createUser = async (user: { clerkId: string; email: string }) => {
   try {
@@ -73,5 +90,58 @@ export const updateUser = async (user: { clerkId: string; email: string }) => {
   } catch (error) {
     console.error("Error updating user:", error);
     return { success: false, error: "Failed to update user" };
+  }
+};
+
+export const getUserBasesById = async (
+  userId: string,
+): Promise<
+  { success: true; bases: Base[] } | { success: false; error: string }
+> => {
+  try {
+    if (!userId) {
+      return { success: false, error: "User ID is required" };
+    }
+
+    const userBases = await db
+      .select()
+      .from(bases)
+      .where(eq(bases.userId, userId))
+      .orderBy(desc(bases.createdAt));
+
+    return { success: true, bases: userBases };
+  } catch (error) {
+    console.error("Error fetching user bases:", error);
+    return { success: false, error: "Failed to fetch user bases" };
+  }
+};
+
+export const getUserWithBasesByClerkId = async (
+  clerkId: string,
+): Promise<
+  | { success: true; user: User; bases: Base[] }
+  | { success: false; error: string }
+> => {
+  try {
+    const userResult = await getUserByClerkId(clerkId);
+
+    if (!userResult.success || !userResult.user) {
+      return { success: false, error: userResult.error ?? "User not found" };
+    }
+
+    const basesResult = await getUserBasesById(userResult.user.id);
+
+    if (!basesResult.success) {
+      return basesResult;
+    }
+
+    return {
+      success: true,
+      user: userResult.user,
+      bases: basesResult.bases,
+    };
+  } catch (error) {
+    console.error("Error fetching user with bases:", error);
+    return { success: false, error: "Failed to fetch user with bases" };
   }
 };
