@@ -3,7 +3,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "~/server/db";
 import { tables, columns, rows, cells } from "~/server/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getBaseById } from "./bases.action";
 
@@ -31,13 +31,14 @@ export async function createTable(
       return { success: false, error: "A table with this name already exists" };
     }
 
-    // Create the table
+    // Create the table with zero rows
     const [newTable] = await db
       .insert(tables)
       .values({
         baseId,
         name,
         description,
+        rowCount: 0,
       })
       .returning();
 
@@ -45,13 +46,13 @@ export async function createTable(
       return { success: false, error: "Failed to create table" };
     }
 
-    // Create default columns
+    // Create default columns (just Name and Notes)
     const defaultColumns = [
       { name: "Name", type: "text" as const, order: 0 },
-      { name: "Age", type: "number" as const, order: 1 },
-      { name: "City", type: "text" as const, order: 2 },
+      { name: "Notes", type: "text" as const, order: 1 },
     ];
 
+    // Insert the columns without any data
     await db.insert(columns).values(
       defaultColumns.map((col) => ({
         tableId: newTable.id,
@@ -135,8 +136,9 @@ export async function getTableData(tableId: string, tableName: string) {
         rowCells.forEach((cell) => {
           const column = tableColumns.find((col) => col.id === cell.columnId);
           if (column) {
-            rowData[column.name.toLowerCase().replace(/\s+/g, "_")] =
-              cell.value;
+            // Use the original column name without transformation
+            rowData[column.name] =
+              column.type === "number" ? Number(cell.value) || 0 : cell.value;
           }
         });
       }
@@ -169,4 +171,109 @@ export async function getTableData(tableId: string, tableName: string) {
     }
     return { success: false, error: "Failed to get table data" };
   }
+}
+
+export async function addRow(tableId: string) {
+  try {
+    // Get the table to get the baseId
+    const table = await db
+      .select()
+      .from(tables)
+      .where(eq(tables.id, tableId))
+      .limit(1);
+
+    if (!table[0]) {
+      return { success: false, error: "Table not found" };
+    }
+
+    // Insert new row
+    const [newRow] = await db
+      .insert(rows)
+      .values({
+        tableId,
+        order: await getNextRowOrder(tableId),
+      })
+      .returning();
+
+    // Update table row count
+    await db
+      .update(tables)
+      .set({ rowCount: sql`${tables.rowCount} + 1` })
+      .where(eq(tables.id, tableId));
+
+    revalidatePath(`/base/${table[0].baseId}`);
+    return { success: true, row: newRow };
+  } catch (error) {
+    console.error("Error adding row:", error);
+    return { success: false, error: "Failed to add row" };
+  }
+}
+
+export async function addCell(rowId: string, columnId: string, value: string) {
+  try {
+    // Get the row and table info for revalidation
+    const rowData = await db
+      .select({
+        row: rows,
+        table: tables,
+      })
+      .from(rows)
+      .where(eq(rows.id, rowId))
+      .innerJoin(tables, eq(tables.id, rows.tableId))
+      .limit(1);
+
+    if (!rowData[0]) {
+      return { success: false, error: "Row not found" };
+    }
+
+    // Check if cell already exists
+    const existingCell = await db
+      .select()
+      .from(cells)
+      .where(and(eq(cells.rowId, rowId), eq(cells.columnId, columnId)))
+      .limit(1);
+
+    let cell;
+    if (existingCell.length > 0) {
+      // Update existing cell
+      const [updatedCell] = await db
+        .update(cells)
+        .set({
+          value,
+          displayValue: value,
+          searchVector: sql`to_tsvector('english', ${value})`,
+        })
+        .where(and(eq(cells.rowId, rowId), eq(cells.columnId, columnId)))
+        .returning();
+      cell = updatedCell;
+    } else {
+      // Insert new cell
+      const [newCell] = await db
+        .insert(cells)
+        .values({
+          rowId,
+          columnId,
+          value,
+          displayValue: value,
+          searchVector: sql`to_tsvector('english', ${value})`,
+        })
+        .returning();
+      cell = newCell;
+    }
+
+    revalidatePath(`/base/${rowData[0].table.baseId}`);
+    return { success: true, cell };
+  } catch (error) {
+    console.error("Error adding/updating cell:", error);
+    return { success: false, error: "Failed to add/update cell" };
+  }
+}
+
+async function getNextRowOrder(tableId: string): Promise<number> {
+  const maxOrderResult = await db
+    .select({ maxOrder: sql<number>`MAX(${rows.order})` })
+    .from(rows)
+    .where(eq(rows.tableId, tableId));
+
+  return (maxOrderResult[0]?.maxOrder ?? -1) + 1;
 }

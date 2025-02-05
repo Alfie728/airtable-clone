@@ -41,6 +41,7 @@ export default function BasePage() {
   const [base, setBase] = useState<BaseData | null>(null);
   const [currentTableId, setCurrentTableId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTableDataLoading, setIsTableDataLoading] = useState(false);
 
   // Load base and tables
   useEffect(() => {
@@ -57,7 +58,7 @@ export default function BasePage() {
           id: baseId,
           name: prev?.name ?? "My Base",
           tables: baseTables,
-          currentTable: prev?.currentTable ?? null,
+          currentTable: null, // Reset current table when base changes
         }));
 
         // Set initial table ID if not set
@@ -79,12 +80,13 @@ export default function BasePage() {
     async function loadTableData() {
       if (!currentTableId || !base) return;
 
+      setIsTableDataLoading(true);
       try {
         const tableToLoad = base.tables.find((t) => t.id === currentTableId);
         if (!tableToLoad) return;
 
         const { success, table: tableData } = await getTableData(
-          tableToLoad.id,
+          currentTableId,
           tableToLoad.name,
         );
 
@@ -100,6 +102,8 @@ export default function BasePage() {
         }
       } catch (error) {
         console.error("Error loading table data:", error);
+      } finally {
+        setIsTableDataLoading(false);
       }
     }
 
@@ -118,11 +122,11 @@ export default function BasePage() {
     setCurrentTableId(newTable.id);
   };
 
-  if (isLoading) {
-    return null;
-  }
+  const handleTableSelect = (tableId: string) => {
+    setCurrentTableId(tableId);
+  };
 
-  if (!base) {
+  if (isLoading || !base) {
     return null;
   }
 
@@ -134,14 +138,14 @@ export default function BasePage() {
           <Sidebar
             tables={base.tables}
             currentTableId={currentTableId}
-            onTableSelect={setCurrentTableId}
+            onTableSelect={handleTableSelect}
           />
           <div className="flex-1">
             <SecondaryNavigation
               currentTableName={base.currentTable?.name}
               tables={base.tables}
               currentTableId={currentTableId}
-              onTableSelect={setCurrentTableId}
+              onTableSelect={handleTableSelect}
               onTableCreated={handleTableCreated}
             />
             <GridControls />
@@ -151,10 +155,19 @@ export default function BasePage() {
                   <h2 className="text-lg font-semibold">
                     {base.currentTable.name}
                   </h2>
-                  <EnhancedDataGrid
-                    initialData={base.currentTable.data}
-                    initialColumns={base.currentTable.columns}
-                  />
+                  {isTableDataLoading ? (
+                    <div className="flex h-64 items-center justify-center rounded-md border">
+                      <div className="text-sm text-gray-500">
+                        Loading table data...
+                      </div>
+                    </div>
+                  ) : (
+                    <EnhancedDataGrid
+                      tableId={currentTableId!}
+                      initialData={base.currentTable.data}
+                      initialColumns={base.currentTable.columns}
+                    />
+                  )}
                 </div>
               </div>
             ) : (

@@ -11,6 +11,7 @@ import { ChevronDown, Plus, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { faker } from "@faker-js/faker";
+import { addRow, addCell } from "~/lib/actions/tables.action";
 
 interface Column {
   id: string;
@@ -24,6 +25,7 @@ interface Row {
 }
 
 interface EnhancedDataGridProps {
+  tableId: string;
   initialData?: Row[];
   initialColumns?: Column[];
   onDataChange?: (data: Row[]) => void;
@@ -31,20 +33,14 @@ interface EnhancedDataGridProps {
 }
 
 export function EnhancedDataGrid({
+  tableId,
   initialData,
   initialColumns,
   onDataChange,
   onColumnsChange,
 }: EnhancedDataGridProps) {
-  const [data, setData] = useState<Row[]>(() => {
-    if (initialData && initialData.length > 0) return initialData;
-    return generateDefaultRows(initialColumns ?? generateDefaultColumns());
-  });
-
-  const [columns, setColumns] = useState<Column[]>(() => {
-    if (initialColumns && initialColumns.length > 0) return initialColumns;
-    return generateDefaultColumns();
-  });
+  const [data, setData] = useState<Row[]>(() => initialData ?? []);
+  const [columns, setColumns] = useState<Column[]>(() => initialColumns ?? []);
 
   const [editingCell, setEditingCell] = useState<{
     rowId: string | null;
@@ -139,20 +135,59 @@ export function EnhancedDataGrid({
     onColumnsChange?.(columns);
   }, [columns, onColumnsChange]);
 
-  function handleCellChange(rowId: string, columnId: string, value: string) {
+  async function handleAddRow() {
+    try {
+      // Add the row to the database
+      const { success, row } = await addRow(tableId);
+      if (success && row) {
+        // Generate mock data for the new row
+        const newRow = generateRow(columns);
+        // Use the database-generated ID
+        newRow.id = row.id;
+
+        // Add cells with mock data to the database
+        const cellPromises = columns.map(async (column) => {
+          const value = newRow[column.name]?.toString() ?? "";
+          const result = await addCell(row.id, column.id, value);
+          return result;
+        });
+
+        // Wait for all cells to be added
+        await Promise.all(cellPromises);
+
+        // Update the UI
+        setData((prev) => [...prev, newRow]);
+      }
+    } catch (error) {
+      console.error("Error adding row:", error);
+    }
+  }
+
+  async function handleCellChange(
+    rowId: string,
+    columnId: string,
+    value: string,
+  ) {
     const column = columns.find((c) => c.id === columnId);
     if (!column) return;
 
-    setData((prev) =>
-      prev.map((row) => {
-        if (row.id === rowId) {
-          const newValue =
-            column.type === "number" ? (Number(value) ?? 0) : value;
-          return { ...row, [column.name]: newValue };
-        }
-        return row;
-      }),
-    );
+    try {
+      const { success } = await addCell(rowId, columnId, value);
+      if (success) {
+        setData((prev) =>
+          prev.map((row) => {
+            if (row.id === rowId) {
+              const newValue =
+                column.type === "number" ? (Number(value) ?? 0) : value;
+              return { ...row, [column.name]: newValue };
+            }
+            return row;
+          }),
+        );
+      }
+    } catch (error) {
+      console.error("Error updating cell:", error);
+    }
   }
 
   function handleTabNavigation(
@@ -238,11 +273,6 @@ export function EnhancedDataGrid({
     );
   }
 
-  function handleAddRow() {
-    const newRow = generateRow(columns);
-    setData([...data, newRow]);
-  }
-
   return (
     <div className="rounded-md border">
       <div className="overflow-auto">
@@ -303,14 +333,6 @@ export function EnhancedDataGrid({
   );
 }
 
-function generateDefaultColumns(): Column[] {
-  return [
-    { id: crypto.randomUUID(), name: "Name", type: "text" },
-    { id: crypto.randomUUID(), name: "Age", type: "number" },
-    { id: crypto.randomUUID(), name: "City", type: "text" },
-  ];
-}
-
 function generateRow(columns: Column[]): Row {
   const row: Row = { id: crypto.randomUUID() };
   columns.forEach((column) => {
@@ -336,8 +358,4 @@ function generateRow(columns: Column[]): Row {
     }
   });
   return row;
-}
-
-function generateDefaultRows(columns: Column[]): Row[] {
-  return Array.from({ length: 5 }, () => generateRow(columns));
 }
