@@ -12,16 +12,22 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { faker } from "@faker-js/faker";
 import { addRow, addCell } from "~/lib/actions/tables.action";
+import { useTable } from "~/hooks/useTable";
+
+interface Row {
+  id: string;
+  [key: string]: string | number;
+}
 
 interface Column {
   id: string;
   name: string;
   type: "text" | "number";
-}
-
-interface Row {
-  id: string;
-  [key: string]: string | number;
+  order: number;
+  width: number;
+  isSearchable: boolean;
+  isSortable: boolean;
+  isVisible: boolean;
 }
 
 interface EnhancedDataGridProps {
@@ -46,6 +52,23 @@ export function EnhancedDataGrid({
     rowId: string | null;
     columnId: string | null;
   }>({ rowId: null, columnId: null });
+
+  const {
+    tableData,
+    isLoading,
+    error,
+    addRow,
+    updateCell,
+    isAddingRow,
+    isUpdatingCell,
+  } = useTable("", tableId);
+
+  useEffect(() => {
+    if (tableData) {
+      setData(tableData.data);
+      setColumns(tableData.columns);
+    }
+  }, [tableData]);
 
   const columnHelper = createColumnHelper<Row>();
 
@@ -136,31 +159,7 @@ export function EnhancedDataGrid({
   }, [columns, onColumnsChange]);
 
   async function handleAddRow() {
-    try {
-      // Add the row to the database
-      const { success, row } = await addRow(tableId);
-      if (success && row) {
-        // Generate mock data for the new row
-        const newRow = generateRow(columns);
-        // Use the database-generated ID
-        newRow.id = row.id;
-
-        // Add cells with mock data to the database
-        const cellPromises = columns.map(async (column) => {
-          const value = newRow[column.name]?.toString() ?? "";
-          const result = await addCell(row.id, column.id, value);
-          return result;
-        });
-
-        // Wait for all cells to be added
-        await Promise.all(cellPromises);
-
-        // Update the UI
-        setData((prev) => [...prev, newRow]);
-      }
-    } catch (error) {
-      console.error("Error adding row:", error);
-    }
+    addRow();
   }
 
   async function handleCellChange(
@@ -168,26 +167,7 @@ export function EnhancedDataGrid({
     columnId: string,
     value: string,
   ) {
-    const column = columns.find((c) => c.id === columnId);
-    if (!column) return;
-
-    try {
-      const { success } = await addCell(rowId, columnId, value);
-      if (success) {
-        setData((prev) =>
-          prev.map((row) => {
-            if (row.id === rowId) {
-              const newValue =
-                column.type === "number" ? (Number(value) ?? 0) : value;
-              return { ...row, [column.name]: newValue };
-            }
-            return row;
-          }),
-        );
-      }
-    } catch (error) {
-      console.error("Error updating cell:", error);
-    }
+    updateCell({ rowId, columnId, value });
   }
 
   function handleTabNavigation(
@@ -250,6 +230,11 @@ export function EnhancedDataGrid({
       id: crypto.randomUUID(),
       name: `Column ${columns.length + 1}`,
       type: "text",
+      order: columns.length,
+      width: 100,
+      isSearchable: true,
+      isSortable: true,
+      isVisible: true,
     };
     setColumns([...columns, newColumn]);
     setData((prev) =>
@@ -276,57 +261,81 @@ export function EnhancedDataGrid({
   return (
     <div className="rounded-md border">
       <div className="overflow-auto">
-        <table className="w-full border-collapse">
-          <thead>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b bg-gray-50">
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className="border-r p-2 text-left font-medium text-gray-600 last:border-r-0"
-                  >
-                    {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )}
+        {isLoading ? (
+          <div className="flex h-64 items-center justify-center">
+            <div className="text-sm text-gray-500">Loading...</div>
+          </div>
+        ) : error ? (
+          <div className="flex h-64 items-center justify-center">
+            <div className="text-sm text-red-500">
+              {error instanceof Error
+                ? error.message
+                : "Error loading table data"}
+            </div>
+          </div>
+        ) : (
+          <table className="w-full border-collapse">
+            <thead>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id} className="border-b bg-gray-50">
+                  {headerGroup.headers.map((header) => (
+                    <th
+                      key={header.id}
+                      className="border-r p-2 text-left font-medium text-gray-600 last:border-r-0"
+                    >
+                      {flexRender(
+                        header.column.columnDef.header,
+                        header.getContext(),
+                      )}
+                    </th>
+                  ))}
+                  <th className="w-10 p-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleAddColumn}
+                      className="h-8 w-8 p-0"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
                   </th>
-                ))}
-                <th className="w-10 p-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleAddColumn}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </th>
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="border-b last:border-b-0">
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="border-r p-0 last:border-r-0">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-                <td className="w-10" />
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </tr>
+              ))}
+            </thead>
+            <tbody>
+              {table.getRowModel().rows.map((row) => (
+                <tr key={row.id} className="border-b last:border-b-0">
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="border-r p-0 last:border-r-0">
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
+                    </td>
+                  ))}
+                  <td className="w-10" />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
       <div className="border-t p-2">
         <Button
           variant="ghost"
           size="sm"
-          onClick={handleAddRow}
+          onClick={() => void handleAddRow()}
           className="gap-2"
+          disabled={isAddingRow}
         >
-          <Plus className="h-4 w-4" />
-          Add row
+          {isAddingRow ? (
+            "Adding..."
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              Add row
+            </>
+          )}
         </Button>
       </div>
     </div>

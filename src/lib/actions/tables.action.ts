@@ -173,36 +173,59 @@ export async function getTableData(tableId: string, tableName: string) {
   }
 }
 
-export async function addRow(tableId: string) {
+export async function addRow(
+  tableId: string,
+  optimisticRow: Record<string, string | number>,
+) {
   try {
-    // Get the table to get the baseId
-    const table = await db
+    // Get table columns first
+    const tableColumns = await db
       .select()
-      .from(tables)
-      .where(eq(tables.id, tableId))
-      .limit(1);
+      .from(columns)
+      .where(eq(columns.tableId, tableId))
+      .orderBy(columns.order);
 
-    if (!table[0]) {
-      return { success: false, error: "Table not found" };
-    }
+    // Get next row order
+    const nextOrder = await getNextRowOrder(tableId);
 
-    // Insert new row
+    // Create the row
     const [newRow] = await db
       .insert(rows)
       .values({
         tableId,
-        order: await getNextRowOrder(tableId),
+        order: nextOrder,
       })
       .returning();
 
-    // Update table row count
+    if (!newRow) {
+      return { success: false, error: "Failed to create row" };
+    }
+
+    // Use the exact values from the optimistic row
+    const cellValues = tableColumns.map((column) => {
+      // Get the exact value from the optimistic row
+      const value = optimisticRow[column.name]?.toString() ?? "";
+
+      return {
+        rowId: newRow.id,
+        columnId: column.id,
+        value,
+        displayValue: value,
+        searchVector: sql`to_tsvector(${value})`,
+      };
+    });
+
+    // Insert all cells
+    await db.insert(cells).values(cellValues);
+
+    // Update row count
     await db
       .update(tables)
-      .set({ rowCount: sql`${tables.rowCount} + 1` })
+      .set({ rowCount: sql`row_count + 1` })
       .where(eq(tables.id, tableId));
 
-    revalidatePath(`/base/${table[0].baseId}`);
-    return { success: true, row: newRow };
+    revalidatePath("/base/[baseId]");
+    return { success: true, row: { ...newRow, ...optimisticRow } };
   } catch (error) {
     console.error("Error adding row:", error);
     return { success: false, error: "Failed to add row" };
