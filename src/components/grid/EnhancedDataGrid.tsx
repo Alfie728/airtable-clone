@@ -10,10 +10,11 @@ import {
 import { Plus, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { faker } from "@faker-js/faker";
 import { useTable } from "~/hooks/useTable";
 import debounce from "lodash/debounce";
 import type { Row, Column } from "~/hooks/useTable";
+
+const BULK_ADD_ROWS_COUNT = 5000;
 
 interface EnhancedDataGridProps {
   tableId: string;
@@ -43,8 +44,10 @@ export function EnhancedDataGrid({
     isLoading,
     error,
     addRow,
+    addBulkRows,
     updateCell,
     isAddingRow,
+    isBatchAdding,
   } = useTable(tableId, tableId);
 
   // Create a debounced update function
@@ -262,6 +265,10 @@ export function EnhancedDataGrid({
     );
   }
 
+  async function handleAddBulkRows() {
+    void addBulkRows(BULK_ADD_ROWS_COUNT);
+  }
+
   return (
     <div className="rounded-md border">
       <div className="overflow-auto">
@@ -338,6 +345,22 @@ export function EnhancedDataGrid({
             <>
               <Plus className="h-4 w-4" />
               Add row
+            </>
+          )}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void handleAddBulkRows()}
+          className="ml-2 gap-2"
+          disabled={isBatchAdding}
+        >
+          {isBatchAdding ? (
+            `Adding ${BULK_ADD_ROWS_COUNT} rows...`
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              Add {BULK_ADD_ROWS_COUNT} rows
             </>
           )}
         </Button>

@@ -5,6 +5,7 @@ import {
   getTableData,
   addRow,
   addCell,
+  addBulkRows,
 } from "~/lib/actions/tables.action";
 import { faker } from "@faker-js/faker";
 import { QueryClient } from "@tanstack/react-query";
@@ -198,6 +199,53 @@ export const useTable = (baseId: string, tableId: string) => {
     },
   });
 
+  const addBulkRowsMutation = useMutation({
+    mutationFn: (count: number) => {
+      const previousData = queryClient.getQueryData<TableResponse>([
+        "table",
+        tableId,
+      ]);
+      if (!previousData?.table) throw new Error("No table data");
+
+      const optimisticRows = Array(count)
+        .fill(null)
+        .map(() => generateMockRow(previousData.table!.columns));
+
+      return addBulkRows(tableId, optimisticRows);
+    },
+    onMutate: async (count) => {
+      await queryClient.cancelQueries({ queryKey: ["table", tableId] });
+      const previousData = queryClient.getQueryData<TableResponse>([
+        "table",
+        tableId,
+      ]);
+
+      if (previousData?.table) {
+        const optimisticRows = Array(count)
+          .fill(null)
+          .map(() => generateMockRow(previousData.table!.columns));
+
+        queryClient.setQueryData<TableResponse>(["table", tableId], {
+          ...previousData,
+          table: {
+            ...previousData.table,
+            data: [...previousData.table.data, ...optimisticRows],
+          },
+        });
+      }
+
+      return { previousData };
+    },
+    onError: (err, _, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(["table", tableId], context.previousData);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["table", tableId] });
+    },
+  });
+
   return {
     baseTables: baseQuery.data?.tables,
     isBaseLoading: baseQuery.isLoading,
@@ -215,6 +263,9 @@ export const useTable = (baseId: string, tableId: string) => {
         addRowMutation.mutate(optimisticRow);
       }
     },
+    addBulkRows: (count: number) => {
+      void addBulkRowsMutation.mutate(count);
+    },
     updateCell: (params: {
       rowId: string;
       columnId: string;
@@ -224,6 +275,7 @@ export const useTable = (baseId: string, tableId: string) => {
     },
     isAddingRow: addRowMutation.isPending,
     isUpdatingCell: updateCellMutation.isPending,
+    isBatchAdding: addBulkRowsMutation.isPending,
   };
 };
 

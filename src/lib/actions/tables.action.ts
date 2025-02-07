@@ -3,9 +3,10 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "~/server/db";
 import { tables, columns, rows, cells } from "~/server/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getBaseById } from "./bases.action";
+import type { Row } from "~/hooks/useTable";
 
 export async function createTable(
   baseId: string,
@@ -66,7 +67,7 @@ export async function createTable(
       })),
     );
 
-    revalidatePath(`/base/${baseId}`);
+    revalidatePath(`/base/${baseId}`, "page");
     return { success: true, table: newTable };
   } catch (error) {
     if (error instanceof Error) {
@@ -108,42 +109,44 @@ export async function getTableData(tableId: string, tableName: string) {
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
 
-    // Get all rows for this table
-    const tableRows = await db
-      .select()
+    // Get all rows and their cells in a single query
+    const rowsWithCells = await db
+      .select({
+        row: rows,
+        cell: cells,
+      })
       .from(rows)
       .where(eq(rows.tableId, tableId))
+      .leftJoin(cells, eq(cells.rowId, rows.id))
       .orderBy(rows.order);
 
-    // Get all cells for these rows
-    const tableCells = await Promise.all(
-      tableRows.map(async (row) => {
-        const rowCells = await db
-          .select()
-          .from(cells)
-          .where(eq(cells.rowId, row.id));
-        return rowCells;
-      }),
-    );
+    // Transform the data efficiently
+    const gridData: Row[] = [];
+    let currentRow: Row | null = null;
 
-    // Transform the data into the format expected by DataGrid
-    const gridData = tableRows.map((row, rowIndex) => {
-      const rowData: { id: string; [key: string]: string | number } = {
-        id: row.id,
-      };
-      const rowCells = tableCells[rowIndex];
-      if (rowCells) {
-        rowCells.forEach((cell) => {
-          const column = tableColumns.find((col) => col.id === cell.columnId);
-          if (column) {
-            // Use the original column name without transformation
-            rowData[column.name] =
-              column.type === "number" ? Number(cell.value) || 0 : cell.value;
-          }
-        });
+    for (const record of rowsWithCells) {
+      if (!currentRow || currentRow.id !== record.row.id) {
+        if (currentRow) {
+          gridData.push(currentRow);
+        }
+        currentRow = { id: record.row.id };
       }
-      return rowData;
-    });
+
+      if (record.cell?.columnId) {
+        const column = tableColumns.find(
+          (col) => col.id === record.cell!.columnId,
+        );
+        if (column) {
+          currentRow[column.name] =
+            column.type === "number"
+              ? Number(record.cell.value) || 0
+              : record.cell.value;
+        }
+      }
+    }
+    if (currentRow) {
+      gridData.push(currentRow);
+    }
 
     const transformedColumns = tableColumns.map((col) => ({
       id: col.id,
@@ -224,7 +227,7 @@ export async function addRow(
       .set({ rowCount: sql`row_count + 1` })
       .where(eq(tables.id, tableId));
 
-    revalidatePath("/base/[baseId]");
+    revalidatePath("/base/[baseId]", "page");
     return { success: true, row: { ...newRow, ...optimisticRow } };
   } catch (error) {
     console.error("Error adding row:", error);
@@ -284,7 +287,7 @@ export async function addCell(rowId: string, columnId: string, value: string) {
       cell = newCell;
     }
 
-    revalidatePath(`/base/${rowData[0].table.baseId}`);
+    revalidatePath(`/base/${rowData[0].table.baseId}`, "page");
     return { success: true, cell };
   } catch (error) {
     console.error("Error adding/updating cell:", error);
@@ -299,4 +302,74 @@ async function getNextRowOrder(tableId: string): Promise<number> {
     .where(eq(rows.tableId, tableId));
 
   return (maxOrderResult[0]?.maxOrder ?? -1) + 1;
+}
+
+export async function addBulkRows(
+  tableId: string,
+  optimisticRows: Record<string, string | number>[],
+) {
+  try {
+    const CHUNK_SIZE = 1000;
+    const tableColumns = await db
+      .select()
+      .from(columns)
+      .where(eq(columns.tableId, tableId))
+      .orderBy(columns.order);
+
+    const lastRow = await db
+      .select({ order: rows.order })
+      .from(rows)
+      .where(eq(rows.tableId, tableId))
+      .orderBy(desc(rows.order))
+      .limit(1);
+
+    const startOrder = (lastRow[0]?.order ?? 0) + 1;
+    const allNewRows = [];
+
+    // Process in chunks
+    for (let i = 0; i < optimisticRows.length; i += CHUNK_SIZE) {
+      const chunk = optimisticRows.slice(i, i + CHUNK_SIZE);
+
+      // Insert chunk of rows
+      const rowsToInsert = chunk.map((_, index) => ({
+        tableId,
+        order: startOrder + i + index,
+      }));
+
+      const newRows = await db.insert(rows).values(rowsToInsert).returning();
+      allNewRows.push(...newRows);
+
+      // Insert cells for this chunk
+      const cellsForChunk = newRows.flatMap((row, rowIndex) =>
+        tableColumns.map((column) => {
+          const optimisticRow = chunk[rowIndex] ?? {};
+          const value = optimisticRow[column.name]?.toString() ?? "";
+          return {
+            rowId: row.id,
+            columnId: column.id,
+            value,
+            displayValue: value,
+            searchVector: sql`to_tsvector(${value})`,
+          };
+        }),
+      );
+
+      await db.insert(cells).values(cellsForChunk);
+    }
+
+    // Update row count once at the end
+    await db
+      .update(tables)
+      .set({ rowCount: sql`row_count + ${optimisticRows.length}` })
+      .where(eq(tables.id, tableId));
+
+    revalidatePath("/base/[baseId]", "page");
+    return {
+      success: true,
+      rows: allNewRows.map((row, i) => ({ ...row, ...optimisticRows[i] })),
+    };
+  } catch (error) {
+    console.error("Error adding bulk rows:", error);
+    return { success: false, error: "Failed to add bulk rows" };
+  }
 }
