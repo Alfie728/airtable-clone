@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { notFound } from "next/navigation";
 import type { tables } from "~/server/db/schema";
 import { TopNavigation } from "~/components/layout/TopNavigation";
 import { EnhancedDataGrid } from "~/components/grid/EnhancedDataGrid";
@@ -9,60 +8,41 @@ import { GridControls } from "~/components/grid/GridControls";
 import { Sidebar } from "~/components/layout/Sidebar";
 import { SecondaryNavigation } from "~/components/layout/SecondaryNavigation";
 import { useTable } from "~/hooks/useTable";
+// import type { TableData } from "~/hooks/useTable";
 
-interface TableData {
-  id: string;
-  name: string;
-  columns: {
-    id: string;
-    name: string;
-    type: "text" | "number";
-    order: number;
-    width: number;
-    isSearchable: boolean;
-    isSortable: boolean;
-    isVisible: boolean;
-  }[];
-  data: {
-    id: string;
-    [key: string]: string | number;
-  }[];
-}
+// interface SerializedTable {
+//   id: string;
+//   name: string;
+//   description: string | null;
+//   baseId: string;
+//   rowCount: number;
+//   createdAt: string;
+//   updatedAt: string | null;
+// }
 
-interface SerializedTable {
-  id: string;
-  name: string;
-  description: string | null;
-  baseId: string;
-  rowCount: number;
-  createdAt: string;
-  updatedAt: string | null;
-}
-
-interface BaseData {
-  id: string;
-  name: string;
-  tables: SerializedTable[];
-  currentTable: TableData | null;
-}
+// interface BaseData {
+//   id: string;
+//   name: string;
+//   tables: SerializedTable[];
+//   currentTable: TableData | null;
+// }
 
 interface BaseClientProps {
   baseId: string;
 }
 
 // Helper function to convert string dates to Date objects
-function deserializeTable(table: SerializedTable): typeof tables.$inferSelect {
-  return {
-    ...table,
-    createdAt: new Date(table.createdAt),
-    updatedAt: table.updatedAt ? new Date(table.updatedAt) : null,
-  };
-}
+// function deserializeTable(table: SerializedTable): typeof tables.$inferSelect {
+//   return {
+//     ...table,
+//     createdAt: new Date(table.createdAt),
+//     updatedAt: table.updatedAt ? new Date(table.updatedAt) : null,
+//   };
+// }
 
 export function BaseClient({ baseId }: BaseClientProps) {
   const [currentTableId, setCurrentTableId] = useState<string | null>(null);
 
-  // Use the table hook for data fetching and mutations
   const {
     tableData,
     baseTables,
@@ -70,16 +50,11 @@ export function BaseClient({ baseId }: BaseClientProps) {
     isBaseLoading,
     error,
     baseError,
-    addRow,
-    updateCell,
-    isAddingRow,
-    isUpdatingCell,
   } = useTable(baseId, currentTableId ?? "");
 
-  // Set initial table ID when base data is loaded
   useEffect(() => {
     if (baseTables && baseTables.length > 0 && !currentTableId) {
-      setCurrentTableId(baseTables[0].id);
+      setCurrentTableId(baseTables[0]?.id ?? null);
     }
   }, [baseTables, currentTableId]);
 

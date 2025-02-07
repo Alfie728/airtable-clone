@@ -1,34 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { faker } from "@faker-js/faker";
-import { addRow, addCell } from "~/lib/actions/tables.action";
 import { useTable } from "~/hooks/useTable";
-
-interface Row {
-  id: string;
-  [key: string]: string | number;
-}
-
-interface Column {
-  id: string;
-  name: string;
-  type: "text" | "number";
-  order: number;
-  width: number;
-  isSearchable: boolean;
-  isSortable: boolean;
-  isVisible: boolean;
-}
+import debounce from "lodash/debounce";
+import type { Row, Column } from "~/hooks/useTable";
 
 interface EnhancedDataGridProps {
   tableId: string;
@@ -60,8 +45,27 @@ export function EnhancedDataGrid({
     addRow,
     updateCell,
     isAddingRow,
-    isUpdatingCell,
-  } = useTable("", tableId);
+  } = useTable(tableId, tableId);
+
+  // Create a debounced update function
+  const debouncedUpdateCell = useMemo(
+    () =>
+      debounce(
+        (params: { rowId: string; columnId: string; value: string }) => {
+          void updateCell(params);
+        },
+        500,
+        { leading: false },
+      ),
+    [updateCell],
+  );
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      debouncedUpdateCell.cancel();
+    };
+  }, [debouncedUpdateCell]);
 
   useEffect(() => {
     if (tableData) {
@@ -167,7 +171,7 @@ export function EnhancedDataGrid({
     columnId: string,
     value: string,
   ) {
-    updateCell({ rowId, columnId, value });
+    await updateCell({ rowId, columnId, value });
   }
 
   function handleTabNavigation(
@@ -342,29 +346,29 @@ export function EnhancedDataGrid({
   );
 }
 
-function generateRow(columns: Column[]): Row {
-  const row: Row = { id: crypto.randomUUID() };
-  columns.forEach((column) => {
-    if (column.type === "text") {
-      switch (column.name.toLowerCase()) {
-        case "name":
-          row[column.name] = faker.person.fullName();
-          break;
-        case "city":
-          row[column.name] = faker.location.city();
-          break;
-        default:
-          row[column.name] = faker.lorem.word();
-      }
-    } else if (column.type === "number") {
-      switch (column.name.toLowerCase()) {
-        case "age":
-          row[column.name] = faker.number.int({ min: 18, max: 80 });
-          break;
-        default:
-          row[column.name] = faker.number.int({ min: 0, max: 100 });
-      }
-    }
-  });
-  return row;
-}
+// function generateRow(columns: Column[]): Row {
+//   const row: Row = { id: crypto.randomUUID() };
+//   columns.forEach((column) => {
+//     if (column.type === "text") {
+//       switch (column.name.toLowerCase()) {
+//         case "name":
+//           row[column.name] = faker.person.fullName();
+//           break;
+//         case "city":
+//           row[column.name] = faker.location.city();
+//           break;
+//         default:
+//           row[column.name] = faker.lorem.word();
+//       }
+//     } else if (column.type === "number") {
+//       switch (column.name.toLowerCase()) {
+//         case "age":
+//           row[column.name] = faker.number.int({ min: 18, max: 80 });
+//           break;
+//         default:
+//           row[column.name] = faker.number.int({ min: 0, max: 100 });
+//       }
+//     }
+//   });
+//   return row;
+// }

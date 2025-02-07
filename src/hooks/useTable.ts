@@ -3,14 +3,13 @@ import { type tables } from "~/server/db/schema";
 import {
   getTables,
   getTableData,
-  createTable,
   addRow,
   addCell,
 } from "~/lib/actions/tables.action";
-import { QueryClient } from "@tanstack/react-query";
 import { faker } from "@faker-js/faker";
+import { QueryClient } from "@tanstack/react-query";
 
-// Types for table state management
+// Define types at the top
 interface Row {
   id: string;
   [key: string]: string | number;
@@ -46,95 +45,71 @@ interface BaseResponse {
   error?: string;
 }
 
-// Prefetch function for SSR
-export async function prefetchTable(baseId: string, tableId: string) {
-  const queryClient = new QueryClient();
-
-  await Promise.all([
-    queryClient.prefetchQuery({
-      queryKey: ["base", baseId],
-      queryFn: () => getTables(baseId),
-    }),
-    queryClient.prefetchQuery({
-      queryKey: ["table", tableId],
-      queryFn: () => getTableData(tableId, ""),
-    }),
-  ]);
-
-  return queryClient;
-}
-
 function generateMockRow(columns: Column[]): Row {
   const row: Row = { id: crypto.randomUUID() };
+
   columns.forEach((column) => {
     if (column.type === "text") {
-      switch (column.name.toLowerCase()) {
-        case "name":
-          row[column.name] = faker.person.fullName();
-          break;
-        case "notes":
-          row[column.name] = faker.lorem.sentence();
-          break;
-        case "email":
-          row[column.name] = faker.internet.email();
-          break;
-        case "phone":
-          row[column.name] = faker.phone.number();
-          break;
-        case "company":
-          row[column.name] = faker.company.name();
-          break;
-        case "city":
-          row[column.name] = faker.location.city();
-          break;
-        default:
-          row[column.name] = faker.lorem.word();
-      }
+      row[column.name] = generateTextValue(column.name.toLowerCase());
     } else if (column.type === "number") {
-      switch (column.name.toLowerCase()) {
-        case "age":
-          row[column.name] = faker.number.int({ min: 18, max: 80 });
-          break;
-        case "price":
-          row[column.name] = faker.number.float({
-            min: 1,
-            max: 1000,
-            fractionDigits: 2,
-          });
-          break;
-        default:
-          row[column.name] = faker.number.int({ min: 0, max: 100 });
-      }
+      row[column.name] = generateNumberValue(column.name.toLowerCase());
     }
   });
+
   return row;
 }
 
-// Main hook for table operations
+// Helper functions to make the code more maintainable
+function generateTextValue(columnName: string): string {
+  switch (columnName) {
+    case "name":
+      return faker.person.fullName();
+    case "notes":
+      return faker.lorem.sentence();
+    case "email":
+      return faker.internet.email();
+    case "phone":
+      return faker.phone.number();
+    case "company":
+      return faker.company.name();
+    case "city":
+      return faker.location.city();
+    default:
+      return faker.lorem.word();
+  }
+}
+
+function generateNumberValue(columnName: string): number {
+  switch (columnName) {
+    case "age":
+      return faker.number.int({ min: 18, max: 80 });
+    case "price":
+      return faker.number.float({ min: 1, max: 1000, fractionDigits: 2 });
+    default:
+      return faker.number.int({ min: 0, max: 100 });
+  }
+}
+
 export const useTable = (baseId: string, tableId: string) => {
   const queryClient = useQueryClient();
 
-  // Query for fetching base data (tables list)
   const baseQuery = useQuery<BaseResponse>({
     queryKey: ["base", baseId],
     queryFn: () => getTables(baseId),
-    enabled: !!baseId,
-    staleTime: 10 * 1000, // Consider data fresh for 10 seconds
+    enabled: Boolean(baseId),
+    staleTime: 10 * 1000,
   });
 
-  // Get table name from base data
   const tableName =
     baseQuery.data?.tables?.find((t) => t.id === tableId)?.name ?? "";
 
-  // Query for fetching table data
   const tableQuery = useQuery<TableResponse>({
     queryKey: ["table", tableId],
     queryFn: () => getTableData(tableId, tableName),
-    enabled: !!tableId && !!tableName,
-    staleTime: 5 * 1000, // Consider data fresh for 5 seconds
+    enabled: Boolean(tableId && tableName),
+    staleTime: 5 * 1000,
   });
 
-  // Mutation for adding a row
   const addRowMutation = useMutation({
     mutationFn: (optimisticRow: Row) => addRow(tableId, optimisticRow),
     onMutate: async (optimisticRow) => {
@@ -152,18 +127,13 @@ export const useTable = (baseId: string, tableId: string) => {
             data: [...previousData.table.data, optimisticRow],
           },
         });
-
-        return { previousData, optimisticRow };
       }
 
-      return { previousData };
+      return { previousData, optimisticRow };
     },
-    onError: (err, variables, context) => {
+    onError: (err, _, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData<TableResponse>(
-          ["table", tableId],
-          context.previousData,
-        );
+        queryClient.setQueryData(["table", tableId], context.previousData);
       }
     },
     onSettled: () => {
@@ -171,18 +141,17 @@ export const useTable = (baseId: string, tableId: string) => {
     },
   });
 
-  // Mutation for updating a cell
   const updateCellMutation = useMutation({
-    mutationFn: ({
-      rowId,
-      columnId,
-      value,
-    }: {
+    mutationFn: async (params: {
       rowId: string;
       columnId: string;
       value: string;
     }) => {
-      return addCell(rowId, columnId, value);
+      const result = await addCell(params.rowId, params.columnId, params.value);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      return result;
     },
     onMutate: async ({ rowId, columnId, value }) => {
       await queryClient.cancelQueries({ queryKey: ["table", tableId] });
@@ -219,12 +188,9 @@ export const useTable = (baseId: string, tableId: string) => {
 
       return { previousData };
     },
-    onError: (err, variables, context) => {
+    onError: (err, _, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData<TableResponse>(
-          ["table", tableId],
-          context.previousData,
-        );
+        queryClient.setQueryData(["table", tableId], context.previousData);
       }
     },
     onSettled: () => {
@@ -233,17 +199,12 @@ export const useTable = (baseId: string, tableId: string) => {
   });
 
   return {
-    // Base data
     baseTables: baseQuery.data?.tables,
     isBaseLoading: baseQuery.isLoading,
     baseError: baseQuery.error,
-
-    // Table data
     tableData: tableQuery.data?.table,
     isLoading: tableQuery.isLoading,
     error: tableQuery.error,
-
-    // Mutations
     addRow: () => {
       const previousData = queryClient.getQueryData<TableResponse>([
         "table",
@@ -254,18 +215,35 @@ export const useTable = (baseId: string, tableId: string) => {
         addRowMutation.mutate(optimisticRow);
       }
     },
-    updateCell: (params: { rowId: string; columnId: string; value: string }) =>
-      updateCellMutation.mutate(params),
+    updateCell: (params: {
+      rowId: string;
+      columnId: string;
+      value: string;
+    }) => {
+      return updateCellMutation.mutateAsync(params);
+    },
     isAddingRow: addRowMutation.isPending,
     isUpdatingCell: updateCellMutation.isPending,
   };
 };
 
-// Helper function to generate an empty row
-function generateEmptyRow(columns: Column[]): Record<string, string | number> {
-  const row: Record<string, string | number> = {};
-  columns.forEach((column) => {
-    row[column.name] = column.type === "number" ? 0 : "";
-  });
-  return row;
+// Export the types
+export type { Row, Column, TableData, TableResponse, BaseResponse };
+
+// Export the prefetch function
+export async function prefetchTable(baseId: string, tableId: string) {
+  const queryClient = new QueryClient();
+
+  await Promise.all([
+    queryClient.prefetchQuery({
+      queryKey: ["base", baseId],
+      queryFn: () => getTables(baseId),
+    }),
+    queryClient.prefetchQuery({
+      queryKey: ["table", tableId],
+      queryFn: () => getTableData(tableId, ""),
+    }),
+  ]);
+
+  return queryClient;
 }
