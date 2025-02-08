@@ -1,7 +1,6 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import "~/styles/globals.css";
 import { Providers } from "./providers";
-
 import { GeistSans } from "geist/font/sans";
 import { type Metadata } from "next";
 
@@ -16,11 +15,11 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={GeistSans.variable}>
-      <ClerkProvider>
-        <Providers>
-          <body>{children}</body>
-        </Providers>
-      </ClerkProvider>
+      <body>
+        <ClerkProvider>
+          <Providers>{children}</Providers>
+        </ClerkProvider>
+      </body>
     </html>
   );
 }
