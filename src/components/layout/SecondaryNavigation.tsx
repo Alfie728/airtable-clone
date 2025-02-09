@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { createTable } from "~/lib/actions/tables.action";
@@ -27,6 +27,7 @@ interface SecondaryNavigationProps {
 export function SecondaryNavigation({
   tables = [],
   currentTableId,
+  currentTableName,
   onTableSelect,
   onTableCreated,
 }: SecondaryNavigationProps) {
@@ -91,96 +92,76 @@ export function SecondaryNavigation({
 
   return (
     <>
-      <div className="flex flex-col border-b">
-        {/* Table tabs */}
-        <div className="flex items-center gap-2 px-4">
-          <div className="flex flex-1 items-center">
-            {tables.map((table) => (
-              <button
-                key={table.id}
-                onClick={() => onTableSelect?.(table.id)}
-                className={cn(
-                  "relative px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900",
-                  "focus:outline-none",
-                  "after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5",
-                  currentTableId === table.id
-                    ? "text-green-600 after:bg-green-600"
-                    : "after:bg-transparent",
-                )}
-              >
-                {table.name}
-              </button>
-            ))}
+      <div className="flex h-10 items-center gap-2 border-b border-gray-200 px-4">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
-              className="ml-2"
+              className="h-7 gap-1 rounded px-2 text-sm font-medium hover:bg-gray-100"
+            >
+              Table 1
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 rounded px-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
               onClick={() => setIsCreateTableOpen(true)}
             >
               <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Controls */}
-        <div className="flex items-center justify-between border-t px-4 py-2">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" className="gap-2">
               Add or import
             </Button>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost">Extensions</Button>
-            <Button variant="ghost" className="gap-2">
-              Tools
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </div>
+        </div>
+        <div className="flex-1" />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 rounded px-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          >
+            Extensions
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 rounded px-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          >
+            Tools
+            <ChevronDown className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
       <Dialog open={isCreateTableOpen} onOpenChange={handleOpenChange}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create new table</DialogTitle>
+            <DialogTitle>Create a new table</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreateTable} className="space-y-4">
-            <div className="space-y-2">
-              <label
-                htmlFor="tableName"
-                className="text-sm font-medium text-gray-700"
-              >
-                Table name
-              </label>
-              <Input
-                id="tableName"
-                value={tableName}
-                onChange={(e) => {
-                  setTableName(e.target.value);
-                  setError("");
-                }}
-                placeholder="Enter table name"
-                className={cn("w-full", error && "border-red-500")}
-                aria-invalid={!!error}
-                aria-errormessage={error ? "tableName-error" : undefined}
-              />
-              {error && (
-                <p id="tableName-error" className="text-sm text-red-500">
-                  {error}
-                </p>
-              )}
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => handleOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isCreating || !tableName.trim()}>
-                {isCreating ? "Creating..." : "Create table"}
-              </Button>
+          <form onSubmit={handleCreateTable}>
+            <div className="space-y-4">
+              <div>
+                <Input
+                  value={tableName}
+                  onChange={(e) => setTableName(e.target.value)}
+                  placeholder="Table name"
+                  className="mt-2"
+                />
+                {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => handleOpenChange(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isCreating}>
+                  {isCreating ? "Creating..." : "Create"}
+                </Button>
+              </div>
             </div>
           </form>
         </DialogContent>

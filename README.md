@@ -25,16 +25,16 @@
 
 ## Core Features
 - [ ] Base Management
-  - [ ] Create base
+  - [x] Create base
   - [ ] Delete base
   - [ ] Rename base
   - [ ] List bases
 
 - [ ] Table Management
-  - [ ] Create table
+  - [x] Create table
   - [ ] Delete table
   - [ ] Rename table
-  - [ ] Generate fake data using Faker.js
+  - [x] Generate fake data using Faker.js
   - [ ] Import/Export functionality
 
 - [ ] Column Management

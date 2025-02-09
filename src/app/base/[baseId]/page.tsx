@@ -1,195 +1,38 @@
-"use client";
+import { BaseClient } from "./BaseClient";
+import { prefetchTable } from "~/lib/query/prefetch";
+import { getTables } from "~/lib/actions/tables.action";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 
-import { useEffect, useState } from "react";
-import { notFound, useParams } from "next/navigation";
-import type { tables } from "~/server/db/schema";
-import { TopNavigation } from "~/components/layout/TopNavigation";
-import { EnhancedDataGrid } from "~/components/grid/EnhancedDataGrid";
-import { GridControls } from "~/components/grid/GridControls";
-import { Sidebar } from "~/components/layout/Sidebar";
-import { SecondaryNavigation } from "~/components/layout/SecondaryNavigation";
-import { getTables, getTableData } from "~/lib/actions/tables.action";
-
-interface TableData {
-  id: string;
-  name: string;
-  columns: {
-    id: string;
-    name: string;
-    type: "text" | "number";
-    order: number;
-    width: number;
-    isSearchable: boolean;
-    isSortable: boolean;
-    isVisible: boolean;
-  }[];
-  data: {
-    id: string;
-    [key: string]: string | number;
-  }[];
+interface PageProps {
+  params: {
+    baseId: string;
+  };
 }
 
-interface BaseData {
-  id: string;
-  name: string;
-  tables: Array<typeof tables.$inferSelect>;
-  currentTable: TableData | null;
-}
-
-export default function BasePage() {
-  const params = useParams();
-  const [base, setBase] = useState<BaseData | null>(null);
-  const [currentTableId, setCurrentTableId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isTableDataLoading, setIsTableDataLoading] = useState(false);
-
-  // Load base and tables
-  useEffect(() => {
-    async function loadBase() {
-      try {
-        const baseId = params.baseId as string;
-        const { success, tables: baseTables } = await getTables(baseId);
-
-        if (!success || !baseTables) {
-          notFound();
-        }
-
-        setBase((prev) => ({
-          id: baseId,
-          name: prev?.name ?? "My Base",
-          tables: baseTables,
-          currentTable: null, // Reset current table when base changes
-        }));
-
-        // Set initial table ID if not set
-        if (!currentTableId && baseTables?.[0]?.id) {
-          setCurrentTableId(baseTables[0].id);
-        }
-      } catch (error) {
-        console.error("Error loading base:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    void loadBase();
-  }, [params.baseId]);
-
-  // Load table data when table ID changes
-  useEffect(() => {
-    async function loadTableData() {
-      if (!currentTableId || !base) return;
-
-      setIsTableDataLoading(true);
-      try {
-        const tableToLoad = base.tables.find((t) => t.id === currentTableId);
-        if (!tableToLoad) return;
-
-        const { success, table: tableData } = await getTableData(
-          currentTableId,
-          tableToLoad.name,
-        );
-
-        if (success && tableData) {
-          setBase((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  currentTable: tableData,
-                }
-              : null,
-          );
-        }
-      } catch (error) {
-        console.error("Error loading table data:", error);
-      } finally {
-        setIsTableDataLoading(false);
-      }
-    }
-
-    void loadTableData();
-  }, [currentTableId, base?.tables]);
-
-  const handleTableCreated = (newTable: typeof tables.$inferSelect) => {
-    setBase((prev) =>
-      prev
-        ? {
-            ...prev,
-            tables: [...prev.tables, newTable],
-          }
-        : null,
-    );
-    setCurrentTableId(newTable.id);
-  };
-
-  const handleTableSelect = (tableId: string) => {
-    setCurrentTableId(tableId);
-  };
-
-  if (isLoading || !base) {
-    return null;
+export default async function BasePage({ params }: PageProps) {
+  const { userId } = await auth();
+  if (!userId) {
+    redirect("/sign-in");
   }
 
+  const { baseId } = await Promise.resolve(params);
+
+  // Get initial tables to find the first table ID
+  const { success, tables } = await getTables(baseId);
+  if (!success) {
+    redirect("/");
+  }
+
+  const initialTableId = tables?.[0]?.id ?? "";
+
+  // Prefetch data
+  const queryClient = await prefetchTable(baseId, initialTableId);
+
   return (
-    <div className="flex min-h-screen flex-col bg-white">
-      <TopNavigation showBaseOptions baseName={base.name} />
-      <main className="flex-1">
-        <div className="flex h-full">
-          <Sidebar
-            tables={base.tables}
-            currentTableId={currentTableId}
-            onTableSelect={handleTableSelect}
-          />
-          <div className="flex-1">
-            <SecondaryNavigation
-              currentTableName={base.currentTable?.name}
-              tables={base.tables}
-              currentTableId={currentTableId}
-              onTableSelect={handleTableSelect}
-              onTableCreated={handleTableCreated}
-            />
-            <GridControls />
-            {base.currentTable ? (
-              <div className="space-y-8 p-4">
-                <div className="space-y-2">
-                  <h2 className="text-lg font-semibold">
-                    {base.currentTable.name}
-                  </h2>
-                  {isTableDataLoading ? (
-                    <div className="flex h-64 items-center justify-center rounded-md border">
-                      <div className="text-sm text-gray-500">
-                        Loading table data...
-                      </div>
-                    </div>
-                  ) : (
-                    <EnhancedDataGrid
-                      tableId={currentTableId!}
-                      initialData={base.currentTable.data}
-                      initialColumns={base.currentTable.columns}
-                    />
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex h-full items-center justify-center">
-                <div className="text-center">
-                  <h3 className="text-sm font-semibold text-gray-900">
-                    No tables
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Get started by creating a new table
-                  </p>
-                  <div className="mt-6">
-                    <button className="inline-flex items-center gap-x-2 rounded-md bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
-                      Create table
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </main>
-    </div>
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <BaseClient baseId={baseId} />
+    </HydrationBoundary>
   );
 }
