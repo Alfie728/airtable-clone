@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { TopNavigation } from "~/components/layout/TopNavigation";
+import { HomeTopNavigation } from "~/components/layout/TopNavigation";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { getUserBases } from "~/lib/actions/bases.action";
@@ -57,7 +57,7 @@ export default async function Page() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      <TopNavigation showBaseOptions={false} />
+      <HomeTopNavigation />
       <main className="flex-1 p-6">
         <div className="mx-auto max-w-7xl">
           <div className="flex items-center justify-between">

@@ -127,8 +127,11 @@ function EditableCell({ getValue, row, column, table }: EditableCellProps) {
 
   if (!isEditing) {
     return (
-      <div className="cursor-pointer p-2" onClick={() => setIsEditing(true)}>
-        {value}
+      <div
+        className="flex h-full w-full cursor-pointer items-center text-sm text-gray-900"
+        onClick={() => setIsEditing(true)}
+      >
+        <span className="truncate">{value}</span>
       </div>
     );
   }
@@ -145,7 +148,7 @@ function EditableCell({ getValue, row, column, table }: EditableCellProps) {
           ? "number"
           : "text"
       }
-      className="h-8"
+      className="h-[22px] w-full border-0 bg-white p-0 text-sm shadow-[0_0_0_2px_#166BFF] focus:ring-0"
     />
   );
 }
@@ -476,14 +479,13 @@ export function EnhancedDataGrid({
   }
 
   return (
-    <div className="rounded-md border">
+    <div className="h-full">
       <div
         ref={tableContainerRef}
-        className="overflow-auto"
+        className="h-full overflow-auto"
         style={{
-          height: "600px", // Fixed height for virtualization
           position: "relative",
-          scrollBehavior: "smooth", // Add smooth scrolling
+          scrollBehavior: "smooth",
         }}
       >
         {isLoading ? (
@@ -499,21 +501,20 @@ export function EnhancedDataGrid({
             </div>
           </div>
         ) : (
-          <table style={{ display: "grid" }}>
+          <table style={{ display: "grid", width: "100%" }}>
             <thead
               style={{
                 display: "grid",
                 position: "sticky",
                 top: 0,
                 zIndex: 1,
-                backgroundColor: "white",
               }}
             >
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr
                   key={headerGroup.id}
                   style={{ display: "flex", width: "100%" }}
-                  className="border-b bg-gray-50"
+                  className="bg-gray-50"
                 >
                   {headerGroup.headers.map((header) => (
                     <th
@@ -522,14 +523,14 @@ export function EnhancedDataGrid({
                         display: "flex",
                         width: header.getSize() ?? "auto",
                       }}
-                      className="border-r p-2 text-left font-medium text-gray-600 last:border-r-0"
+                      className="border-b border-r border-gray-200 px-2 py-1 text-left text-xs font-medium text-gray-600 last:border-r-0"
                     >
                       <div
-                        className={
+                        className={`flex items-center gap-1 ${
                           header.column.getCanSort()
                             ? "cursor-pointer select-none"
                             : ""
-                        }
+                        }`}
                         onClick={header.column.getToggleSortingHandler()}
                       >
                         {flexRender(
@@ -543,14 +544,14 @@ export function EnhancedDataGrid({
                       </div>
                     </th>
                   ))}
-                  <th className="w-10 p-2">
+                  <th className="w-10 border-b border-gray-200 px-1 py-1">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={handleAddColumn}
-                      className="h-8 w-8 p-0"
+                      className="h-5 w-5 p-0"
                     >
-                      <Plus className="h-4 w-4" />
+                      <Plus className="h-3 w-3" />
                     </Button>
                   </th>
                 </tr>
@@ -578,7 +579,7 @@ export function EnhancedDataGrid({
                         transform: `translateY(${virtualRow.start}px)`,
                         width: "100%",
                       }}
-                      className="border-b last:border-b-0"
+                      className="hover:bg-gray-50/50"
                     >
                       {row.getVisibleCells().map((cell) => (
                         <td
@@ -587,7 +588,7 @@ export function EnhancedDataGrid({
                             display: "flex",
                             width: cell.column.getSize() ?? "auto",
                           }}
-                          className="border-r p-0 last:border-r-0"
+                          className="border-b border-r border-gray-100 px-2 py-[3px] text-sm last:border-r-0"
                         >
                           {flexRender(
                             cell.column.columnDef.cell,
@@ -595,7 +596,7 @@ export function EnhancedDataGrid({
                           )}
                         </td>
                       ))}
-                      <td className="w-10" />
+                      <td className="w-10 border-b border-gray-100" />
                     </tr>
                   );
                 })}
@@ -603,21 +604,21 @@ export function EnhancedDataGrid({
           </table>
         )}
       </div>
-      <div className="border-t p-2">
+      <div className="border-t border-gray-200 bg-white p-2">
         <div className="flex gap-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => void addRow()}
-            className="gap-2"
+            className="h-7 gap-2 text-xs hover:bg-gray-50"
             disabled={isAddingRow}
           >
             {isAddingRow ? (
               "Adding..."
             ) : (
               <>
-                <Plus className="h-4 w-4" />
-                Add row
+                <Plus className="h-3 w-3" />
+                Add record
               </>
             )}
           </Button>
@@ -625,15 +626,15 @@ export function EnhancedDataGrid({
             variant="ghost"
             size="sm"
             onClick={handleAddBulkRows}
-            className="gap-2"
+            className="h-7 gap-2 text-xs hover:bg-gray-50"
             disabled={isBatchAdding}
           >
             {isBatchAdding ? (
-              `Adding ${BULK_ADD_ROWS_COUNT} rows...`
+              `Adding ${BULK_ADD_ROWS_COUNT} records...`
             ) : (
               <>
-                <Plus className="h-4 w-4" />
-                Add {BULK_ADD_ROWS_COUNT} rows
+                <Plus className="h-3 w-3" />
+                Add {BULK_ADD_ROWS_COUNT} records
               </>
             )}
           </Button>

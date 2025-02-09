@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import type { tables } from "~/server/db/schema";
-import { TopNavigation } from "~/components/layout/TopNavigation";
+import { BaseTopNavigation } from "~/components/layout/TopNavigation";
 import { EnhancedDataGrid } from "~/components/grid/EnhancedDataGrid";
 import { GridControls } from "~/components/grid/GridControls";
 import { Sidebar } from "~/components/layout/Sidebar";
 import { SecondaryNavigation } from "~/components/layout/SecondaryNavigation";
 import { useTable } from "~/hooks/useTable";
+import { useBase } from "~/hooks/useBase";
+import { cn } from "~/lib/utils";
 // import type { TableData } from "~/hooks/useTable";
 
 // interface SerializedTable {
@@ -42,9 +44,12 @@ interface BaseClientProps {
 
 export function BaseClient({ baseId }: BaseClientProps) {
   const [currentTableId, setCurrentTableId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const { tableData, baseTables, isLoading, isBaseLoading, error, baseError } =
     useTable(baseId, currentTableId ?? "");
+
+  const { baseName, isLoading: isBaseNameLoading } = useBase(baseId);
 
   useEffect(() => {
     if (baseTables && baseTables.length > 0 && !currentTableId) {
@@ -75,7 +80,7 @@ export function BaseClient({ baseId }: BaseClientProps) {
     );
   }
 
-  if (isBaseLoading) {
+  if (isBaseLoading || isBaseNameLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-sm text-gray-500">Loading base data...</div>
@@ -85,66 +90,63 @@ export function BaseClient({ baseId }: BaseClientProps) {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      <TopNavigation showBaseOptions baseName={tableData?.name ?? "My Base"} />
-      <main className="flex-1">
-        <div className="flex h-full">
-          <Sidebar
-            tables={baseTables ?? []}
-            currentTableId={currentTableId}
-            onTableSelect={handleTableSelect}
-          />
-          <div className="flex-1">
-            <SecondaryNavigation
-              currentTableName={tableData?.name}
+      <BaseTopNavigation baseName={baseName} />
+      <main className="flex flex-1 flex-col">
+        <SecondaryNavigation
+          currentTableName={tableData?.name}
+          tables={baseTables ?? []}
+          currentTableId={currentTableId}
+          onTableSelect={handleTableSelect}
+          onTableCreated={handleTableCreated}
+        />
+        <GridControls
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        />
+        <div className="relative flex flex-1">
+          <div
+            className={cn(
+              "absolute bottom-0 left-0 top-0 z-10 w-60 border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
+              !isSidebarOpen && "-translate-x-full",
+            )}
+          >
+            <Sidebar
               tables={baseTables ?? []}
               currentTableId={currentTableId}
               onTableSelect={handleTableSelect}
-              onTableCreated={handleTableCreated}
             />
-            <GridControls />
-            {tableData ? (
-              <div className="space-y-8 p-4">
-                <div className="space-y-2">
-                  <h2 className="text-lg font-semibold">{tableData.name}</h2>
-                  {isLoading ? (
-                    <div className="flex h-64 items-center justify-center rounded-md border">
-                      <div className="text-sm text-gray-500">
-                        Loading table data...
-                      </div>
-                    </div>
-                  ) : error ? (
-                    <div className="flex h-64 items-center justify-center rounded-md border">
-                      <div className="text-sm text-red-500">
-                        {error instanceof Error
-                          ? error.message
-                          : "Failed to load table data"}
-                      </div>
-                    </div>
-                  ) : (
-                    <EnhancedDataGrid
-                      tableId={currentTableId!}
-                      initialData={tableData.data}
-                      initialColumns={tableData.columns}
-                    />
-                  )}
+          </div>
+          <div
+            className={cn(
+              "flex-1 overflow-x-auto transition-[margin] duration-200 ease-in-out",
+              isSidebarOpen && "ml-60",
+            )}
+          >
+            {isLoading ? (
+              <div className="flex h-full items-center justify-center">
+                <div className="text-sm text-gray-500">
+                  Loading table data...
+                </div>
+              </div>
+            ) : error ? (
+              <div className="flex h-full items-center justify-center">
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold text-red-600">Error</h3>
+                  <p className="mt-2 text-sm text-gray-500">
+                    {error instanceof Error
+                      ? error.message
+                      : "Failed to load table data"}
+                  </p>
                 </div>
               </div>
             ) : (
-              <div className="flex h-full items-center justify-center">
-                <div className="text-center">
-                  <h3 className="text-sm font-semibold text-gray-900">
-                    No tables
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Get started by creating a new table
-                  </p>
-                  <div className="mt-6">
-                    <button className="inline-flex items-center gap-x-2 rounded-md bg-blue-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
-                      Create table
-                    </button>
-                  </div>
-                </div>
-              </div>
+              tableData && (
+                <EnhancedDataGrid
+                  tableId={currentTableId!}
+                  initialData={tableData.data}
+                  initialColumns={tableData.columns}
+                />
+              )
             )}
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { TopNavigation } from "~/components/layout/TopNavigation";
+import { HomeTopNavigation } from "~/components/layout/TopNavigation";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createBase } from "~/lib/actions/bases.action";
@@ -37,7 +37,7 @@ export default function NewBasePage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      <TopNavigation showBaseOptions={false} />
+      <HomeTopNavigation />
       <Toaster position="top-center" />
       <main className="flex-1 p-6">
         <div className="mx-auto max-w-2xl">
