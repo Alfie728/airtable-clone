@@ -479,10 +479,10 @@ export function EnhancedDataGrid({
   }
 
   return (
-    <div className="h-full">
+    <div className="flex h-full flex-col">
       <div
         ref={tableContainerRef}
-        className="h-full overflow-auto"
+        className="flex-1 overflow-auto"
         style={{
           position: "relative",
           scrollBehavior: "smooth",

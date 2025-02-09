@@ -89,9 +89,9 @@ export function BaseClient({ baseId }: BaseClientProps) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex h-screen flex-col bg-white">
       <BaseTopNavigation baseName={baseName} />
-      <main className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-hidden">
         <SecondaryNavigation
           currentTableName={tableData?.name}
           tables={baseTables ?? []}
@@ -103,7 +103,7 @@ export function BaseClient({ baseId }: BaseClientProps) {
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
-        <div className="relative flex flex-1">
+        <div className="relative flex flex-1 overflow-hidden">
           <div
             className={cn(
               "absolute bottom-0 left-0 top-0 z-10 w-60 border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
@@ -118,7 +118,7 @@ export function BaseClient({ baseId }: BaseClientProps) {
           </div>
           <div
             className={cn(
-              "flex-1 overflow-x-auto transition-[margin] duration-200 ease-in-out",
+              "flex-1 transition-[margin] duration-200 ease-in-out",
               isSidebarOpen && "ml-60",
             )}
           >
@@ -150,7 +150,7 @@ export function BaseClient({ baseId }: BaseClientProps) {
             )}
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
