@@ -1,3 +1,5 @@
+"use client";
+
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { type tables } from "~/server/db/schema";
 import {
@@ -8,7 +10,6 @@ import {
   addBulkRows,
 } from "~/lib/actions/tables.action";
 import { faker } from "@faker-js/faker";
-import { QueryClient } from "@tanstack/react-query";
 
 // Define types at the top
 interface Row {
@@ -281,21 +282,3 @@ export const useTable = (baseId: string, tableId: string) => {
 
 // Export the types
 export type { Row, Column, TableData, TableResponse, BaseResponse };
-
-// Export the prefetch function
-export async function prefetchTable(baseId: string, tableId: string) {
-  const queryClient = new QueryClient();
-
-  await Promise.all([
-    queryClient.prefetchQuery({
-      queryKey: ["base", baseId],
-      queryFn: () => getTables(baseId),
-    }),
-    queryClient.prefetchQuery({
-      queryKey: ["table", tableId],
-      queryFn: () => getTableData(tableId, ""),
-    }),
-  ]);
-
-  return queryClient;
-}

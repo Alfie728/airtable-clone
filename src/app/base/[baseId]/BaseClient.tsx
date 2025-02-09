@@ -43,14 +43,8 @@ interface BaseClientProps {
 export function BaseClient({ baseId }: BaseClientProps) {
   const [currentTableId, setCurrentTableId] = useState<string | null>(null);
 
-  const {
-    tableData,
-    baseTables,
-    isLoading,
-    isBaseLoading,
-    error,
-    baseError,
-  } = useTable(baseId, currentTableId ?? "");
+  const { tableData, baseTables, isLoading, isBaseLoading, error, baseError } =
+    useTable(baseId, currentTableId ?? "");
 
   useEffect(() => {
     if (baseTables && baseTables.length > 0 && !currentTableId) {

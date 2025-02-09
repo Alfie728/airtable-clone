@@ -1,5 +1,5 @@
 import { BaseClient } from "./BaseClient";
-import { prefetchTable } from "~/hooks/useTable";
+import { prefetchTable } from "~/lib/query/prefetch";
 import { getTables } from "~/lib/actions/tables.action";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { auth } from "@clerk/nextjs/server";
