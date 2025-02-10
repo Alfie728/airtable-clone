@@ -46,7 +46,7 @@ type HeaderType = Header<Row, string | number>;
 type CellType = Cell<Row, string | number>;
 type RowType = TableRow<Row>;
 
-const BULK_ADD_ROWS_COUNT = 500;
+const BULK_ADD_ROWS_COUNT = 15000;
 
 interface EnhancedDataGridProps {
   tableId: string;
@@ -160,16 +160,12 @@ export function EnhancedDataGrid({
   onDataChange,
   onColumnsChange,
 }: EnhancedDataGridProps) {
-  const [localData, setLocalData] = useState<Row[]>(() => initialData ?? []);
   const [editingCell, setEditingCell] = useState<{
     rowId: string | null;
     columnId: string | null;
   }>({ rowId: null, columnId: null });
-
-  // Track pending edits for rows being added
-  const [pendingRowEdits, setPendingRowEdits] = useState<
-    Record<string, { columnId: string; value: string }[]>
-  >({});
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   const {
     tableData,
@@ -183,78 +179,15 @@ export function EnhancedDataGrid({
   } = useTable(tableId, tableId);
 
   const columns = useMemo(() => tableData?.columns ?? [], [tableData?.columns]);
-
-  // Track pending updates with debounce
-  const [pendingUpdate, setPendingUpdate] = useState<{
-    timeoutId: NodeJS.Timeout | null;
-    params: { rowId: string; columnId: string; value: string } | null;
-  }>({ timeoutId: null, params: null });
-
-  const [autoResetPageIndex, skipAutoResetPageIndex] = useSkipper();
-
-  // Add ref for virtualization
-  const tableContainerRef = useRef<HTMLDivElement>(null);
-  const [sorting, setSorting] = useState<SortingState>([]);
-
-  // Scroll to bottom when new rows are added
-  useEffect(() => {
-    if (tableContainerRef.current && (isAddingRow || isBatchAdding)) {
-      const scrollElement = tableContainerRef.current;
-      scrollElement.scrollTop = scrollElement.scrollHeight;
-    }
-  }, [localData.length, isAddingRow, isBatchAdding]);
-
-  // Apply pending edits when row creation is complete
-  useEffect(() => {
-    if (!isAddingRow && tableData) {
-      // Find rows that were just created
-      Object.entries(pendingRowEdits).forEach(([rowId, edits]) => {
-        const serverRow = tableData.data.find((row) => row.id === rowId);
-        if (serverRow) {
-          // Apply all pending edits for this row
-          edits.forEach(({ columnId, value }) => {
-            void updateCell({ rowId, columnId, value });
-          });
-          // Clear pending edits for this row
-          setPendingRowEdits((prev) => {
-            const { [rowId]: _, ...rest } = prev;
-            return rest;
-          });
-        }
-      });
-    }
-  }, [isAddingRow, tableData, updateCell]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      if (pendingUpdate.timeoutId) {
-        clearTimeout(pendingUpdate.timeoutId);
-      }
-    };
-  }, [pendingUpdate.timeoutId]);
+  const data = useMemo(() => tableData?.data ?? [], [tableData?.data]);
 
   useEffect(() => {
-    if (tableData) {
-      // Preserve local edits when updating from server
-      const newData = tableData.data.map((row) => {
-        const rowEdits = pendingRowEdits[row.id];
-        if (rowEdits) {
-          const updatedRow = { ...row };
-          rowEdits.forEach(({ columnId, value }) => {
-            const column = columns.find((col) => col.id === columnId);
-            if (column) {
-              updatedRow[column.name] =
-                column.type === "number" ? Number(value) || 0 : value;
-            }
-          });
-          return updatedRow;
-        }
-        return row;
-      });
-      setLocalData(newData);
-    }
-  }, [tableData, pendingRowEdits, columns]);
+    onDataChange?.(data);
+  }, [data, onDataChange]);
+
+  useEffect(() => {
+    onColumnsChange?.(columns);
+  }, [columns, onColumnsChange]);
 
   const columnHelper = createColumnHelper<Row>();
 
@@ -308,7 +241,7 @@ export function EnhancedDataGrid({
   );
 
   const table = useReactTable<Row>({
-    data: localData,
+    data,
     columns: tableColumns,
     defaultColumn,
     getCoreRowModel: getCoreRowModel(),
@@ -320,8 +253,7 @@ export function EnhancedDataGrid({
     onSortingChange: setSorting,
     meta: {
       updateData: (rowIndex: number, columnId: string, value: unknown) => {
-        skipAutoResetPageIndex();
-        const row = localData[rowIndex];
+        const row = data[rowIndex];
         if (!row) return;
 
         const column = columns.find((col) => col.id === columnId);
@@ -332,21 +264,6 @@ export function EnhancedDataGrid({
           columnId,
           value: String(value),
         });
-
-        // Optimistically update local state
-        setLocalData((old) =>
-          old.map((row, index) => {
-            if (index === rowIndex) {
-              const newValue =
-                column.type === "number" ? Number(value) || 0 : value;
-              return {
-                ...row,
-                [column.name]: newValue,
-              } as Row;
-            }
-            return row;
-          }),
-        );
       },
       handleTabNavigation: (
         rowId: string,
@@ -362,7 +279,7 @@ export function EnhancedDataGrid({
 
   const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
     count: rows.length,
-    estimateSize: () => 33, // estimate row height
+    estimateSize: () => 33,
     getScrollElement: () => tableContainerRef.current,
     measureElement:
       typeof window !== "undefined" && !navigator.userAgent.includes("Firefox")
@@ -372,15 +289,7 @@ export function EnhancedDataGrid({
     overscan: 5,
   });
 
-  useEffect(() => {
-    onDataChange?.(localData);
-  }, [localData, onDataChange]);
-
-  useEffect(() => {
-    onColumnsChange?.(columns);
-  }, [columns, onColumnsChange]);
-
-  async function handleCellChange(
+  function handleCellChange(
     rowId: string,
     columnId: string,
     value: string,
@@ -399,11 +308,9 @@ export function EnhancedDataGrid({
     currentColumnId: string,
     isShiftTab: boolean,
   ) {
-    const currentRow = localData.find((row) => row.id === currentRowId);
+    const currentRow = data.find((row) => row.id === currentRowId);
     const currentColumn = columns.find((col) => col.id === currentColumnId);
-    const currentRowIndex = localData.findIndex(
-      (row) => row.id === currentRowId,
-    );
+    const currentRowIndex = data.findIndex((row) => row.id === currentRowId);
     const currentColumnIndex = columns.findIndex(
       (col) => col.id === currentColumnId,
     );
@@ -418,7 +325,7 @@ export function EnhancedDataGrid({
 
     if (isShiftTab) {
       const prevColumn = columns[currentColumnIndex - 1];
-      const prevRow = localData[currentRowIndex - 1];
+      const prevRow = data[currentRowIndex - 1];
       const lastColumn = columns[columns.length - 1];
 
       if (currentColumnIndex > 0 && prevColumn) {
@@ -434,7 +341,7 @@ export function EnhancedDataGrid({
       }
     } else {
       const nextColumn = columns[currentColumnIndex + 1];
-      const nextRow = localData[currentRowIndex + 1];
+      const nextRow = data[currentRowIndex + 1];
       const firstColumn = columns[0];
 
       if (currentColumnIndex < columns.length - 1 && nextColumn) {
@@ -442,11 +349,7 @@ export function EnhancedDataGrid({
           rowId: currentRowId,
           columnId: nextColumn.id,
         });
-      } else if (
-        currentRowIndex < localData.length - 1 &&
-        nextRow &&
-        firstColumn
-      ) {
+      } else if (currentRowIndex < data.length - 1 && nextRow && firstColumn) {
         setEditingCell({
           rowId: nextRow.id,
           columnId: firstColumn.id,
@@ -564,42 +467,40 @@ export function EnhancedDataGrid({
                 position: "relative",
               }}
             >
-              {rowVirtualizer
-                .getVirtualItems()
-                .map((virtualRow: VirtualItem) => {
-                  const row = rows[virtualRow.index] as RowType;
-                  return (
-                    <tr
-                      key={row.id}
-                      data-index={virtualRow.index}
-                      ref={(node) => rowVirtualizer.measureElement(node)}
-                      style={{
-                        display: "flex",
-                        position: "absolute",
-                        transform: `translateY(${virtualRow.start}px)`,
-                        width: "100%",
-                      }}
-                      className="hover:bg-gray-50/50"
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <td
-                          key={cell.id}
-                          style={{
-                            display: "flex",
-                            width: cell.column.getSize() ?? "auto",
-                          }}
-                          className="border-b border-r border-gray-100 px-2 py-[3px] text-sm last:border-r-0"
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                        </td>
-                      ))}
-                      <td className="w-10 border-b border-gray-100" />
-                    </tr>
-                  );
-                })}
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const row = rows[virtualRow.index] as RowType;
+                return (
+                  <tr
+                    key={row.id}
+                    data-index={virtualRow.index}
+                    ref={(node) => rowVirtualizer.measureElement(node)}
+                    style={{
+                      display: "flex",
+                      position: "absolute",
+                      transform: `translateY(${virtualRow.start}px)`,
+                      width: "100%",
+                    }}
+                    className="hover:bg-gray-50/50"
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td
+                        key={cell.id}
+                        style={{
+                          display: "flex",
+                          width: cell.column.getSize() ?? "auto",
+                        }}
+                        className="border-b border-r border-gray-100 px-2 py-[3px] text-sm last:border-r-0"
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </td>
+                    ))}
+                    <td className="w-10 border-b border-gray-100" />
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -629,44 +530,12 @@ export function EnhancedDataGrid({
             className="h-7 gap-2 text-xs hover:bg-gray-50"
             disabled={isBatchAdding}
           >
-            {isBatchAdding ? (
-              `Adding ${BULK_ADD_ROWS_COUNT} records...`
-            ) : (
-              <>
-                <Plus className="h-3 w-3" />
-                Add {BULK_ADD_ROWS_COUNT} records
-              </>
-            )}
+            {isBatchAdding
+              ? `Adding ${BULK_ADD_ROWS_COUNT} rows...`
+              : `Add ${BULK_ADD_ROWS_COUNT} rows`}
           </Button>
         </div>
       </div>
     </div>
   );
 }
-
-// function generateRow(columns: Column[]): Row {
-//   const row: Row = { id: crypto.randomUUID() };
-//   columns.forEach((column) => {
-//     if (column.type === "text") {
-//       switch (column.name.toLowerCase()) {
-//         case "name":
-//           row[column.name] = faker.person.fullName();
-//           break;
-//         case "city":
-//           row[column.name] = faker.location.city();
-//           break;
-//         default:
-//           row[column.name] = faker.lorem.word();
-//       }
-//     } else if (column.type === "number") {
-//       switch (column.name.toLowerCase()) {
-//         case "age":
-//           row[column.name] = faker.number.int({ min: 18, max: 80 });
-//           break;
-//         default:
-//           row[column.name] = faker.number.int({ min: 0, max: 100 });
-//       }
-//     }
-//   });
-//   return row;
-// }

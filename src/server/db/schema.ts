@@ -148,7 +148,7 @@ export const columns = createTable(
 export const rows = createTable(
   "rows",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: uuid("id").primaryKey(),
     tableId: uuid("table_id")
       .references(() => tables.id)
       .notNull(),

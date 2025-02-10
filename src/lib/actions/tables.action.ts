@@ -191,10 +191,11 @@ export async function addRow(
     // Get next row order
     const nextOrder = await getNextRowOrder(tableId);
 
-    // Create the row
+    // Create the row using the client-provided ID
     const [newRow] = await db
       .insert(rows)
       .values({
+        id: optimisticRow.id as string, // Use the client-provided ID
         tableId,
         order: nextOrder,
       })
@@ -331,15 +332,22 @@ export async function addBulkRows(
       const chunk = optimisticRows.slice(i, i + CHUNK_SIZE);
 
       // Insert chunk of rows
-      const rowsToInsert = chunk.map((_, index) => ({
+      const rowsToInsert = chunk.map((row, index) => ({
+        id: String(row.id),
         tableId,
         order: startOrder + i + index,
       }));
 
       const newRows = await db.insert(rows).values(rowsToInsert).returning();
-      allNewRows.push(...newRows);
 
-      // Insert cells for this chunk
+      // Merge server and client data, preserving client values
+      const mergedRows = newRows.map((newRow, idx) => ({
+        ...newRow,
+        ...chunk[idx],
+      }));
+      allNewRows.push(...mergedRows);
+
+      // Insert cells for this chunk using client's optimistic data
       const cellsForChunk = newRows.flatMap((row, rowIndex) =>
         tableColumns.map((column) => {
           const optimisticRow = chunk[rowIndex] ?? {};
@@ -366,10 +374,9 @@ export async function addBulkRows(
     revalidatePath("/base/[baseId]", "page");
     return {
       success: true,
-      rows: allNewRows.map((row, i) => ({ ...row, ...optimisticRows[i] })),
+      rows: allNewRows,
     };
-  } catch (error) {
-    console.error("Error adding bulk rows:", error);
+  } catch {
     return { success: false, error: "Failed to add bulk rows" };
   }
 }

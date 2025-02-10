@@ -10,6 +10,7 @@ import {
   addBulkRows,
 } from "~/lib/actions/tables.action";
 import { faker } from "@faker-js/faker";
+import { useRef } from "react";
 
 // Define types at the top
 interface Row {
@@ -94,6 +95,11 @@ function generateNumberValue(columnName: string): number {
 
 export const useTable = (baseId: string, tableId: string) => {
   const queryClient = useQueryClient();
+  const latestMutationRef = useRef<string | null>(null);
+  const pendingRowCreationsRef = useRef<Map<string, Promise<unknown>>>(
+    new Map(),
+  );
+  const rowIdMappingRef = useRef<Map<string, string>>(new Map());
 
   const baseQuery = useQuery<BaseResponse>({
     queryKey: ["base", baseId],
@@ -113,7 +119,21 @@ export const useTable = (baseId: string, tableId: string) => {
   });
 
   const addRowMutation = useMutation({
-    mutationFn: (optimisticRow: Row) => addRow(tableId, optimisticRow),
+    mutationFn: async (optimisticRow: Row) => {
+      console.log("[useTable] Starting row creation for:", optimisticRow.id);
+      latestMutationRef.current = "addRow";
+      const promise = addRow(tableId, optimisticRow);
+      pendingRowCreationsRef.current.set(optimisticRow.id, promise);
+      const result = await promise;
+      if (result.success && result.row && "id" in result.row) {
+        console.log("[useTable] Row creation completed. Mapping IDs:", {
+          clientId: optimisticRow.id,
+          serverId: result.row.id,
+        });
+        rowIdMappingRef.current.set(optimisticRow.id, result.row.id);
+      }
+      return result;
+    },
     onMutate: async (optimisticRow) => {
       await queryClient.cancelQueries({ queryKey: ["table", tableId] });
       const previousData = queryClient.getQueryData<TableResponse>([
@@ -137,9 +157,19 @@ export const useTable = (baseId: string, tableId: string) => {
       if (context?.previousData) {
         queryClient.setQueryData(["table", tableId], context.previousData);
       }
+      if (context?.optimisticRow) {
+        pendingRowCreationsRef.current.delete(context.optimisticRow.id);
+        rowIdMappingRef.current.delete(context.optimisticRow.id);
+      }
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ["table", tableId] });
+    onSettled: (data, _, variables) => {
+      pendingRowCreationsRef.current.delete(variables.id);
+      if (
+        latestMutationRef.current === "addRow" &&
+        pendingRowCreationsRef.current.size === 0
+      ) {
+        void queryClient.invalidateQueries({ queryKey: ["table", tableId] });
+      }
     },
   });
 
@@ -149,72 +179,225 @@ export const useTable = (baseId: string, tableId: string) => {
       columnId: string;
       value: string;
     }) => {
-      const result = await addCell(params.rowId, params.columnId, params.value);
-      if (!result.success) {
-        throw new Error(result.error);
+      // console.log("[useTable] Starting cell update:", {
+      //   rowId: params.rowId,
+      //   columnId: params.columnId,
+      //   value: params.value,
+      //   pendingCreations: Array.from(pendingRowCreationsRef.current.keys()),
+      //   latestMutation: latestMutationRef.current,
+      //   hasPendingBulkOps: addBulkRowsMutation.isPending,
+      // });
+
+      const MAX_RETRIES = 5;
+      const INITIAL_DELAY = 1000;
+      let retryCount = 0;
+
+      while (retryCount < MAX_RETRIES) {
+        try {
+          // 1. Check if this is a new row being created
+          const pendingCreation = pendingRowCreationsRef.current.get(
+            params.rowId,
+          );
+          if (pendingCreation) {
+            // console.log(
+            //   "[useTable] Found pending creation for row:",
+            //   params.rowId,
+            //   "waiting for completion...",
+            // );
+            try {
+              // Wait for row creation to complete
+              await pendingCreation;
+              // console.log(
+              //   "[useTable] Row creation completed for:",
+              //   params.rowId,
+              // );
+              return addCell(params.rowId, params.columnId, params.value);
+            } catch (error) {
+              // console.error("[useTable] Row creation error:", {
+              //   rowId: params.rowId,
+              //   error,
+              // });
+              throw error instanceof Error ? error : new Error(String(error));
+            }
+          }
+
+          // 2. Update the cell directly since IDs are the same
+          latestMutationRef.current = "updateCell";
+          // console.log("[useTable] Updating cell directly:", {
+          //   rowId: params.rowId,
+          //   columnId: params.columnId,
+          //   value: params.value,
+          // });
+
+          const result = await addCell(
+            params.rowId,
+            params.columnId,
+            params.value,
+          );
+
+          if (!result.success) {
+            if (result.error?.includes("Row not found")) {
+              retryCount++;
+              if (retryCount < MAX_RETRIES) {
+                const delay = INITIAL_DELAY * Math.pow(2, retryCount - 1);
+                // console.log(
+                //   `[useTable] Row not found, retrying in ${delay}ms (attempt ${retryCount}/${MAX_RETRIES})`,
+                //   { rowId: params.rowId },
+                // );
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                continue;
+              }
+            }
+            // console.error("[useTable] Cell update failed:", {
+            //   error: result.error,
+            //   rowId: params.rowId,
+            //   columnId: params.columnId,
+            //   value: params.value,
+            // });
+            throw new Error(result.error ?? "Cell update failed");
+          }
+
+          // console.log("[useTable] Cell update successful:", {
+          //   rowId: params.rowId,
+          //   columnId: params.columnId,
+          // });
+          return result;
+        } catch (error) {
+          if (retryCount === MAX_RETRIES - 1) {
+            throw error;
+          }
+          retryCount++;
+          const delay = INITIAL_DELAY * Math.pow(2, retryCount - 1);
+          // console.log(
+          //   `[useTable] Error updating cell, retrying in ${delay}ms (attempt ${retryCount}/${MAX_RETRIES})`,
+          //   { error, rowId: params.rowId },
+          // );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
       }
-      return result;
+
+      throw new Error("Max retries exceeded");
     },
-    onMutate: async ({ rowId, columnId, value }) => {
-      await queryClient.cancelQueries({ queryKey: ["table", tableId] });
+    onMutate: async (params) => {
+      // console.log("[useTable] Starting optimistic cell update:", {
+      //   rowId: params.rowId,
+      //   columnId: params.columnId,
+      //   value: params.value,
+      //   hasPendingCreation: pendingRowCreationsRef.current.has(params.rowId),
+      // });
+
+      // Only cancel queries if this is not a pending row update
+      if (!pendingRowCreationsRef.current.has(params.rowId)) {
+        await queryClient.cancelQueries({ queryKey: ["table", tableId] });
+      }
+
+      // Apply optimistic update
       const previousData = queryClient.getQueryData<TableResponse>([
         "table",
         tableId,
       ]);
 
-      if (previousData?.table) {
-        const updatedData = previousData.table.data.map((row) => {
-          if (row.id === rowId) {
-            const column = previousData.table?.columns.find(
-              (col) => col.id === columnId,
-            );
-            if (column) {
-              return {
-                ...row,
-                [column.name]:
-                  column.type === "number" ? Number(value) || 0 : value,
-              };
-            }
-          }
-          return row;
-        });
+      const table = previousData?.table;
+      if (table?.columns && table.data) {
+        // console.log("[useTable] Applying optimistic update for cell:", {
+        //   rowId: params.rowId,
+        //   columnId: params.columnId,
+        //   currentDataSize: table.data.length,
+        // });
 
-        queryClient.setQueryData<TableResponse>(["table", tableId], {
+        const updatedData = {
           ...previousData,
           table: {
-            ...previousData.table,
-            data: updatedData,
+            ...table,
+            data: table.data.map((row) => {
+              if (row.id === params.rowId) {
+                const columnName = table.columns.find(
+                  (col) => col.id === params.columnId,
+                )?.name;
+                if (columnName) {
+                  return {
+                    ...row,
+                    [columnName]: params.value,
+                  };
+                }
+              }
+              return row;
+            }),
           },
-        });
+        };
+        queryClient.setQueryData(["table", tableId], updatedData);
       }
 
-      return { previousData };
+      return { previousData, params };
     },
-    onError: (err, _, context) => {
+    onError: (err, variables, context) => {
+      // console.error("[useTable] Cell update error:", {
+      //   error: err,
+      //   rowId: variables.rowId,
+      //   columnId: variables.columnId,
+      // });
       if (context?.previousData) {
         queryClient.setQueryData(["table", tableId], context.previousData);
       }
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ["table", tableId] });
+    onSettled: (data, error, variables) => {
+      // console.log("[useTable] Cell update settled:", {
+      //   success: !error,
+      //   rowId: variables.rowId,
+      //   columnId: variables.columnId,
+      //   hasPendingBulkOps: addBulkRowsMutation.isPending,
+      //   latestMutation: latestMutationRef.current,
+      // });
+
+      // Only invalidate if there are no pending bulk operations
+      if (
+        latestMutationRef.current === "updateCell" &&
+        !addBulkRowsMutation.isPending
+      ) {
+        // console.log("[useTable] Invalidating queries after cell update");
+        void queryClient.invalidateQueries({ queryKey: ["table", tableId] });
+      }
     },
   });
 
   const addBulkRowsMutation = useMutation({
-    mutationFn: (count: number) => {
-      const previousData = queryClient.getQueryData<TableResponse>([
-        "table",
-        tableId,
-      ]);
-      if (!previousData?.table) throw new Error("No table data");
+    mutationFn: async (params: { optimisticRows: Row[] }) => {
+      // console.log("[useTable] Starting bulk row creation:", {
+      //   rowCount: params.optimisticRows.length,
+      //   firstRowId: params.optimisticRows[0]?.id,
+      //   lastRowId: params.optimisticRows[params.optimisticRows.length - 1]?.id,
+      // });
 
-      const optimisticRows = Array(count)
-        .fill(null)
-        .map(() => generateMockRow(previousData.table!.columns));
+      latestMutationRef.current = "addBulkRows";
+      // Add all rows to pending creations map
+      const promise = addBulkRows(tableId, params.optimisticRows);
+      params.optimisticRows.forEach((row) => {
+        pendingRowCreationsRef.current.set(row.id, promise);
+      });
 
-      return addBulkRows(tableId, optimisticRows);
+      // console.log("[useTable] Added rows to pending creations:", {
+      //   pendingCount: pendingRowCreationsRef.current.size,
+      // });
+
+      const result = await promise;
+
+      // Clear pending creations after success
+      params.optimisticRows.forEach((row) => {
+        pendingRowCreationsRef.current.delete(row.id);
+      });
+
+      // console.log("[useTable] Bulk row creation completed:", {
+      //   success: result.success,
+      //   remainingPending: pendingRowCreationsRef.current.size,
+      // });
+
+      return result;
     },
-    onMutate: async (count) => {
+    onMutate: async (params: { optimisticRows: Row[] }) => {
+      // console.log("[useTable] Starting optimistic bulk update:", {
+      //   rowCount: params.optimisticRows.length,
+      // });
+
       await queryClient.cancelQueries({ queryKey: ["table", tableId] });
       const previousData = queryClient.getQueryData<TableResponse>([
         "table",
@@ -222,28 +405,46 @@ export const useTable = (baseId: string, tableId: string) => {
       ]);
 
       if (previousData?.table) {
-        const optimisticRows = Array(count)
-          .fill(null)
-          .map(() => generateMockRow(previousData.table!.columns));
+        // console.log("[useTable] Applying optimistic bulk update:", {
+        //   currentDataSize: previousData.table.data.length,
+        //   addingRows: params.optimisticRows.length,
+        // });
 
         queryClient.setQueryData<TableResponse>(["table", tableId], {
           ...previousData,
           table: {
             ...previousData.table,
-            data: [...previousData.table.data, ...optimisticRows],
+            data: [...previousData.table.data, ...params.optimisticRows],
           },
         });
       }
 
       return { previousData };
     },
-    onError: (err, _, context) => {
+    onError: (err, variables, context) => {
+      // console.error("[useTable] Bulk row creation error:", {
+      //   error: err,
+      //   rowCount: variables.optimisticRows.length,
+      // });
       if (context?.previousData) {
         queryClient.setQueryData(["table", tableId], context.previousData);
       }
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ["table", tableId] });
+    onSettled: (data, error) => {
+      // console.log("[useTable] Bulk row creation settled:", {
+      //   success: !error,
+      //   hasPendingCellUpdates: updateCellMutation.isPending,
+      //   latestMutation: latestMutationRef.current,
+      // });
+
+      // Only invalidate if there are no pending cell updates
+      if (
+        latestMutationRef.current === "addBulkRows" &&
+        !updateCellMutation.isPending
+      ) {
+        // console.log("[useTable] Invalidating queries after bulk creation");
+        void queryClient.invalidateQueries({ queryKey: ["table", tableId] });
+      }
     },
   });
 
@@ -265,7 +466,16 @@ export const useTable = (baseId: string, tableId: string) => {
       }
     },
     addBulkRows: (count: number) => {
-      void addBulkRowsMutation.mutate(count);
+      const previousData = queryClient.getQueryData<TableResponse>([
+        "table",
+        tableId,
+      ]);
+      if (previousData?.table) {
+        const optimisticRows = Array(count)
+          .fill(null)
+          .map(() => generateMockRow(previousData.table!.columns));
+        void addBulkRowsMutation.mutate({ optimisticRows });
+      }
     },
     updateCell: (params: {
       rowId: string;
