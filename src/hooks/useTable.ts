@@ -190,37 +190,78 @@ export const useTable = (baseId: string, tableId: string) => {
         pendingCreations: Array.from(pendingRowCreationsRef.current.keys()),
       });
 
-      // 1. Check if this is a new row being created
-      const pendingCreation = pendingRowCreationsRef.current.get(params.rowId);
-      if (pendingCreation) {
-        console.log("[useTable] Found pending creation for row:", params.rowId);
+      const MAX_RETRIES = 5;
+      const INITIAL_DELAY = 1000;
+      let retryCount = 0;
+
+      while (retryCount < MAX_RETRIES) {
         try {
-          // Wait for row creation to complete
-          await pendingCreation;
-          console.log("[useTable] Row creation completed, updating cell");
-          // Use the same ID since it's preserved on the server
-          return addCell(params.rowId, params.columnId, params.value);
+          // 1. Check if this is a new row being created
+          const pendingCreation = pendingRowCreationsRef.current.get(
+            params.rowId,
+          );
+          if (pendingCreation) {
+            console.log(
+              "[useTable] Found pending creation for row:",
+              params.rowId,
+            );
+            try {
+              // Wait for row creation to complete
+              await pendingCreation;
+              console.log("[useTable] Row creation completed, updating cell");
+              // Use the same ID since it's preserved on the server
+              return addCell(params.rowId, params.columnId, params.value);
+            } catch (error) {
+              console.error("[useTable] Row creation error:", error);
+              throw error instanceof Error ? error : new Error(String(error));
+            }
+          }
+
+          // 2. Update the cell directly since IDs are the same
+          latestMutationRef.current = "updateCell";
+          const result = await addCell(
+            params.rowId,
+            params.columnId,
+            params.value,
+          );
+
+          if (!result.success) {
+            if (result.error?.includes("Row not found")) {
+              // If row not found, wait and retry
+              retryCount++;
+              if (retryCount < MAX_RETRIES) {
+                const delay = INITIAL_DELAY * Math.pow(2, retryCount - 1);
+                console.log(
+                  `[useTable] Row not found, retrying in ${delay}ms (attempt ${retryCount}/${MAX_RETRIES})`,
+                );
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                continue;
+              }
+            }
+            console.error("[useTable] Cell update failed:", {
+              error: result.error,
+              rowId: params.rowId,
+              columnId: params.columnId,
+              value: params.value,
+            });
+            throw new Error(result.error ?? "Cell update failed");
+          }
+
+          return result;
         } catch (error) {
-          console.error("[useTable] Row creation error:", error);
-          throw error instanceof Error ? error : new Error(String(error));
+          if (retryCount === MAX_RETRIES - 1) {
+            throw error;
+          }
+          retryCount++;
+          const delay = INITIAL_DELAY * Math.pow(2, retryCount - 1);
+          console.log(
+            `[useTable] Error updating cell, retrying in ${delay}ms (attempt ${retryCount}/${MAX_RETRIES})`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
 
-      // 2. Update the cell directly since IDs are the same
-      latestMutationRef.current = "updateCell";
-      const result = await addCell(params.rowId, params.columnId, params.value);
-
-      if (!result.success) {
-        console.error("[useTable] Cell update failed:", {
-          error: result.error,
-          rowId: params.rowId,
-          columnId: params.columnId,
-          value: params.value,
-        });
-        throw new Error(result.error ?? "Cell update failed");
-      }
-
-      return result;
+      throw new Error("Max retries exceeded");
     },
     onMutate: async (params) => {
       // Only cancel queries if this is not a pending row update
@@ -237,21 +278,11 @@ export const useTable = (baseId: string, tableId: string) => {
   });
 
   const addBulkRowsMutation = useMutation({
-    mutationFn: (count: number) => {
+    mutationFn: async (params: { optimisticRows: Row[] }) => {
       latestMutationRef.current = "addBulkRows";
-      const previousData = queryClient.getQueryData<TableResponse>([
-        "table",
-        tableId,
-      ]);
-      if (!previousData?.table) throw new Error("No table data");
-
-      const optimisticRows = Array(count)
-        .fill(null)
-        .map(() => generateMockRow(previousData.table!.columns));
-
-      return addBulkRows(tableId, optimisticRows);
+      return addBulkRows(tableId, params.optimisticRows);
     },
-    onMutate: async (count) => {
+    onMutate: async (params: { optimisticRows: Row[] }) => {
       await queryClient.cancelQueries({ queryKey: ["table", tableId] });
       const previousData = queryClient.getQueryData<TableResponse>([
         "table",
@@ -259,15 +290,11 @@ export const useTable = (baseId: string, tableId: string) => {
       ]);
 
       if (previousData?.table) {
-        const optimisticRows = Array(count)
-          .fill(null)
-          .map(() => generateMockRow(previousData.table!.columns));
-
         queryClient.setQueryData<TableResponse>(["table", tableId], {
           ...previousData,
           table: {
             ...previousData.table,
-            data: [...previousData.table.data, ...optimisticRows],
+            data: [...previousData.table.data, ...params.optimisticRows],
           },
         });
       }
@@ -304,7 +331,16 @@ export const useTable = (baseId: string, tableId: string) => {
       }
     },
     addBulkRows: (count: number) => {
-      void addBulkRowsMutation.mutate(count);
+      const previousData = queryClient.getQueryData<TableResponse>([
+        "table",
+        tableId,
+      ]);
+      if (previousData?.table) {
+        const optimisticRows = Array(count)
+          .fill(null)
+          .map(() => generateMockRow(previousData.table!.columns));
+        void addBulkRowsMutation.mutate({ optimisticRows });
+      }
     },
     updateCell: (params: {
       rowId: string;
