@@ -11,7 +11,6 @@ import {
   ChevronDown,
   Eye,
   Grid,
-  Users,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { UserGroupsIcon, RowHeightIcon } from "~/components/Icons";

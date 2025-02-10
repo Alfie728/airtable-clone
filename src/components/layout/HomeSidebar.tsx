@@ -101,9 +101,9 @@ export function HomeSidebar({ isOpen, onToggle }: HomeSidebarProps) {
                 onClick={() => toggleSection("workspaces")}
               >
                 All workspaces
-                <button className="-mr-4 flex h-6 w-6 items-center justify-center rounded p-1 hover:bg-gray-100">
+                <span className="-mr-4 flex h-6 w-6 items-center justify-center rounded p-1 hover:bg-gray-100">
                   <Plus className="h-4 w-4" />
-                </button>
+                </span>
               </button>
               <div className="flex items-center">
                 <button
