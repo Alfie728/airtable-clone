@@ -191,10 +191,11 @@ export async function addRow(
     // Get next row order
     const nextOrder = await getNextRowOrder(tableId);
 
-    // Create the row
+    // Create the row using the client-provided ID
     const [newRow] = await db
       .insert(rows)
       .values({
+        id: optimisticRow.id as string, // Use the client-provided ID
         tableId,
         order: nextOrder,
       })
@@ -228,7 +229,7 @@ export async function addRow(
       .where(eq(tables.id, tableId));
 
     revalidatePath("/base/[baseId]", "page");
-    return { success: true, row: { ...newRow, ...optimisticRow } };
+    return { success: true, row: newRow };
   } catch (error) {
     console.error("Error adding row:", error);
     return { success: false, error: "Failed to add row" };
@@ -331,7 +332,8 @@ export async function addBulkRows(
       const chunk = optimisticRows.slice(i, i + CHUNK_SIZE);
 
       // Insert chunk of rows
-      const rowsToInsert = chunk.map((_, index) => ({
+      const rowsToInsert = chunk.map((row, index) => ({
+        id: row.id as string, // Include the client-generated ID
         tableId,
         order: startOrder + i + index,
       }));

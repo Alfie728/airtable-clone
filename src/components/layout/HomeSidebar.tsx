@@ -61,7 +61,7 @@ export function HomeSidebar({ isOpen, onToggle }: HomeSidebarProps) {
         <div>
           {/* Navigation Section */}
           <div className="mb-2 flex flex-col">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 rounded-sm hover:bg-[rgb(242,244,248)]">
               <button
                 className="flex flex-1 items-center px-3 py-2 text-[15px] font-medium text-gray-700 hover:text-gray-900"
                 onClick={() => toggleSection("home")}
@@ -95,7 +95,7 @@ export function HomeSidebar({ isOpen, onToggle }: HomeSidebarProps) {
 
           {/* Workspaces Section */}
           <div>
-            <div className="flex items-center">
+            <div className="flex items-center rounded-sm hover:bg-[rgb(242,244,248)]">
               <button
                 className="flex flex-1 items-center justify-between px-3 py-2 text-[15px] font-medium text-gray-700 hover:text-gray-900"
                 onClick={() => toggleSection("workspaces")}
@@ -123,14 +123,14 @@ export function HomeSidebar({ isOpen, onToggle }: HomeSidebarProps) {
               <div className="mt-1 space-y-0.5 px-2">
                 <NextLink
                   href="#"
-                  className="flex h-8 items-center gap-2 rounded bg-gray-100 px-2 text-[13px] font-normal text-[rgb(29,31,37)]"
+                  className="flex h-8 items-center gap-2 rounded px-2 text-[13px] font-normal text-[rgb(29,31,37)] hover:bg-[rgb(242,244,248)]"
                 >
                   <Users className="h-4 w-4 pr-1" />
                   My First Workspace
                 </NextLink>
                 <NextLink
                   href="#"
-                  className="flex h-8 items-center gap-2 rounded bg-gray-100 px-2 text-[13px] font-normal text-[rgb(29,31,37)]"
+                  className="flex h-8 items-center gap-2 rounded px-2 text-[13px] font-normal text-[rgb(29,31,37)] hover:bg-[rgb(242,244,248)]"
                 >
                   <Users className="h-4 w-4 pr-1" />
                   Workspace
