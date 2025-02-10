@@ -131,7 +131,7 @@ export function BaseTopNavigation({ baseName }: BaseTopNavigationProps) {
           </Button>
           <div className="ml-2 flex items-center">
             <SignedIn>
-              <UserButton afterSignOutUrl="/" />
+              <UserButton />
             </SignedIn>
             <SignedOut>
               <SignInButton>
