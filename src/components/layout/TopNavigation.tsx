@@ -14,7 +14,7 @@ import {
 import { Button } from "~/components/ui/button";
 import { useState } from "react";
 import { cn } from "~/lib/utils";
-import { AirtableLogo, AirtableLogoWithText } from "~/components/Logo";
+import { AirtableLogo, AirtableLogoWithText } from "~/components/Icons";
 
 interface BaseTopNavigationProps {
   baseName: string;

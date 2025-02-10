@@ -39,7 +39,7 @@ export function SecondaryNavigation({
 }: SecondaryNavigationProps) {
   const [isCreateTableOpen, setIsCreateTableOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [tableName, setTableName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
@@ -129,7 +129,7 @@ export function SecondaryNavigation({
               ))}
             </div>
             <div className="relative">
-              <Popover>
+              <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="ghost"
@@ -168,6 +168,8 @@ export function SecondaryNavigation({
                             className="flex h-9 flex-1 items-center justify-between gap-2 rounded-none px-2 py-1.5 text-[13px] font-normal hover:bg-transparent"
                             onClick={() => {
                               onTableSelect?.(table.id);
+                              setIsPopoverOpen(false);
+                              setSearchQuery("");
                             }}
                           >
                             <div className="flex items-center gap-2">
@@ -194,6 +196,8 @@ export function SecondaryNavigation({
                           className="flex h-9 w-full items-center justify-start gap-2 rounded-none px-2 py-1.5 text-[13px] font-normal hover:bg-gray-100"
                           onClick={() => {
                             setIsCreateTableOpen(true);
+                            setIsPopoverOpen(false);
+                            setSearchQuery("");
                           }}
                         >
                           <Plus className="h-3.5 w-3.5" />
