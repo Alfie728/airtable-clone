@@ -164,7 +164,7 @@ export function HomeTopNavigation({ onMenuToggle }: HomeTopNavigationProps) {
             className="h-7 w-7 p-0"
             onClick={handleMenuToggle}
           >
-            <Menu className="h-4 w-4 text-gray-700" />
+            <Menu className="text-gray-700" width={20} height={20} />
           </Button>
           <AirtableLogoWithText />
         </div>

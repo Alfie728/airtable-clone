@@ -13,7 +13,7 @@ interface HomeContentProps {
 }
 
 export function HomeContent({ bases }: HomeContentProps) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const tableData = {
     rows: bases.map((base: SerializedBase) => ({

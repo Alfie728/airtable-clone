@@ -9,23 +9,46 @@ import {
   BookOpen,
   ShoppingBag,
   Upload,
+  Home,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import { Separator } from "~/components/ui/separator";
 import { cn } from "~/lib/utils";
 import NextLink from "next/link";
 
 interface HomeSidebarProps {
   isOpen: boolean;
+  onToggle?: () => void;
 }
 
 type OpenSection = "home" | "workspaces" | null;
 
-export function HomeSidebar({ isOpen }: HomeSidebarProps) {
+function MiniSidebar({ onToggle }: { onToggle?: () => void }) {
+  return (
+    <div className="left-0 top-[56px] z-50 flex h-[calc(100vh-56px)] w-[46px] flex-col items-center border-r border-gray-200 bg-white py-3 pt-5">
+      <div className="flex flex-col">
+        <Button variant="ghost" size="sm" className="mb-2 p-0">
+          <Home className="text-gray-700" />
+        </Button>
+        <Button variant="ghost" size="sm" className="mb-2 p-0">
+          <Users className="text-gray-700" />
+        </Button>
+      </div>
+      <Separator className="w-[55%]" />
+    </div>
+  );
+}
+
+export function HomeSidebar({ isOpen, onToggle }: HomeSidebarProps) {
   const [openSection, setOpenSection] = useState<OpenSection>("workspaces");
 
   const toggleSection = (section: OpenSection) => {
     setOpenSection(openSection === section ? null : section);
   };
+
+  if (!isOpen) {
+    return <MiniSidebar onToggle={onToggle} />;
+  }
 
   return (
     <div
@@ -100,16 +123,16 @@ export function HomeSidebar({ isOpen }: HomeSidebarProps) {
               <div className="mt-1 space-y-0.5 px-2">
                 <NextLink
                   href="#"
-                  className="flex h-8 items-center gap-2 rounded bg-gray-100 px-2 text-[15px] font-medium text-gray-700"
+                  className="flex h-8 items-center gap-2 rounded bg-gray-100 px-2 text-[13px] font-normal text-[rgb(29,31,37)]"
                 >
-                  <Users className="h-4 w-4 text-gray-500" />
+                  <Users className="h-4 w-4 pr-1" />
                   My First Workspace
                 </NextLink>
                 <NextLink
                   href="#"
-                  className="flex h-8 items-center gap-2 rounded px-2 text-[15px] font-medium text-gray-700 hover:bg-gray-100"
+                  className="flex h-8 items-center gap-2 rounded bg-gray-100 px-2 text-[13px] font-normal text-[rgb(29,31,37)]"
                 >
-                  <Users className="h-4 w-4 text-gray-500" />
+                  <Users className="h-4 w-4 pr-1" />
                   Workspace
                 </NextLink>
               </div>
