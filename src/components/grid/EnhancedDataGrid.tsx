@@ -46,7 +46,7 @@ type HeaderType = Header<Row, string | number>;
 type CellType = Cell<Row, string | number>;
 type RowType = TableRow<Row>;
 
-const BULK_ADD_ROWS_COUNT = 500;
+const BULK_ADD_ROWS_COUNT = 15000;
 
 interface EnhancedDataGridProps {
   tableId: string;
@@ -532,7 +532,7 @@ export function EnhancedDataGrid({
           >
             {isBatchAdding
               ? `Adding ${BULK_ADD_ROWS_COUNT} rows...`
-              : "Add bulk rows"}
+              : `Add ${BULK_ADD_ROWS_COUNT} rows`}
           </Button>
         </div>
       </div>

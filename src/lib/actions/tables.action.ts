@@ -376,7 +376,7 @@ export async function addBulkRows(
       success: true,
       rows: allNewRows,
     };
-  } catch (error) {
+  } catch {
     return { success: false, error: "Failed to add bulk rows" };
   }
 }
