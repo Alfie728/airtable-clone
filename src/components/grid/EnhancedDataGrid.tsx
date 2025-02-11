@@ -46,14 +46,24 @@ type HeaderType = Header<Row, string | number>;
 type CellType = Cell<Row, string | number>;
 type RowType = TableRow<Row>;
 
-const BULK_ADD_ROWS_COUNT = 15000;
+const BULK_ADD_ROWS_COUNT = 100;
 
 interface EnhancedDataGridProps {
+  baseId: string;
   tableId: string;
   initialData?: Row[];
   initialColumns?: Column[];
   onDataChange?: (data: Row[]) => void;
   onColumnsChange?: (columns: Column[]) => void;
+  addRow: () => void;
+  addBulkRows: (count: number) => void;
+  updateCell: (params: {
+    rowId: string;
+    columnId: string;
+    value: string;
+  }) => Promise<{ success: boolean; error?: string }>;
+  isAddingRow: boolean;
+  isBatchAdding: boolean;
 }
 
 // Add useSkipper hook for better pagination handling
@@ -154,11 +164,17 @@ function EditableCell({ getValue, row, column, table }: EditableCellProps) {
 }
 
 export function EnhancedDataGrid({
+  baseId,
   tableId,
   initialData,
   initialColumns,
   onDataChange,
   onColumnsChange,
+  addRow,
+  addBulkRows,
+  updateCell,
+  isAddingRow,
+  isBatchAdding,
 }: EnhancedDataGridProps) {
   const [editingCell, setEditingCell] = useState<{
     rowId: string | null;
@@ -167,51 +183,15 @@ export function EnhancedDataGrid({
   const [sorting, setSorting] = useState<SortingState>([]);
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
-  const {
-    tableData,
-    isLoading,
-    error,
-    addRow,
-    addBulkRows,
-    updateCell,
-    isAddingRow,
-    isBatchAdding,
-  } = useTable(tableId, tableId, {
-    success: true,
-    table:
-      initialData && initialColumns
-        ? {
-            id: tableId,
-            name: "",
-            columns: initialColumns,
-            data: initialData,
-          }
-        : undefined,
-  });
-
   const columns = useMemo<Column[]>(() => {
-    // First try to use table data from the query
-    if (tableData?.success && tableData.table?.columns) {
-      return tableData.table.columns;
-    }
-    // Fall back to initial columns if available
-    if (initialColumns) {
-      return initialColumns;
-    }
-    return [];
-  }, [tableData?.success, tableData?.table?.columns, initialColumns]);
+    // Use initial columns directly since we're not fetching here
+    return initialColumns ?? [];
+  }, [initialColumns]);
 
   const data = useMemo<Row[]>(() => {
-    // First try to use table data from the query
-    if (tableData?.success && tableData.table?.data) {
-      return tableData.table.data;
-    }
-    // Fall back to initial data if available
-    if (initialData) {
-      return initialData;
-    }
-    return [];
-  }, [tableData?.success, tableData?.table?.data, initialData]);
+    // Use initial data directly since we're not fetching here
+    return initialData ?? [];
+  }, [initialData]);
 
   useEffect(() => {
     onDataChange?.(data);
@@ -250,12 +230,10 @@ export function EnhancedDataGrid({
         name: col.name,
         type: col.type,
         isNew: (row: Row) => {
-          if (!tableData?.success || !tableData.table?.data) {
+          if (!initialData?.some((serverRow) => serverRow.id === row.id)) {
             return false;
           }
-          return !tableData.table.data.some(
-            (serverRow) => serverRow.id === row.id,
-          );
+          return !initialData.some((serverRow) => serverRow.id === row.id);
         },
       },
       header: () => (
@@ -272,7 +250,7 @@ export function EnhancedDataGrid({
         </div>
       ),
     }));
-  }, [columns, tableData?.success, tableData?.table?.data]);
+  }, [columns, initialData]);
 
   function handleTabNavigation(
     currentRowId: string,
@@ -425,119 +403,105 @@ export function EnhancedDataGrid({
           scrollBehavior: "smooth",
         }}
       >
-        {isLoading ? (
-          <div className="flex h-64 items-center justify-center">
-            <div className="text-sm text-gray-500">Loading...</div>
-          </div>
-        ) : error ? (
-          <div className="flex h-64 items-center justify-center">
-            <div className="text-sm text-red-500">
-              {error instanceof Error
-                ? error.message
-                : "Error loading table data"}
-            </div>
-          </div>
-        ) : (
-          <table style={{ display: "grid", width: "100%" }}>
-            <thead
-              style={{
-                display: "grid",
-                position: "sticky",
-                top: 0,
-                zIndex: 1,
-              }}
-            >
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr
-                  key={headerGroup.id}
-                  style={{ display: "flex", width: "100%" }}
-                  className="bg-gray-50"
-                >
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      style={{
-                        display: "flex",
-                        width: header.getSize() ?? "auto",
-                      }}
-                      className="border-b border-r border-gray-200 px-2 py-1 text-left text-xs font-medium text-gray-600 last:border-r-0"
-                    >
-                      <div
-                        className={`flex items-center gap-1 ${
-                          header.column.getCanSort()
-                            ? "cursor-pointer select-none"
-                            : ""
-                        }`}
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                        {{
-                          asc: " 🔼",
-                          desc: " 🔽",
-                        }[header.column.getIsSorted() as string] ?? null}
-                      </div>
-                    </th>
-                  ))}
-                  <th className="w-10 border-b border-gray-200 px-1 py-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleAddColumn}
-                      className="h-5 w-5 p-0"
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                  </th>
-                </tr>
-              ))}
-            </thead>
-            <tbody
-              style={{
-                display: "grid",
-                height: `${rowVirtualizer.getTotalSize()}px`,
-                position: "relative",
-              }}
-            >
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const row = rows[virtualRow.index] as RowType;
-                return (
-                  <tr
-                    key={row.id}
-                    data-index={virtualRow.index}
-                    ref={(node) => rowVirtualizer.measureElement(node)}
+        <table style={{ display: "grid", width: "100%" }}>
+          <thead
+            style={{
+              display: "grid",
+              position: "sticky",
+              top: 0,
+              zIndex: 1,
+            }}
+          >
+            {table.getHeaderGroups().map((headerGroup) => (
+              <tr
+                key={headerGroup.id}
+                style={{ display: "flex", width: "100%" }}
+                className="bg-gray-50"
+              >
+                {headerGroup.headers.map((header) => (
+                  <th
+                    key={header.id}
                     style={{
                       display: "flex",
-                      position: "absolute",
-                      transform: `translateY(${virtualRow.start}px)`,
-                      width: "100%",
+                      width: header.getSize() ?? "auto",
                     }}
-                    className="hover:bg-gray-50/50"
+                    className="border-b border-r border-gray-200 px-2 py-1 text-left text-xs font-medium text-gray-600 last:border-r-0"
                   >
-                    {row.getVisibleCells().map((cell) => (
-                      <td
-                        key={cell.id}
-                        style={{
-                          display: "flex",
-                          width: cell.column.getSize() ?? "auto",
-                        }}
-                        className="border-b border-r border-gray-100 px-2 py-[3px] text-sm last:border-r-0"
-                      >
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </td>
-                    ))}
-                    <td className="w-10 border-b border-gray-100" />
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+                    <div
+                      className={`flex items-center gap-1 ${
+                        header.column.getCanSort()
+                          ? "cursor-pointer select-none"
+                          : ""
+                      }`}
+                      onClick={header.column.getToggleSortingHandler()}
+                    >
+                      {flexRender(
+                        header.column.columnDef.header,
+                        header.getContext(),
+                      )}
+                      {{
+                        asc: " 🔼",
+                        desc: " 🔽",
+                      }[header.column.getIsSorted() as string] ?? null}
+                    </div>
+                  </th>
+                ))}
+                <th className="w-10 border-b border-gray-200 px-1 py-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleAddColumn}
+                    className="h-5 w-5 p-0"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </th>
+              </tr>
+            ))}
+          </thead>
+          <tbody
+            style={{
+              display: "grid",
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              position: "relative",
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const row = rows[virtualRow.index] as RowType;
+              return (
+                <tr
+                  key={row.id}
+                  data-index={virtualRow.index}
+                  ref={(node) => rowVirtualizer.measureElement(node)}
+                  style={{
+                    display: "flex",
+                    position: "absolute",
+                    transform: `translateY(${virtualRow.start}px)`,
+                    width: "100%",
+                  }}
+                  className="hover:bg-gray-50/50"
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td
+                      key={cell.id}
+                      style={{
+                        display: "flex",
+                        width: cell.column.getSize() ?? "auto",
+                      }}
+                      className="border-b border-r border-gray-100 px-2 py-[3px] text-sm last:border-r-0"
+                    >
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
+                    </td>
+                  ))}
+                  <td className="w-10 border-b border-gray-100" />
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
       <div className="border-t border-gray-200 bg-white p-2">
         <div className="flex gap-2">

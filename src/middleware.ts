@@ -7,31 +7,31 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
-  const authState = await auth();
+  // const authState = await auth();
 
-  // Detailed logging of the request and auth state
-  console.log("[Middleware] Request details:", {
-    path: request.nextUrl.pathname,
-    isPublic: isPublicRoute(request),
-    method: request.method,
-    timestamp: new Date().toISOString(),
-  });
+  // // Detailed logging of the request and auth state
+  // console.log("[Middleware] Request details:", {
+  //   path: request.nextUrl.pathname,
+  //   isPublic: isPublicRoute(request),
+  //   method: request.method,
+  //   timestamp: new Date().toISOString(),
+  // });
 
-  console.log("[Middleware] Auth state:", {
-    userId: authState.userId,
-    sessionId: authState.sessionId,
-    isSignedIn: !!authState.userId,
-  });
+  // console.log("[Middleware] Auth state:", {
+  //   userId: authState.userId,
+  //   sessionId: authState.sessionId,
+  //   isSignedIn: !!authState.userId,
+  // });
 
   if (!isPublicRoute(request)) {
-    console.log("[Middleware] Protecting route:", request.nextUrl.pathname);
+    // console.log("[Middleware] Protecting route:", request.nextUrl.pathname);
     await auth.protect();
-    console.log("[Middleware] Route protected, auth check complete");
+    // console.log("[Middleware] Route protected, auth check complete");
   } else {
-    console.log(
-      "[Middleware] Public route accessed:",
-      request.nextUrl.pathname,
-    );
+    // console.log(
+    //   "[Middleware] Public route accessed:",
+    //   request.nextUrl.pathname,
+    // );
   }
 });
 

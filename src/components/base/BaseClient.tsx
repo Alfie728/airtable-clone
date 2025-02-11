@@ -10,19 +10,16 @@ import { SecondaryNavigation } from "~/components/layout/SecondaryNavigation";
 import { useTable } from "~/hooks/useTable";
 import { useBase } from "~/hooks/useBase";
 import { cn } from "~/lib/utils";
-import type { TableResponse } from "~/hooks/useTable";
 import { useRouter } from "next/navigation";
 
 interface BaseClientProps {
   baseId: string;
-  initialTableData?: TableResponse;
   initialTableId: string;
   viewId: string;
 }
 
 export function BaseClient({
   baseId,
-  initialTableData,
   initialTableId,
   viewId,
 }: BaseClientProps) {
@@ -30,31 +27,45 @@ export function BaseClient({
   const [currentTableId, setCurrentTableId] = useState<string>(initialTableId);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  const { tableData, baseTables, isLoading, isBaseLoading, error, baseError } =
-    useTable(baseId, currentTableId, initialTableData);
-
   const { baseName, isLoading: isBaseNameLoading } = useBase(baseId);
+  const {
+    tableData,
+    isLoading,
+    isTableLoading,
+    baseError,
+    tableError,
+    addRow,
+    addBulkRows,
+    updateCell,
+    isAddingRow,
+    isBatchAdding,
+    baseTables,
+  } = useTable(baseId, currentTableId);
 
+  // Single effect to handle routing based on table existence
   useEffect(() => {
-    if (baseTables && baseTables.length > 0 && !currentTableId) {
-      const firstTableId = baseTables[0]?.id;
-      if (firstTableId) {
-        setCurrentTableId(firstTableId);
-        router.push(`/${baseId}/${firstTableId}/grid`, { scroll: false });
+    if (!isLoading && baseTables && baseTables.length > 0) {
+      // If current table doesn't exist or there's an error, redirect to the first available table
+      const tableExists = baseTables.some((t) => t.id === currentTableId);
+      const firstTable = baseTables[0];
+      if (!tableExists && firstTable?.id) {
+        setCurrentTableId(firstTable.id);
+        router.replace(`/${baseId}/${firstTable.id}/grid`);
       }
+    } else if (!isLoading && (!baseTables || baseTables.length === 0)) {
+      // If there are no tables at all, redirect to home
+      router.replace("/");
     }
-  }, [baseTables, currentTableId, baseId, router]);
+  }, [isLoading, baseTables, currentTableId, baseId, router]);
 
   const handleTableCreated = (newTable: typeof tables.$inferSelect) => {
     const newUrl = `/${baseId}/${newTable.id}/grid`;
-    window.history.pushState({}, "", newUrl);
     setCurrentTableId(newTable.id);
     router.push(newUrl, { scroll: false });
   };
 
   const handleTableSelect = (tableId: string) => {
     const newUrl = `/${baseId}/${tableId}/grid`;
-    window.history.pushState({}, "", newUrl);
     setCurrentTableId(tableId);
     router.push(newUrl, { scroll: false });
   };
@@ -64,20 +75,8 @@ export function BaseClient({
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
           <h3 className="text-lg font-semibold text-red-600">Error</h3>
-          <p className="mt-2 text-sm text-gray-500">
-            {baseError instanceof Error
-              ? baseError.message
-              : "Failed to load base data"}
-          </p>
+          <p className="mt-2 text-sm text-gray-500">{baseError.message}</p>
         </div>
-      </div>
-    );
-  }
-
-  if (isBaseLoading || isBaseNameLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-sm text-gray-500">Loading base data...</div>
       </div>
     );
   }
@@ -87,7 +86,7 @@ export function BaseClient({
       <BaseTopNavigation baseName={baseName} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <SecondaryNavigation
-          currentTableName={tableData?.table?.name}
+          currentTableName={tableData?.name}
           tables={baseTables ?? []}
           currentTableId={currentTableId}
           onTableSelect={handleTableSelect}
@@ -116,30 +115,33 @@ export function BaseClient({
               isSidebarOpen && "ml-60",
             )}
           >
-            {isLoading ? (
+            {isTableLoading ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-sm text-gray-500">
                   Loading table data...
                 </div>
               </div>
-            ) : error ? (
+            ) : tableError ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
                   <h3 className="text-lg font-semibold text-red-600">Error</h3>
                   <p className="mt-2 text-sm text-gray-500">
-                    {error instanceof Error
-                      ? error.message
-                      : "Failed to load table data"}
+                    {tableError.message}
                   </p>
                 </div>
               </div>
             ) : (
-              tableData?.success &&
-              tableData.table && (
+              tableData && (
                 <EnhancedDataGrid
+                  baseId={baseId}
                   tableId={currentTableId}
-                  initialData={tableData.table.data}
-                  initialColumns={tableData.table.columns}
+                  initialData={tableData.data}
+                  initialColumns={tableData.columns}
+                  addRow={addRow}
+                  addBulkRows={addBulkRows}
+                  updateCell={updateCell}
+                  isAddingRow={isAddingRow}
+                  isBatchAdding={isBatchAdding}
                 />
               )
             )}

@@ -1,6 +1,11 @@
 "use client";
 
-import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
+import {
+  useQueryClient,
+  useQuery,
+  useMutation,
+  useQueries,
+} from "@tanstack/react-query";
 import { type tables } from "~/server/db/schema";
 import {
   getTables,
@@ -10,7 +15,7 @@ import {
   addBulkRows,
 } from "~/lib/actions/tables.action";
 import { faker } from "@faker-js/faker";
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 
 // Define types at the top
 interface Row {
@@ -93,11 +98,7 @@ function generateNumberValue(columnName: string): number {
   }
 }
 
-export const useTable = (
-  baseId: string,
-  tableId: string,
-  initialData?: TableResponse,
-) => {
+export const useTable = (baseId: string, tableId: string) => {
   const queryClient = useQueryClient();
   const latestMutationRef = useRef<string | null>(null);
   const pendingRowCreationsRef = useRef<Map<string, Promise<unknown>>>(
@@ -105,24 +106,39 @@ export const useTable = (
   );
   const rowIdMappingRef = useRef<Map<string, string>>(new Map());
 
-  const baseQuery = useQuery<BaseResponse>({
+  // Query for base tables
+  const baseQuery = useQuery({
     queryKey: ["base", baseId],
     queryFn: () => getTables(baseId),
-    enabled: Boolean(baseId),
     staleTime: 10 * 1000,
   });
 
-  const tableName =
-    baseQuery.data?.tables?.find((t) => t.id === tableId)?.name ?? "";
-
-  const tableQuery = useQuery<TableResponse>({
-    queryKey: ["table", tableId],
-    queryFn: () => getTableData(tableId, tableName),
-    enabled: Boolean(tableId && tableName),
-    staleTime: 5 * 1000,
-    initialData: initialData,
-    refetchOnMount: false,
+  // Get all table queries in parallel using useQueries
+  const tableQueries = useQueries({
+    queries: (baseQuery.data?.tables ?? []).map((table) => ({
+      queryKey: ["table", table.id] as const,
+      queryFn: () => getTableData(table.id, table.name),
+      staleTime: 5 * 1000,
+      placeholderData: () =>
+        queryClient.getQueryData<TableResponse>(["table", table.id]),
+      // Cancel in-flight queries when switching tables
+      gcTime: 0,
+      enabled: table.id === tableId,
+    })),
   });
+
+  // Cancel previous table queries when switching tables
+  useEffect(() => {
+    return () => {
+      // Cancel any in-flight queries for the previous table
+      void queryClient.cancelQueries({ queryKey: ["table", tableId] });
+    };
+  }, [queryClient, tableId]);
+
+  // Find the current table's query result
+  const currentTableQuery = tableQueries.find(
+    (q) => q.data?.table?.id === tableId,
+  );
 
   const addRowMutation = useMutation({
     mutationFn: async (optimisticRow: Row) => {
@@ -455,31 +471,19 @@ export const useTable = (
   });
 
   return {
-    baseTables: baseQuery.data?.tables,
-    isBaseLoading: baseQuery.isLoading,
-    baseError: baseQuery.error,
-    tableData: tableQuery.data,
-    isLoading: tableQuery.isLoading,
-    error: tableQuery.error,
     addRow: () => {
-      const previousData = queryClient.getQueryData<TableResponse>([
-        "table",
-        tableId,
-      ]);
-      if (previousData?.table) {
-        const optimisticRow = generateMockRow(previousData.table.columns);
+      const tableData = currentTableQuery?.data;
+      if (tableData?.success && tableData.table) {
+        const optimisticRow = generateMockRow(tableData.table.columns);
         addRowMutation.mutate(optimisticRow);
       }
     },
     addBulkRows: (count: number) => {
-      const previousData = queryClient.getQueryData<TableResponse>([
-        "table",
-        tableId,
-      ]);
-      if (previousData?.table) {
+      const tableData = currentTableQuery?.data;
+      if (tableData?.success && tableData.table) {
         const optimisticRows = Array(count)
           .fill(null)
-          .map(() => generateMockRow(previousData.table!.columns));
+          .map(() => generateMockRow(tableData.table!.columns));
         void addBulkRowsMutation.mutate({ optimisticRows });
       }
     },
@@ -493,6 +497,16 @@ export const useTable = (
     isAddingRow: addRowMutation.isPending,
     isUpdatingCell: updateCellMutation.isPending,
     isBatchAdding: addBulkRowsMutation.isPending,
+    // Add loading states
+    isLoading: baseQuery.isLoading ?? false,
+    isTableLoading: currentTableQuery?.isLoading ?? false,
+    // Add error states
+    baseError: baseQuery.error ?? null,
+    tableError: currentTableQuery?.error ?? null,
+    // Add table data
+    tableData: currentTableQuery?.data?.table,
+    // Add base tables data
+    baseTables: baseQuery.data?.tables ?? [],
   };
 };
 

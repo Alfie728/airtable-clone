@@ -41,9 +41,12 @@ export async function prefetchTable(
   tableId: string,
   tableName: string,
 ): Promise<void> {
+  if (!tableId || !tableName) return;
+
   await queryClient.prefetchQuery({
     queryKey: ["table", tableId],
     queryFn: () => getTableData(tableId, tableName),
+    staleTime: 5 * 1000,
   });
 }
 
@@ -55,23 +58,30 @@ export async function prefetchBaseTables(
   queryClient: QueryClient,
   baseId: string,
 ): Promise<void> {
-  // First prefetch the base tables
+  if (!baseId) return;
+
+  // Prefetch base tables first since we need this data
   await queryClient.prefetchQuery({
     queryKey: ["base", baseId],
     queryFn: () => getTables(baseId),
+    staleTime: 10 * 1000,
   });
 
-  // Get the tables data from cache
-  const tablesData = queryClient.getQueryData<GetTablesResponse>([
+  // Get base data from cache
+  const baseData = queryClient.getQueryData<GetTablesResponse>([
     "base",
     baseId,
   ]);
 
-  // If we have tables, prefetch each table's data
-  if (tablesData?.success && tablesData.tables) {
+  // Prefetch table data in parallel if we have tables
+  if (baseData?.success && baseData.tables) {
     await Promise.all(
-      tablesData.tables.map((table) =>
-        prefetchTable(queryClient, table.id, table.name),
+      baseData.tables.map((table) =>
+        queryClient.prefetchQuery({
+          queryKey: ["table", table.id],
+          queryFn: () => getTableData(table.id, table.name),
+          staleTime: 5 * 1000,
+        }),
       ),
     );
   }
