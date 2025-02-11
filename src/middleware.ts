@@ -14,6 +14,7 @@ export default clerkMiddleware(async (auth, request) => {
     path: request.nextUrl.pathname,
     isPublic: isPublicRoute(request),
     method: request.method,
+    headers: Object.fromEntries(request.headers.entries()),
     timestamp: new Date().toISOString(),
   });
 
@@ -21,12 +22,20 @@ export default clerkMiddleware(async (auth, request) => {
     userId: authState.userId,
     sessionId: authState.sessionId,
     isSignedIn: !!authState.userId,
+    hasSession: !!authState.sessionId,
   });
 
   if (!isPublicRoute(request)) {
     console.log("[Middleware] Protecting route:", request.nextUrl.pathname);
-    await auth.protect();
-    console.log("[Middleware] Route protected, auth check complete");
+    try {
+      await auth.protect();
+      console.log("[Middleware] Route protected, auth check complete");
+    } catch (error) {
+      console.error("[Middleware] Auth protection failed:", error);
+      // Log the redirect attempt
+      console.log("[Middleware] Redirecting to:", "/sign-in");
+      return Response.redirect(new URL("/sign-in", request.url));
+    }
   } else {
     console.log(
       "[Middleware] Public route accessed:",
