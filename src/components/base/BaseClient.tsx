@@ -11,66 +11,52 @@ import { useTable } from "~/hooks/useTable";
 import { useBase } from "~/hooks/useBase";
 import { cn } from "~/lib/utils";
 import type { TableResponse } from "~/hooks/useTable";
-
-// interface SerializedTable {
-//   id: string;
-//   name: string;
-//   description: string | null;
-//   baseId: string;
-//   rowCount: number;
-//   createdAt: string;
-//   updatedAt: string | null;
-// }
-
-// interface BaseData {
-//   id: string;
-//   name: string;
-//   tables: SerializedTable[];
-//   currentTable: TableData | null;
-// }
+import { useRouter } from "next/navigation";
 
 interface BaseClientProps {
   baseId: string;
   initialTableData?: TableResponse;
   initialTableId: string;
+  viewId: string;
 }
-
-// Helper function to convert string dates to Date objects
-// function deserializeTable(table: SerializedTable): typeof tables.$inferSelect {
-//   return {
-//     ...table,
-//     createdAt: new Date(table.createdAt),
-//     updatedAt: table.updatedAt ? new Date(table.updatedAt) : null,
-//   };
-// }
 
 export function BaseClient({
   baseId,
   initialTableData,
   initialTableId,
+  viewId,
 }: BaseClientProps) {
-  const [currentTableId, setCurrentTableId] = useState<string | null>(
-    initialTableId,
-  );
+  const router = useRouter();
+  const [currentTableId, setCurrentTableId] = useState<string>(initialTableId);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const { tableData, baseTables, isLoading, isBaseLoading, error, baseError } =
-    useTable(baseId, currentTableId ?? "", initialTableData);
+    useTable(baseId, currentTableId, initialTableData);
 
   const { baseName, isLoading: isBaseNameLoading } = useBase(baseId);
 
   useEffect(() => {
     if (baseTables && baseTables.length > 0 && !currentTableId) {
-      setCurrentTableId(baseTables[0]?.id ?? null);
+      const firstTableId = baseTables[0]?.id;
+      if (firstTableId) {
+        setCurrentTableId(firstTableId);
+        router.push(`/${baseId}/${firstTableId}/grid`, { scroll: false });
+      }
     }
-  }, [baseTables, currentTableId]);
+  }, [baseTables, currentTableId, baseId, router]);
 
   const handleTableCreated = (newTable: typeof tables.$inferSelect) => {
+    const newUrl = `/${baseId}/${newTable.id}/grid`;
+    window.history.pushState({}, "", newUrl);
     setCurrentTableId(newTable.id);
+    router.push(newUrl, { scroll: false });
   };
 
   const handleTableSelect = (tableId: string) => {
+    const newUrl = `/${baseId}/${tableId}/grid`;
+    window.history.pushState({}, "", newUrl);
     setCurrentTableId(tableId);
+    router.push(newUrl, { scroll: false });
   };
 
   if (baseError) {
@@ -151,7 +137,7 @@ export function BaseClient({
               tableData?.success &&
               tableData.table && (
                 <EnhancedDataGrid
-                  tableId={currentTableId!}
+                  tableId={currentTableId}
                   initialData={tableData.table.data}
                   initialColumns={tableData.table.columns}
                 />

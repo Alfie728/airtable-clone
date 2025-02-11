@@ -1,4 +1,4 @@
-import { BaseClient } from "./BaseClient";
+import { BaseClient } from "~/components/base/BaseClient";
 import { getTables } from "~/lib/actions/tables.action";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
@@ -15,6 +15,8 @@ interface TablesResponse {
 interface PageProps {
   params: {
     baseId: string;
+    tableId: string;
+    viewId: string;
   };
 }
 
@@ -24,8 +26,8 @@ export default async function BasePage({ params }: PageProps) {
     redirect("/sign-in");
   }
 
-  const { baseId } = await Promise.resolve(params);
-  console.log("Accessing base:", baseId);
+  const { baseId, tableId, viewId } = params;
+  console.log("Accessing base:", baseId, "table:", tableId, "view:", viewId);
 
   // Use the shared query client
   const queryClient = getQueryClient();
@@ -48,22 +50,29 @@ export default async function BasePage({ params }: PageProps) {
     redirect("/");
   }
 
-  const initialTableId = tablesResponse.tables?.[0]?.id ?? "";
-  console.log("Initial table ID:", initialTableId);
+  // Verify that the table exists in this base
+  const tableExists = tablesResponse.tables?.some((t) => t.id === tableId);
+  if (!tableExists) {
+    // If table doesn't exist, redirect to the first table
+    const firstTableId = tablesResponse.tables?.[0]?.id;
+    if (firstTableId) {
+      redirect(`/${baseId}/${firstTableId}/grid`);
+    }
+    redirect("/");
+  }
 
   // Get the table data from cache since it was prefetched on homepage
   const initialTableData = queryClient.getQueryData<TableResponse>([
     "table",
-    initialTableId,
+    tableId,
   ]);
-
-  console.log("Initial table data:", initialTableData);
 
   return (
     <BaseClient
       baseId={baseId}
       initialTableData={initialTableData}
-      initialTableId={initialTableId}
+      initialTableId={tableId}
+      viewId={viewId}
     />
   );
 }

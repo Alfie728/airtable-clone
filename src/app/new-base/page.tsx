@@ -26,7 +26,7 @@ export default function NewBasePage() {
       }
 
       toast.success("Base created successfully");
-      router.push(`/base/${result.baseId}`);
+      router.push(`/${result.baseId}/tables/grid`);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to create base";

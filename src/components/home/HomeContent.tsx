@@ -68,7 +68,7 @@ export function HomeContent({ bases }: HomeContentProps) {
               {tableData.rows.map((row) => (
                 <Link
                   key={row.id}
-                  href={`/base/${row.id}`}
+                  href={`/${row.id}/tables/grid`}
                   onMouseEnter={() => handleBaseHover(row.id)}
                   className="group relative flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md"
                 >
