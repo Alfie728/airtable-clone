@@ -192,7 +192,7 @@ export function HomeTopNavigation({ onMenuToggle }: HomeTopNavigationProps) {
             <Bell className="h-4 w-4" strokeWidth={1.5} />
           </Button>
           <SignedIn>
-            <UserButton signInUrl="/sign-in" />
+            <UserButton />
           </SignedIn>
           <SignedOut>
             <SignInButton>
