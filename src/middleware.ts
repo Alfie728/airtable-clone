@@ -9,12 +9,11 @@ const isPublicRoute = createRouteMatcher([
 export default clerkMiddleware(async (auth, request) => {
   const authState = await auth();
 
-  // Detailed logging of the request and auth state
+  // Detailed logging without trying to modify headers
   console.log("[Middleware] Request details:", {
     path: request.nextUrl.pathname,
     isPublic: isPublicRoute(request),
     method: request.method,
-    headers: Object.fromEntries(request.headers.entries()),
     timestamp: new Date().toISOString(),
   });
 
@@ -32,9 +31,9 @@ export default clerkMiddleware(async (auth, request) => {
       console.log("[Middleware] Route protected, auth check complete");
     } catch (error) {
       console.error("[Middleware] Auth protection failed:", error);
-      // Log the redirect attempt
-      console.log("[Middleware] Redirecting to:", "/sign-in");
-      return Response.redirect(new URL("/sign-in", request.url));
+      // Create a new URL for the redirect
+      const signInUrl = new URL("/sign-in", request.url);
+      return Response.redirect(signInUrl);
     }
   } else {
     console.log(
