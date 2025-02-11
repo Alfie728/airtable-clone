@@ -137,15 +137,14 @@ export const useTable = (baseId: string, tableId: string) => {
     };
   }, [queryClient, tableId]);
 
-  // Find the current table's query result
-  const currentTableQuery = tableQueries.find(
-    (q) => q.data?.table?.id === tableId,
-  );
+  // Find the current table query based on the index in the base tables array
+  const currentTableIndex =
+    baseQuery.data?.tables?.findIndex((t) => t.id === tableId) ?? -1;
+  const currentTableQuery =
+    currentTableIndex >= 0 ? tableQueries[currentTableIndex] : undefined;
 
-  // Add a more accurate loading state check
-  const isTableLoading = tableQueries.some(
-    (q) => q.isLoading && q.fetchStatus !== "idle",
-  );
+  // Check loading state for the current table
+  const isTableLoading = currentTableQuery?.status === "pending";
 
   const addRowMutation = useMutation({
     mutationFn: async (optimisticRow: Row) => {
@@ -487,7 +486,7 @@ export const useTable = (baseId: string, tableId: string) => {
     },
     addBulkRows: (count: number) => {
       const tableData = currentTableQuery?.data;
-      if (tableData?.success && tableData.table) {
+      if (tableData?.success && tableData.table?.columns) {
         const optimisticRows = Array(count)
           .fill(null)
           .map(() => generateMockRow(tableData.table!.columns));
