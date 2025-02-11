@@ -119,11 +119,13 @@ export const useTable = (baseId: string, tableId: string) => {
       queryKey: ["table", table.id] as const,
       queryFn: () => getTableData(table.id, table.name),
       staleTime: 5 * 1000,
+      enabled: table.id === tableId,
+      refetchOnMount: true,
+      refetchOnWindowFocus: false,
       placeholderData: () =>
         queryClient.getQueryData<TableResponse>(["table", table.id]),
       // Cancel in-flight queries when switching tables
       gcTime: 0,
-      enabled: table.id === tableId,
     })),
   });
 
@@ -138,6 +140,11 @@ export const useTable = (baseId: string, tableId: string) => {
   // Find the current table's query result
   const currentTableQuery = tableQueries.find(
     (q) => q.data?.table?.id === tableId,
+  );
+
+  // Add a more accurate loading state check
+  const isTableLoading = tableQueries.some(
+    (q) => q.isLoading && q.fetchStatus !== "idle",
   );
 
   const addRowMutation = useMutation({
@@ -499,7 +506,7 @@ export const useTable = (baseId: string, tableId: string) => {
     isBatchAdding: addBulkRowsMutation.isPending,
     // Add loading states
     isLoading: baseQuery.isLoading ?? false,
-    isTableLoading: currentTableQuery?.isLoading ?? false,
+    isTableLoading, // Use the new loading state
     // Add error states
     baseError: baseQuery.error ?? null,
     tableError: currentTableQuery?.error ?? null,

@@ -80,7 +80,7 @@ export function BaseClient({
       </div>
     );
   }
-
+  console.log("[BaseClient] isTableLoading", isTableLoading);
   return (
     <div className="flex h-screen flex-col bg-white">
       <BaseTopNavigation baseName={baseName} />
@@ -137,9 +137,9 @@ export function BaseClient({
                   tableId={currentTableId}
                   initialData={tableData.data}
                   initialColumns={tableData.columns}
-                  addRow={addRow}
-                  addBulkRows={addBulkRows}
-                  updateCell={updateCell}
+                  addRowAction={addRow}
+                  addBulkRowsAction={addBulkRows}
+                  updateCellAction={updateCell}
                   isAddingRow={isAddingRow}
                   isBatchAdding={isBatchAdding}
                 />

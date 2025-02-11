@@ -55,9 +55,9 @@ interface EnhancedDataGridProps {
   initialColumns?: Column[];
   onDataChange?: (data: Row[]) => void;
   onColumnsChange?: (columns: Column[]) => void;
-  addRow: () => void;
-  addBulkRows: (count: number) => void;
-  updateCell: (params: {
+  addRowAction: () => void;
+  addBulkRowsAction: (count: number) => void;
+  updateCellAction: (params: {
     rowId: string;
     columnId: string;
     value: string;
@@ -170,9 +170,9 @@ export function EnhancedDataGrid({
   initialColumns,
   onDataChange,
   onColumnsChange,
-  addRow,
-  addBulkRows,
-  updateCell,
+  addRowAction,
+  addBulkRowsAction,
+  updateCellAction,
   isAddingRow,
   isBatchAdding,
 }: EnhancedDataGridProps) {
@@ -327,7 +327,7 @@ export function EnhancedDataGrid({
   };
 
   async function handleAddBulkRows() {
-    void addBulkRows(BULK_ADD_ROWS_COUNT);
+    void addBulkRowsAction(BULK_ADD_ROWS_COUNT);
   }
 
   const table = useReactTable<Row>({
@@ -349,7 +349,7 @@ export function EnhancedDataGrid({
         const column = columns.find((col) => col.id === columnId);
         if (!column) return;
 
-        void updateCell({
+        void updateCellAction({
           rowId: row.id,
           columnId,
           value: String(value),
@@ -508,7 +508,7 @@ export function EnhancedDataGrid({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => void addRow()}
+            onClick={() => void addRowAction()}
             className="h-7 gap-2 text-xs hover:bg-gray-50"
             disabled={isAddingRow}
           >
