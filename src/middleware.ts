@@ -6,13 +6,17 @@ const isPublicRoute = createRouteMatcher([
   "/api/webhooks(.*)",
 ]);
 
-export default clerkMiddleware(
-  async (auth, request) => {
-    if (!isPublicRoute(request)) {
-      await auth.protect();
-    }
-  },
-);
+export default clerkMiddleware(async (auth, request) => {
+  // Add logging for both development and production
+  console.log("[Middleware] Path:", request.nextUrl.pathname);
+  console.log("[Middleware] Is public:", isPublicRoute(request));
+
+  if (!isPublicRoute(request)) {
+    const authState = await auth();
+    console.log("[Middleware] Auth state:", authState);
+    await auth.protect();
+  }
+});
 
 export const config = {
   matcher: [

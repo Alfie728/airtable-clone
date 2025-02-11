@@ -131,7 +131,7 @@ export function BaseTopNavigation({ baseName }: BaseTopNavigationProps) {
           </Button>
           <div className="ml-2 flex items-center">
             <SignedIn>
-              <UserButton afterSignOutUrl="/" />
+              <UserButton />
             </SignedIn>
             <SignedOut>
               <SignInButton>
@@ -192,7 +192,7 @@ export function HomeTopNavigation({ onMenuToggle }: HomeTopNavigationProps) {
             <Bell className="h-4 w-4" strokeWidth={1.5} />
           </Button>
           <SignedIn>
-            <UserButton afterSignOutUrl="/" />
+            <UserButton />
           </SignedIn>
           <SignedOut>
             <SignInButton>

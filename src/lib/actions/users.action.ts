@@ -23,21 +23,25 @@ interface User {
 
 export const createUser = async (user: { clerkId: string; email: string }) => {
   try {
-    // Check if user already exists
-    const existingUser = await getUserByClerkId(user.clerkId);
+    // Try to insert the user, if it fails due to conflict, return the existing user
+    const [newUser] = await db
+      .insert(users)
+      .values({
+        clerkId: user.clerkId,
+        email: user.email,
+      })
+      .onConflictDoNothing({ target: users.clerkId })
+      .returning();
 
-    if (existingUser.success) {
+    // If insert returned nothing, it means the user already exists
+    if (!newUser) {
+      const existingUser = await getUserByClerkId(user.clerkId);
       return existingUser;
     }
 
-    await db.insert(users).values({
-      clerkId: user.clerkId,
-      email: user.email,
-    });
-
     return {
       success: true,
-      user: { clerkId: user.clerkId, email: user.email },
+      user: newUser,
     };
   } catch (error) {
     console.error("Error creating user", error);

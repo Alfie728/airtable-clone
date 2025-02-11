@@ -14,12 +14,16 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="font-sans">
-      <body>
-        <ClerkProvider>
+    <ClerkProvider
+      afterSignOutUrl="/sign-in"
+      signInUrl="/sign-in"
+      signUpUrl="/sign-up"
+    >
+      <html lang="en" className="font-sans">
+        <body>
           <Providers>{children}</Providers>
-        </ClerkProvider>
-      </body>
-    </html>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }
