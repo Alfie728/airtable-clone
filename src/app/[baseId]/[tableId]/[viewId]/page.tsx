@@ -18,7 +18,5 @@ export default async function BasePage({ params }: PageProps) {
 
   const { baseId, tableId, viewId } = await Promise.resolve(params);
 
-  return (
-    <BaseClient baseId={baseId} initialTableId={tableId} viewId={viewId} />
-  );
+  return <BaseClient baseId={baseId} tableId={tableId} viewId={viewId} />;
 }

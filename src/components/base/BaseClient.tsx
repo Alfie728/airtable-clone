@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import type { tables } from "~/server/db/schema";
 import { BaseTopNavigation } from "~/components/layout/TopNavigation";
 import { EnhancedDataGrid } from "~/components/grid/EnhancedDataGrid";
@@ -14,17 +14,12 @@ import { useRouter } from "next/navigation";
 
 interface BaseClientProps {
   baseId: string;
-  initialTableId: string;
+  tableId: string;
   viewId: string;
 }
 
-export function BaseClient({
-  baseId,
-  initialTableId,
-  viewId,
-}: BaseClientProps) {
+export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   const router = useRouter();
-  const [currentTableId, setCurrentTableId] = useState<string>(initialTableId);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const { baseName, isLoading: isBaseNameLoading } = useBase(baseId);
@@ -40,34 +35,27 @@ export function BaseClient({
     isAddingRow,
     isBatchAdding,
     baseTables,
-  } = useTable(baseId, currentTableId);
+  } = useTable(baseId, tableId);
 
-  // Single effect to handle routing based on table existence
+  // Handle invalid table ID
   useEffect(() => {
     if (!isLoading && baseTables && baseTables.length > 0) {
-      // If current table doesn't exist or there's an error, redirect to the first available table
-      const tableExists = baseTables.some((t) => t.id === currentTableId);
       const firstTable = baseTables[0];
-      if (!tableExists && firstTable?.id) {
-        setCurrentTableId(firstTable.id);
-        router.replace(`/${baseId}/${firstTable.id}/grid`);
+      if (
+        firstTable &&
+        (tableId === "tables" || !baseTables.some((t) => t.id === tableId))
+      ) {
+        router.replace(`/${baseId}/${firstTable.id}/grid`, { scroll: false });
       }
-    } else if (!isLoading && (!baseTables || baseTables.length === 0)) {
-      // If there are no tables at all, redirect to home
-      router.replace("/");
     }
-  }, [isLoading, baseTables, currentTableId, baseId, router]);
+  }, [isLoading, baseTables, tableId, baseId, router]);
 
   const handleTableCreated = (newTable: typeof tables.$inferSelect) => {
-    const newUrl = `/${baseId}/${newTable.id}/grid`;
-    setCurrentTableId(newTable.id);
-    router.push(newUrl, { scroll: false });
+    router.replace(`/${baseId}/${newTable.id}/grid`, { scroll: false });
   };
 
   const handleTableSelect = (tableId: string) => {
-    const newUrl = `/${baseId}/${tableId}/grid`;
-    setCurrentTableId(tableId);
-    router.push(newUrl, { scroll: false });
+    router.replace(`/${baseId}/${tableId}/grid`, { scroll: false });
   };
 
   if (baseError) {
@@ -80,7 +68,12 @@ export function BaseClient({
       </div>
     );
   }
-  console.log("[BaseClient] isTableLoading", isTableLoading);
+
+  if (!isLoading && (!baseTables || baseTables.length === 0)) {
+    router.replace("/");
+    return null;
+  }
+
   return (
     <div className="flex h-screen flex-col bg-white">
       <BaseTopNavigation baseName={baseName} />
@@ -88,7 +81,7 @@ export function BaseClient({
         <SecondaryNavigation
           currentTableName={tableData?.name}
           tables={baseTables ?? []}
-          currentTableId={currentTableId}
+          currentTableId={tableId}
           onTableSelect={handleTableSelect}
           onTableCreated={handleTableCreated}
         />
@@ -105,7 +98,7 @@ export function BaseClient({
           >
             <Sidebar
               tables={baseTables ?? []}
-              currentTableId={currentTableId}
+              currentTableId={tableId}
               onTableSelect={handleTableSelect}
             />
           </div>
@@ -134,7 +127,7 @@ export function BaseClient({
               tableData && (
                 <EnhancedDataGrid
                   baseId={baseId}
-                  tableId={currentTableId}
+                  tableId={tableId}
                   initialData={tableData.data}
                   initialColumns={tableData.columns}
                   addRowAction={addRow}
