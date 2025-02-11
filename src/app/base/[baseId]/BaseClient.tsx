@@ -10,7 +10,7 @@ import { SecondaryNavigation } from "~/components/layout/SecondaryNavigation";
 import { useTable } from "~/hooks/useTable";
 import { useBase } from "~/hooks/useBase";
 import { cn } from "~/lib/utils";
-// import type { TableData } from "~/hooks/useTable";
+import type { TableResponse } from "~/hooks/useTable";
 
 // interface SerializedTable {
 //   id: string;
@@ -31,6 +31,8 @@ import { cn } from "~/lib/utils";
 
 interface BaseClientProps {
   baseId: string;
+  initialTableData?: TableResponse;
+  initialTableId: string;
 }
 
 // Helper function to convert string dates to Date objects
@@ -42,12 +44,18 @@ interface BaseClientProps {
 //   };
 // }
 
-export function BaseClient({ baseId }: BaseClientProps) {
-  const [currentTableId, setCurrentTableId] = useState<string | null>(null);
+export function BaseClient({
+  baseId,
+  initialTableData,
+  initialTableId,
+}: BaseClientProps) {
+  const [currentTableId, setCurrentTableId] = useState<string | null>(
+    initialTableId,
+  );
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const { tableData, baseTables, isLoading, isBaseLoading, error, baseError } =
-    useTable(baseId, currentTableId ?? "");
+    useTable(baseId, currentTableId ?? "", initialTableData);
 
   const { baseName, isLoading: isBaseNameLoading } = useBase(baseId);
 
@@ -93,7 +101,7 @@ export function BaseClient({ baseId }: BaseClientProps) {
       <BaseTopNavigation baseName={baseName} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <SecondaryNavigation
-          currentTableName={tableData?.name}
+          currentTableName={tableData?.table?.name}
           tables={baseTables ?? []}
           currentTableId={currentTableId}
           onTableSelect={handleTableSelect}
@@ -140,11 +148,12 @@ export function BaseClient({ baseId }: BaseClientProps) {
                 </div>
               </div>
             ) : (
-              tableData && (
+              tableData?.success &&
+              tableData.table && (
                 <EnhancedDataGrid
                   tableId={currentTableId!}
-                  initialData={tableData.data}
-                  initialColumns={tableData.columns}
+                  initialData={tableData.table.data}
+                  initialColumns={tableData.table.columns}
                 />
               )
             )}

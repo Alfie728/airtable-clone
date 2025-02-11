@@ -93,7 +93,11 @@ function generateNumberValue(columnName: string): number {
   }
 }
 
-export const useTable = (baseId: string, tableId: string) => {
+export const useTable = (
+  baseId: string,
+  tableId: string,
+  initialData?: TableResponse,
+) => {
   const queryClient = useQueryClient();
   const latestMutationRef = useRef<string | null>(null);
   const pendingRowCreationsRef = useRef<Map<string, Promise<unknown>>>(
@@ -116,6 +120,8 @@ export const useTable = (baseId: string, tableId: string) => {
     queryFn: () => getTableData(tableId, tableName),
     enabled: Boolean(tableId && tableName),
     staleTime: 5 * 1000,
+    initialData: initialData,
+    refetchOnMount: false,
   });
 
   const addRowMutation = useMutation({
@@ -452,7 +458,7 @@ export const useTable = (baseId: string, tableId: string) => {
     baseTables: baseQuery.data?.tables,
     isBaseLoading: baseQuery.isLoading,
     baseError: baseQuery.error,
-    tableData: tableQuery.data?.table,
+    tableData: tableQuery.data,
     isLoading: tableQuery.isLoading,
     error: tableQuery.error,
     addRow: () => {

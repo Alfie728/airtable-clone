@@ -176,10 +176,42 @@ export function EnhancedDataGrid({
     updateCell,
     isAddingRow,
     isBatchAdding,
-  } = useTable(tableId, tableId);
+  } = useTable(tableId, tableId, {
+    success: true,
+    table:
+      initialData && initialColumns
+        ? {
+            id: tableId,
+            name: "",
+            columns: initialColumns,
+            data: initialData,
+          }
+        : undefined,
+  });
 
-  const columns = useMemo(() => tableData?.columns ?? [], [tableData?.columns]);
-  const data = useMemo(() => tableData?.data ?? [], [tableData?.data]);
+  const columns = useMemo<Column[]>(() => {
+    // First try to use table data from the query
+    if (tableData?.success && tableData.table?.columns) {
+      return tableData.table.columns;
+    }
+    // Fall back to initial columns if available
+    if (initialColumns) {
+      return initialColumns;
+    }
+    return [];
+  }, [tableData?.success, tableData?.table?.columns, initialColumns]);
+
+  const data = useMemo<Row[]>(() => {
+    // First try to use table data from the query
+    if (tableData?.success && tableData.table?.data) {
+      return tableData.table.data;
+    }
+    // Fall back to initial data if available
+    if (initialData) {
+      return initialData;
+    }
+    return [];
+  }, [tableData?.success, tableData?.table?.data, initialData]);
 
   useEffect(() => {
     onDataChange?.(data);
@@ -207,101 +239,40 @@ export function EnhancedDataGrid({
     [],
   );
 
-  const tableColumns = useMemo(
-    () =>
-      columns.map(
-        (col): ColumnDefWithMeta => ({
-          id: col.id,
-          accessorFn: (row: Row) => {
-            const value = row[col.name];
-            return typeof value === "undefined" ? "" : value;
-          },
-          meta: {
-            name: col.name,
-            type: col.type,
-            isNew: (row: Row) =>
-              !tableData?.data.some((serverRow) => serverRow.id === row.id),
-          },
-          header: () => (
-            <div className="flex items-center gap-2">
-              <span>{col.name}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-auto"
-                onClick={() => handleDeleteColumn(col.id)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ),
-        }),
+  const tableColumns = useMemo<ColumnDefWithMeta[]>(() => {
+    return columns.map((col) => ({
+      id: col.id,
+      accessorFn: (row: Row) => {
+        const value = row[col.name];
+        return typeof value === "undefined" ? "" : value;
+      },
+      meta: {
+        name: col.name,
+        type: col.type,
+        isNew: (row: Row) => {
+          if (!tableData?.success || !tableData.table?.data) {
+            return false;
+          }
+          return !tableData.table.data.some(
+            (serverRow) => serverRow.id === row.id,
+          );
+        },
+      },
+      header: () => (
+        <div className="flex items-center gap-2">
+          <span>{col.name}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onClick={() => handleDeleteColumn(col.id)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       ),
-    [columns, tableData?.data],
-  );
-
-  const table = useReactTable<Row>({
-    data,
-    columns: tableColumns,
-    defaultColumn,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    manualSorting: true,
-    state: {
-      sorting,
-    },
-    onSortingChange: setSorting,
-    meta: {
-      updateData: (rowIndex: number, columnId: string, value: unknown) => {
-        const row = data[rowIndex];
-        if (!row) return;
-
-        const column = columns.find((col) => col.id === columnId);
-        if (!column) return;
-
-        void updateCell({
-          rowId: row.id,
-          columnId,
-          value: String(value),
-        });
-      },
-      handleTabNavigation: (
-        rowId: string,
-        columnId: string,
-        isShiftKey: boolean,
-      ) => {
-        handleTabNavigation(rowId, columnId, isShiftKey);
-      },
-    } satisfies TableMeta,
-  });
-
-  const { rows } = table.getRowModel();
-
-  const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
-    count: rows.length,
-    estimateSize: () => 33,
-    getScrollElement: () => tableContainerRef.current,
-    measureElement:
-      typeof window !== "undefined" && !navigator.userAgent.includes("Firefox")
-        ? (element: HTMLTableRowElement | null) =>
-            element?.getBoundingClientRect().height ?? 33
-        : undefined,
-    overscan: 5,
-  });
-
-  function handleCellChange(
-    rowId: string,
-    columnId: string,
-    value: string,
-    isNewRow: boolean,
-  ) {
-    const rowIndex = table
-      .getRowModel()
-      .rows.findIndex((row) => row.original.id === rowId);
-    if (rowIndex === -1) return;
-
-    (table.options.meta as TableMeta).updateData(rowIndex, columnId, value);
-  }
+    }));
+  }, [columns, tableData?.success, tableData?.table?.data]);
 
   function handleTabNavigation(
     currentRowId: string,
@@ -374,11 +345,74 @@ export function EnhancedDataGrid({
   };
 
   const handleDeleteColumn = (columnId: string) => {
-    onColumnsChange?.(columns.filter((c) => c.id !== columnId));
+    onColumnsChange?.(columns.filter((col) => col.id !== columnId));
   };
 
   async function handleAddBulkRows() {
     void addBulkRows(BULK_ADD_ROWS_COUNT);
+  }
+
+  const table = useReactTable<Row>({
+    data,
+    columns: tableColumns,
+    defaultColumn,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    manualSorting: true,
+    state: {
+      sorting,
+    },
+    onSortingChange: setSorting,
+    meta: {
+      updateData: (rowIndex: number, columnId: string, value: unknown) => {
+        const row = data[rowIndex];
+        if (!row) return;
+
+        const column = columns.find((col) => col.id === columnId);
+        if (!column) return;
+
+        void updateCell({
+          rowId: row.id,
+          columnId,
+          value: String(value),
+        });
+      },
+      handleTabNavigation: (
+        rowId: string,
+        columnId: string,
+        isShiftKey: boolean,
+      ) => {
+        handleTabNavigation(rowId, columnId, isShiftKey);
+      },
+    } satisfies TableMeta,
+  });
+
+  const { rows } = table.getRowModel();
+
+  const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
+    count: rows.length,
+    estimateSize: () => 33,
+    getScrollElement: () => tableContainerRef.current,
+    measureElement:
+      typeof window !== "undefined" && !navigator.userAgent.includes("Firefox")
+        ? (element: HTMLTableRowElement | null) =>
+            element?.getBoundingClientRect().height ?? 33
+        : undefined,
+    overscan: 5,
+  });
+
+  function handleCellChange(
+    rowId: string,
+    columnId: string,
+    value: string,
+    isNewRow: boolean,
+  ) {
+    const rowIndex = table
+      .getRowModel()
+      .rows.findIndex((row) => row.original.id === rowId);
+    if (rowIndex === -1) return;
+
+    (table.options.meta as TableMeta).updateData(rowIndex, columnId, value);
   }
 
   return (
