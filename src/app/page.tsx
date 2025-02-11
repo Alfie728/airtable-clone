@@ -1,5 +1,4 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
 import { getUserBases } from "~/lib/actions/bases.action";
 import { HomeContent } from "~/components/home/HomeContent";
 import { createUser } from "~/lib/actions/users.action";
@@ -7,10 +6,10 @@ import { createUser } from "~/lib/actions/users.action";
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const { userId } = await auth();
+  const { userId, redirectToSignIn } = await auth();
 
   if (!userId) {
-    redirect("/sign-in");
+    return redirectToSignIn();
   }
 
   const { success, bases, error } = await getUserBases(userId);
