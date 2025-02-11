@@ -7,21 +7,31 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
-  // Add logging for both development and production
-  console.log("[Middleware] Path:", request.nextUrl.pathname);
-  console.log("[Middleware] Is public:", isPublicRoute(request));
+  const authState = await auth();
+
+  // Detailed logging of the request and auth state
+  console.log("[Middleware] Request details:", {
+    path: request.nextUrl.pathname,
+    isPublic: isPublicRoute(request),
+    method: request.method,
+    timestamp: new Date().toISOString(),
+  });
+
+  console.log("[Middleware] Auth state:", {
+    userId: authState.userId,
+    sessionId: authState.sessionId,
+    isSignedIn: !!authState.userId,
+  });
 
   if (!isPublicRoute(request)) {
-    const authState = await auth();
-    console.log("[Middleware] Auth state:", authState);
-
-    // If user is not authenticated and trying to access a protected route
-    if (!authState.userId) {
-      const signInUrl = new URL("/sign-in", request.url);
-      return Response.redirect(signInUrl);
-    }
-
+    console.log("[Middleware] Protecting route:", request.nextUrl.pathname);
     await auth.protect();
+    console.log("[Middleware] Route protected, auth check complete");
+  } else {
+    console.log(
+      "[Middleware] Public route accessed:",
+      request.nextUrl.pathname,
+    );
   }
 });
 
