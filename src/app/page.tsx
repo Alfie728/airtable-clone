@@ -2,17 +2,10 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { getUserBases } from "~/lib/actions/bases.action";
 import { HomeContent } from "~/components/home/HomeContent";
 import { createUser } from "~/lib/actions/users.action";
-import { prefetchBaseTables } from "~/lib/query/prefetch";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { getQueryClient } from "~/lib/query/client";
 
 export const dynamic = "force-dynamic";
-
-async function prefetchAllBasesData(bases: Array<{ id: string }>) {
-  // Prefetch all bases in parallel
-  await Promise.all(bases.map((base) => prefetchBaseTables(base.id)));
-  return getQueryClient();
-}
 
 export default async function Page() {
   const { userId, redirectToSignIn } = await auth();
@@ -47,7 +40,7 @@ export default async function Page() {
       throw new Error(retryResult.error ?? "Failed to get user bases");
     }
 
-    const queryClient = await prefetchAllBasesData(retryResult.bases);
+    const queryClient = getQueryClient();
 
     return (
       <HydrationBoundary state={dehydrate(queryClient)}>
@@ -60,7 +53,7 @@ export default async function Page() {
     throw new Error(error ?? "Failed to get user bases");
   }
 
-  const queryClient = await prefetchAllBasesData(bases);
+  const queryClient = getQueryClient();
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>

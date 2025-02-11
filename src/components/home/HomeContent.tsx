@@ -7,6 +7,8 @@ import type { SerializedBase } from "~/lib/actions/bases.action";
 import { HomeSidebar } from "~/components/layout/HomeSidebar";
 import { HomeTopNavigation } from "~/components/layout/TopNavigation";
 import { cn } from "~/lib/utils";
+import { prefetchBaseTables } from "~/lib/query/prefetch";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface HomeContentProps {
   bases: SerializedBase[];
@@ -14,6 +16,7 @@ interface HomeContentProps {
 
 export function HomeContent({ bases }: HomeContentProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const tableData = {
     rows: bases.map((base: SerializedBase) => ({
@@ -29,6 +32,11 @@ export function HomeContent({ bases }: HomeContentProps) {
       { key: "createdAt", name: "Created" },
       { key: "updatedAt", name: "Last modified" },
     ],
+  };
+
+  const handleBaseHover = async (baseId: string) => {
+    console.log("Hovering over base:", baseId);
+    await prefetchBaseTables(queryClient, baseId);
   };
 
   return (
@@ -61,6 +69,7 @@ export function HomeContent({ bases }: HomeContentProps) {
                 <Link
                   key={row.id}
                   href={`/base/${row.id}`}
+                  onMouseEnter={() => handleBaseHover(row.id)}
                   className="group relative flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md"
                 >
                   <div className="flex flex-1 flex-col p-6">

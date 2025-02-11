@@ -1,48 +1,77 @@
-import { QueryClient } from "@tanstack/react-query";
+import { type QueryClient } from "@tanstack/react-query";
 import { getTables, getTableData } from "~/lib/actions/tables.action";
 import { getQueryClient } from "./client";
+import type { tables } from "~/server/db/schema";
 
-// This function is specifically for prefetching
-export async function prefetchTable(baseId: string, tableId: string) {
-  const queryClient = getQueryClient();
+type TableType = typeof tables.$inferSelect;
 
-  // First get the base data to get the table name
-  const { tables } = await queryClient.fetchQuery({
-    queryKey: ["base", baseId],
-    queryFn: () => getTables(baseId),
-    staleTime: Infinity,
-  });
-
-  const tableName = tables?.find((t) => t.id === tableId)?.name ?? "";
-
-  // Prefetch and cache the table data
-  const tableData = await queryClient.fetchQuery({
-    queryKey: ["table", tableId],
-    queryFn: () => getTableData(tableId, tableName),
-    staleTime: Infinity,
-  });
-
-  return tableData;
+interface TableColumn {
+  id: string;
+  name: string;
+  type: string;
+  order: number;
+  width: number;
+  isSearchable: boolean;
+  isSortable: boolean;
+  isVisible: boolean;
 }
 
-// This function is for prefetching just the tables of a base
-export async function prefetchBaseTables(baseId: string) {
-  const queryClient = getQueryClient();
+type GetTablesResponse = {
+  success: boolean;
+  tables?: TableType[];
+  error?: string;
+};
 
-  // Fetch the base tables
-  const { success, tables } = await queryClient.fetchQuery({
+type GetTableDataResponse = {
+  success: boolean;
+  table?: {
+    id: string;
+    name: string;
+    columns: TableColumn[];
+    data: Record<string, string | number>[];
+  };
+  error?: string;
+};
+
+/**
+ * Prefetches a single table's data
+ */
+export async function prefetchTable(
+  queryClient: QueryClient,
+  tableId: string,
+  tableName: string,
+): Promise<void> {
+  await queryClient.prefetchQuery({
+    queryKey: ["table", tableId],
+    queryFn: () => getTableData(tableId, tableName),
+  });
+}
+
+/**
+ * Prefetches all tables for a base and their data
+ * This is typically used for hover prefetching on the home page
+ */
+export async function prefetchBaseTables(
+  queryClient: QueryClient,
+  baseId: string,
+): Promise<void> {
+  // First prefetch the base tables
+  await queryClient.prefetchQuery({
     queryKey: ["base", baseId],
     queryFn: () => getTables(baseId),
   });
 
+  // Get the tables data from cache
+  const tablesData = queryClient.getQueryData<GetTablesResponse>([
+    "base",
+    baseId,
+  ]);
+
   // If we have tables, prefetch each table's data
-  if (success && tables) {
+  if (tablesData?.success && tablesData.tables) {
     await Promise.all(
-      tables.map((table) =>
-        queryClient.fetchQuery({
-          queryKey: ["table", table.id],
-          queryFn: () => getTableData(table.id, table.name),
-        }),
+      tablesData.tables.map((table) =>
+        prefetchTable(queryClient, table.id, table.name),
       ),
     );
   }
