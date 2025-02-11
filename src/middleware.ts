@@ -14,6 +14,13 @@ export default clerkMiddleware(async (auth, request) => {
   if (!isPublicRoute(request)) {
     const authState = await auth();
     console.log("[Middleware] Auth state:", authState);
+
+    // If user is not authenticated and trying to access a protected route
+    if (!authState.userId) {
+      const signInUrl = new URL("/sign-in", request.url);
+      return Response.redirect(signInUrl);
+    }
+
     await auth.protect();
   }
 });
