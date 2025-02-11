@@ -9,7 +9,7 @@ const isPublicRoute = createRouteMatcher([
 export default clerkMiddleware(async (auth, request) => {
   const authState = await auth();
 
-  // Detailed logging without trying to modify headers
+  // Detailed logging of the request and auth state
   console.log("[Middleware] Request details:", {
     path: request.nextUrl.pathname,
     isPublic: isPublicRoute(request),
@@ -21,20 +21,12 @@ export default clerkMiddleware(async (auth, request) => {
     userId: authState.userId,
     sessionId: authState.sessionId,
     isSignedIn: !!authState.userId,
-    hasSession: !!authState.sessionId,
   });
 
   if (!isPublicRoute(request)) {
     console.log("[Middleware] Protecting route:", request.nextUrl.pathname);
-    try {
-      await auth.protect();
-      console.log("[Middleware] Route protected, auth check complete");
-    } catch (error) {
-      console.error("[Middleware] Auth protection failed:", error);
-      // Create a new URL for the redirect
-      const signInUrl = new URL("/sign-in", request.url);
-      return Response.redirect(signInUrl);
-    }
+    await auth.protect();
+    console.log("[Middleware] Route protected, auth check complete");
   } else {
     console.log(
       "[Middleware] Public route accessed:",
