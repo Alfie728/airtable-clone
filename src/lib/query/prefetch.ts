@@ -4,6 +4,7 @@ import { getBaseById } from "~/lib/actions/bases.action";
 import type { BaseResponse } from "~/types/table";
 import { type tables } from "~/server/db/schema";
 import { queryKeys } from "./keys";
+import { getUserBases } from "~/lib/actions/bases.action";
 
 type TableType = typeof tables.$inferSelect;
 
@@ -88,4 +89,19 @@ export async function prefetchBaseTables(
       ),
     );
   }
+}
+
+/**
+ * Prefetches the list of bases for the current user
+ * This is used for initial page load hydration
+ */
+export async function prefetchBasesList(
+  queryClient: QueryClient,
+  userId: string,
+): Promise<void> {
+  await queryClient.prefetchQuery({
+    queryKey: queryKeys.bases.list(),
+    queryFn: () => getUserBases(userId),
+    staleTime: 10 * 1000,
+  });
 }

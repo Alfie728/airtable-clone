@@ -4,6 +4,8 @@ import { HomeContent } from "~/components/home/HomeContent";
 import { createUser } from "~/lib/actions/users.action";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { getQueryClient } from "~/lib/query/client";
+import { prefetchBasesList } from "~/lib/query/prefetch";
+import type { SerializedBase } from "~/lib/actions/bases.action";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +16,18 @@ export default async function Page() {
     return redirectToSignIn();
   }
 
-  const { success, bases, error } = await getUserBases(userId);
+  const queryClient = getQueryClient();
+
+  // Try to prefetch bases list
+  await prefetchBasesList(queryClient, userId);
+  const basesData = queryClient.getQueryData<{
+    success: boolean;
+    bases?: SerializedBase[];
+    error?: string;
+  }>(["bases", "list"]);
 
   // If user not found, create them and try again
-  if (!success && error === "User not found") {
+  if (!basesData?.success && basesData?.error === "User not found") {
     // Get user email from Clerk
     const user = await currentUser();
     if (!user?.emailAddresses?.[0]?.emailAddress) {
@@ -34,30 +44,31 @@ export default async function Page() {
       throw new Error("Failed to create user");
     }
 
-    // Try getting bases again
-    const retryResult = await getUserBases(userId);
-    if (!retryResult.success || !retryResult.bases) {
-      throw new Error(retryResult.error ?? "Failed to get user bases");
+    // Try prefetching bases again
+    await prefetchBasesList(queryClient, userId);
+    const retryBasesData = queryClient.getQueryData<{
+      success: boolean;
+      bases?: SerializedBase[];
+      error?: string;
+    }>(["bases", "list"]);
+    if (!retryBasesData?.success || !retryBasesData.bases) {
+      throw new Error(retryBasesData?.error ?? "Failed to get user bases");
     }
-
-    const queryClient = getQueryClient();
 
     return (
       <HydrationBoundary state={dehydrate(queryClient)}>
-        <HomeContent bases={retryResult.bases} />
+        <HomeContent bases={retryBasesData.bases} />
       </HydrationBoundary>
     );
   }
 
-  if (!success || !bases) {
-    throw new Error(error ?? "Failed to get user bases");
+  if (!basesData?.success || !basesData.bases) {
+    throw new Error(basesData?.error ?? "Failed to get user bases");
   }
-
-  const queryClient = getQueryClient();
 
   return (
     <HydrationBoundary state={dehydrate(queryClient)}>
-      <HomeContent bases={bases} />
+      <HomeContent bases={basesData.bases} />
     </HydrationBoundary>
   );
 }
