@@ -6,7 +6,7 @@ import { tables, columns, rows, cells } from "~/server/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getBaseById } from "./bases.action";
-import type { Row } from "~/hooks/useTable";
+import type { Row } from "~/types/table";
 
 export async function createTable(
   baseId: string,

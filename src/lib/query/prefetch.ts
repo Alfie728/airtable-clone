@@ -1,7 +1,8 @@
 import { type QueryClient } from "@tanstack/react-query";
 import { getTables, getTableData } from "~/lib/actions/tables.action";
-import { getQueryClient } from "./client";
-import type { tables } from "~/server/db/schema";
+import { getBaseById } from "~/lib/actions/bases.action";
+import type { BaseResponse } from "~/types/table";
+import { type tables } from "~/server/db/schema";
 
 type TableType = typeof tables.$inferSelect;
 
@@ -60,7 +61,14 @@ export async function prefetchBaseTables(
 ): Promise<void> {
   if (!baseId) return;
 
-  // Prefetch base tables first since we need this data
+  // Prefetch base info first
+  await queryClient.prefetchQuery({
+    queryKey: ["base", baseId, "info"],
+    queryFn: () => getBaseById(baseId),
+    staleTime: 30 * 1000,
+  });
+
+  // Prefetch base tables
   await queryClient.prefetchQuery({
     queryKey: ["base", baseId],
     queryFn: () => getTables(baseId),
@@ -68,10 +76,7 @@ export async function prefetchBaseTables(
   });
 
   // Get base data from cache
-  const baseData = queryClient.getQueryData<GetTablesResponse>([
-    "base",
-    baseId,
-  ]);
+  const baseData = queryClient.getQueryData<BaseResponse>(["base", baseId]);
 
   // Prefetch table data in parallel if we have tables
   if (baseData?.success && baseData.tables) {

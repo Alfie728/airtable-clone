@@ -28,26 +28,29 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   >(null);
   const queryClient = useQueryClient();
 
-  const { baseName, isLoading: isBaseNameLoading } = useBase(baseId);
+  const {
+    baseName,
+    isLoading: isBaseLoading,
+    tables: baseTables,
+    addTable,
+    isAddingTable,
+    error: baseError,
+  } = useBase(baseId);
   const {
     tableData,
-    isLoading,
-    isTableLoading,
-    baseError,
+    isLoading: isTableLoading,
     tableError,
     addRow,
     addBulkRows,
     updateCell,
     isAddingRow,
     isBatchAdding,
-    isAddingTable,
-    baseTables,
-    addTable,
   } = useTable(baseId, tableId);
 
   // Handle navigation for empty base and invalid table ID
   useEffect(() => {
-    if (!isLoading) {
+    if (!isBaseLoading && !isTableLoading) {
+      // Only handle navigation after both base and table data are loaded
       if (!baseTables || baseTables.length === 0) {
         router.replace("/");
       } else if (
@@ -61,7 +64,15 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         }
       }
     }
-  }, [isLoading, baseTables, isAddingTable, tableId, baseId, router]);
+  }, [
+    isBaseLoading,
+    isTableLoading,
+    baseTables,
+    isAddingTable,
+    tableId,
+    baseId,
+    router,
+  ]);
 
   const handleTableCreated = async (newTable: typeof tables.$inferSelect) => {
     try {
@@ -101,13 +112,13 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   }
 
   // Remove the direct navigation logic from render
-  if (!isLoading && (!baseTables || baseTables.length === 0)) {
+  if (!isBaseLoading && (!baseTables || baseTables.length === 0)) {
     return null;
   }
 
   // Remove the direct navigation logic from render
   if (
-    !isLoading &&
+    !isBaseLoading &&
     !isAddingTable &&
     baseTables?.length > 0 &&
     (tableId === "tables" || !baseTables.some((t) => t.id === tableId))

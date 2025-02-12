@@ -21,12 +21,12 @@ export default function NewBasePage() {
       formData.append("userId", userId ?? "");
 
       const result = await createBase(formData);
-      if (!result?.baseId) {
+      if (!result?.baseId || !result?.defaultTableId) {
         throw new Error("Failed to create base");
       }
 
       toast.success("Base created successfully");
-      router.push(`/${result.baseId}/tables/grid`);
+      router.push(`/${result.baseId}/${result.defaultTableId}/grid`);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to create base";

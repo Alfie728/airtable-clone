@@ -116,7 +116,7 @@ export async function createBase(formData: FormData) {
     ]);
 
     revalidatePath("/");
-    return { baseId: newBase.id };
+    return { baseId: newBase.id, defaultTableId: newTable.id };
   } catch (error) {
     console.error("Error creating base:", error);
     throw error instanceof Error ? error : new Error("Failed to create base");

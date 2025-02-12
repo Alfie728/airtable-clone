@@ -20,7 +20,7 @@ import type { tables } from "~/server/db/schema";
 import { cn } from "~/lib/utils";
 import { toast } from "sonner";
 import { Separator } from "@radix-ui/react-separator";
-import type { TableCreateResponse } from "~/hooks/useTable";
+import type { TableCreateResponse } from "~/types/table";
 
 interface SecondaryNavigationProps {
   currentTableName?: string;

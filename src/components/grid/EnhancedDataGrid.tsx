@@ -18,8 +18,7 @@ import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { Plus, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { useTable } from "~/hooks/useTable";
-import type { Row, Column } from "~/hooks/useTable";
+import type { Row, Column } from "~/types/table";
 
 interface TableMeta {
   updateData: (rowIndex: number, columnId: string, value: unknown) => void;
