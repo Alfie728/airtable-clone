@@ -152,6 +152,15 @@ export const deleteUser = async (clerkId: string) => {
       return { success: false, error: "User not found" };
     }
 
+    // First delete audit logs since they have foreign key constraints
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_audit_logs"
+      WHERE user_id IN (
+        SELECT id FROM "airtable-clone_users"
+        WHERE clerk_id = ${clerkId}
+      );
+    `);
+
     // Execute cascading deletion using SQL
     await db.execute(sql`
       -- First, store the user ID
@@ -247,20 +256,6 @@ export const deleteUser = async (clerkId: string) => {
         WHERE clerk_id = ${clerkId}
       );
     `);
-
-    try {
-      // Log the deletion before actually deleting the user
-      await db.insert(auditLogs).values({
-        userId: user.id,
-        action: "DELETE_USER",
-        entityType: "USER",
-        entityId: user.id,
-        metadata: { clerkId },
-      });
-    } catch (error) {
-      console.error("Failed to create audit log:", error);
-      // Continue with deletion
-    }
 
     // Finally delete the user
     await db.execute(sql`
