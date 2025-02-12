@@ -4,19 +4,20 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getBaseById } from "~/lib/actions/bases.action";
 import { getTables, createTable } from "~/lib/actions/tables.action";
 import type { BaseResponse, TableCreateResponse } from "~/types/table";
+import { queryKeys } from "~/lib/query/keys";
 
 export const useBase = (baseId: string) => {
   const queryClient = useQueryClient();
 
   const baseInfoQuery = useQuery({
-    queryKey: ["base", baseId, "info"],
+    queryKey: queryKeys.bases.info(baseId),
     queryFn: () => getBaseById(baseId),
     enabled: Boolean(baseId),
     staleTime: 30 * 1000, // Cache for 30 seconds
   });
 
   const baseTablesQuery = useQuery({
-    queryKey: ["base", baseId],
+    queryKey: queryKeys.bases.tables.list(baseId),
     queryFn: () => getTables(baseId),
     staleTime: 10 * 1000,
     enabled: Boolean(baseId),
@@ -36,11 +37,12 @@ export const useBase = (baseId: string) => {
       return result;
     },
     onMutate: async (params) => {
-      await queryClient.cancelQueries({ queryKey: ["base", baseId] });
-      const previousData = queryClient.getQueryData<BaseResponse>([
-        "base",
-        baseId,
-      ]);
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.bases.tables.list(baseId),
+      });
+      const previousData = queryClient.getQueryData<BaseResponse>(
+        queryKeys.bases.tables.list(baseId),
+      );
 
       const optimisticTable = {
         id: params.optimisticId,
@@ -53,21 +55,29 @@ export const useBase = (baseId: string) => {
       };
 
       if (previousData?.tables) {
-        queryClient.setQueryData<BaseResponse>(["base", baseId], {
-          ...previousData,
-          tables: [...previousData.tables, optimisticTable],
-        });
+        queryClient.setQueryData<BaseResponse>(
+          queryKeys.bases.tables.list(baseId),
+          {
+            ...previousData,
+            tables: [...previousData.tables, optimisticTable],
+          },
+        );
       }
 
       return { previousData, optimisticTable };
     },
     onError: (err, _, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(["base", baseId], context.previousData);
+        queryClient.setQueryData(
+          queryKeys.bases.tables.list(baseId),
+          context.previousData,
+        );
       }
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ["base", baseId] });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.bases.tables.list(baseId),
+      });
     },
   });
 

@@ -3,6 +3,7 @@ import { getTables, getTableData } from "~/lib/actions/tables.action";
 import { getBaseById } from "~/lib/actions/bases.action";
 import type { BaseResponse } from "~/types/table";
 import { type tables } from "~/server/db/schema";
+import { queryKeys } from "./keys";
 
 type TableType = typeof tables.$inferSelect;
 
@@ -45,7 +46,7 @@ export async function prefetchTable(
   if (!tableId || !tableName) return;
 
   await queryClient.prefetchQuery({
-    queryKey: ["table", tableId],
+    queryKey: queryKeys.tables.detail(tableId),
     queryFn: () => getTableData(tableId, tableName),
     staleTime: 5 * 1000,
   });
@@ -63,27 +64,24 @@ export async function prefetchBaseTables(
 
   // Prefetch base info first
   await queryClient.prefetchQuery({
-    queryKey: ["base", baseId, "info"],
+    queryKey: queryKeys.bases.info(baseId),
     queryFn: () => getBaseById(baseId),
     staleTime: 30 * 1000,
   });
 
-  // Prefetch base tables
-  await queryClient.prefetchQuery({
-    queryKey: ["base", baseId],
+  // Prefetch base tables list
+  const tablesResult = await queryClient.fetchQuery({
+    queryKey: queryKeys.bases.tables.list(baseId),
     queryFn: () => getTables(baseId),
     staleTime: 10 * 1000,
   });
 
-  // Get base data from cache
-  const baseData = queryClient.getQueryData<BaseResponse>(["base", baseId]);
-
-  // Prefetch table data in parallel if we have tables
-  if (baseData?.success && baseData.tables) {
+  // If we have tables, prefetch each table's data
+  if (tablesResult.success && tablesResult.tables) {
     await Promise.all(
-      baseData.tables.map((table) =>
+      tablesResult.tables.map((table) =>
         queryClient.prefetchQuery({
-          queryKey: ["table", table.id],
+          queryKey: queryKeys.tables.detail(table.id),
           queryFn: () => getTableData(table.id, table.name),
           staleTime: 5 * 1000,
         }),

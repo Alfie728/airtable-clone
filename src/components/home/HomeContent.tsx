@@ -9,6 +9,7 @@ import { HomeTopNavigation } from "~/components/layout/TopNavigation";
 import { cn } from "~/lib/utils";
 import { prefetchBaseTables } from "~/lib/query/prefetch";
 import { useQueryClient } from "@tanstack/react-query";
+import { BaseCard } from "~/components/home/BaseCard";
 
 interface HomeContentProps {
   bases: SerializedBase[];
@@ -65,30 +66,11 @@ export function HomeContent({ bases }: HomeContentProps) {
             </div>
 
             <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {tableData.rows.map((row) => (
-                <Link
-                  key={row.id}
-                  href={`/${row.id}/tables/grid`}
-                  onMouseEnter={() => handleBaseHover(row.id)}
-                  className="group relative flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md"
-                >
-                  <div className="flex flex-1 flex-col p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600">
-                      {row.name}
-                    </h3>
-                    {row.description && (
-                      <p className="mt-2 text-sm text-gray-500">
-                        {row.description}
-                      </p>
-                    )}
-                    <div className="mt-4 text-xs text-gray-400">
-                      Created {new Date(row.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                </Link>
+              {bases.map((base) => (
+                <BaseCard key={base.id} base={base} onHover={handleBaseHover} />
               ))}
 
-              {tableData.rows.length === 0 && (
+              {bases.length === 0 && (
                 <div className="col-span-full">
                   <div className="rounded-lg border-2 border-dashed border-gray-200 p-12 text-center">
                     <h3 className="mt-2 text-sm font-semibold text-gray-900">

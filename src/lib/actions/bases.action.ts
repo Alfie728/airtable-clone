@@ -1,10 +1,19 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "~/server/db";
-import { bases, tables, columns } from "~/server/db/schema";
+import {
+  bases,
+  tables,
+  columns,
+  viewFilters,
+  views,
+  rows,
+  cells,
+} from "~/server/db/schema";
 import { getUserByClerkId } from "./users.action";
 import { revalidatePath } from "next/cache";
+import { sql } from "drizzle-orm";
 
 export interface SerializedBase {
   id: string;
@@ -135,5 +144,87 @@ export async function getBaseById(baseId: string) {
   } catch (error) {
     console.error("Error getting base:", error);
     return null;
+  }
+}
+
+export async function deleteBase(baseId: string) {
+  try {
+    // Delete in order of dependencies using raw SQL
+    // First delete view filters
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_view_filters"
+      WHERE view_id IN (
+        SELECT v.id 
+        FROM "airtable-clone_views" v
+        JOIN "airtable-clone_tables" t ON v.table_id = t.id
+        WHERE t.base_id = ${baseId}
+      );
+    `);
+
+    // Delete views
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_views"
+      WHERE table_id IN (
+        SELECT id 
+        FROM "airtable-clone_tables"
+        WHERE base_id = ${baseId}
+      );
+    `);
+
+    // Delete cells
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_cells"
+      WHERE row_id IN (
+        SELECT r.id 
+        FROM "airtable-clone_rows" r
+        JOIN "airtable-clone_tables" t ON r.table_id = t.id
+        WHERE t.base_id = ${baseId}
+      );
+    `);
+
+    // Delete rows
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_rows"
+      WHERE table_id IN (
+        SELECT id 
+        FROM "airtable-clone_tables"
+        WHERE base_id = ${baseId}
+      );
+    `);
+
+    // Delete columns
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_columns"
+      WHERE table_id IN (
+        SELECT id 
+        FROM "airtable-clone_tables"
+        WHERE base_id = ${baseId}
+      );
+    `);
+
+    // Delete tables
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_tables"
+      WHERE base_id = ${baseId};
+    `);
+
+    // Finally delete the base
+    const [deletedBase] = await db
+      .delete(bases)
+      .where(eq(bases.id, baseId))
+      .returning();
+
+    if (!deletedBase) {
+      throw new Error("Base not found");
+    }
+
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting base:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to delete base",
+    };
   }
 }

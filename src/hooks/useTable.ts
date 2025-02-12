@@ -16,6 +16,7 @@ import {
 } from "~/lib/actions/tables.action";
 import type { Row, Column, TableResponse } from "~/types/table";
 import { useBase } from "./useBase";
+import { queryKeys } from "~/lib/query/keys";
 
 function generateMockRow(columns: Column[]): Row {
   const row: Row = { id: crypto.randomUUID() };
@@ -74,14 +75,16 @@ export const useTable = (baseId: string, tableId: string) => {
   // Get all table queries in parallel using useQueries
   const tableQueries = useQueries({
     queries: tables.map((table) => ({
-      queryKey: ["table", table.id] as const,
+      queryKey: queryKeys.tables.detail(table.id),
       queryFn: () => getTableData(table.id, table.name),
       staleTime: 5 * 1000,
       enabled: table.id === tableId,
       refetchOnMount: true,
       refetchOnWindowFocus: false,
       placeholderData: () =>
-        queryClient.getQueryData<TableResponse>(["table", table.id]),
+        queryClient.getQueryData<TableResponse>(
+          queryKeys.tables.detail(table.id),
+        ),
       gcTime: 0,
     })),
   });
@@ -89,7 +92,9 @@ export const useTable = (baseId: string, tableId: string) => {
   // Cancel previous table queries when switching tables
   useEffect(() => {
     return () => {
-      void queryClient.cancelQueries({ queryKey: ["table", tableId] });
+      void queryClient.cancelQueries({
+        queryKey: queryKeys.tables.detail(tableId),
+      });
     };
   }, [queryClient, tableId]);
 
@@ -113,27 +118,34 @@ export const useTable = (baseId: string, tableId: string) => {
       return result;
     },
     onMutate: async (optimisticRow) => {
-      await queryClient.cancelQueries({ queryKey: ["table", tableId] });
-      const previousData = queryClient.getQueryData<TableResponse>([
-        "table",
-        tableId,
-      ]);
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.tables.detail(tableId),
+      });
+      const previousData = queryClient.getQueryData<TableResponse>(
+        queryKeys.tables.detail(tableId),
+      );
 
       if (previousData?.table) {
-        queryClient.setQueryData<TableResponse>(["table", tableId], {
-          ...previousData,
-          table: {
-            ...previousData.table,
-            data: [...previousData.table.data, optimisticRow],
+        queryClient.setQueryData<TableResponse>(
+          queryKeys.tables.detail(tableId),
+          {
+            ...previousData,
+            table: {
+              ...previousData.table,
+              data: [...previousData.table.data, optimisticRow],
+            },
           },
-        });
+        );
       }
 
       return { previousData, optimisticRow };
     },
     onError: (err, _, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(["table", tableId], context.previousData);
+        queryClient.setQueryData(
+          queryKeys.tables.detail(tableId),
+          context.previousData,
+        );
       }
       if (context?.optimisticRow) {
         pendingRowCreationsRef.current.delete(context.optimisticRow.id);
@@ -146,7 +158,9 @@ export const useTable = (baseId: string, tableId: string) => {
         latestMutationRef.current === "addRow" &&
         pendingRowCreationsRef.current.size === 0
       ) {
-        void queryClient.invalidateQueries({ queryKey: ["table", tableId] });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.tables.detail(tableId),
+        });
       }
     },
   });
@@ -209,13 +223,14 @@ export const useTable = (baseId: string, tableId: string) => {
     },
     onMutate: async (params) => {
       if (!pendingRowCreationsRef.current.has(params.rowId)) {
-        await queryClient.cancelQueries({ queryKey: ["table", tableId] });
+        await queryClient.cancelQueries({
+          queryKey: queryKeys.tables.detail(tableId),
+        });
       }
 
-      const previousData = queryClient.getQueryData<TableResponse>([
-        "table",
-        tableId,
-      ]);
+      const previousData = queryClient.getQueryData<TableResponse>(
+        queryKeys.tables.detail(tableId),
+      );
 
       const table = previousData?.table;
       if (table?.columns && table.data) {
@@ -239,14 +254,17 @@ export const useTable = (baseId: string, tableId: string) => {
             }),
           },
         };
-        queryClient.setQueryData(["table", tableId], updatedData);
+        queryClient.setQueryData(queryKeys.tables.detail(tableId), updatedData);
       }
 
       return { previousData, params };
     },
     onError: (err, variables, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(["table", tableId], context.previousData);
+        queryClient.setQueryData(
+          queryKeys.tables.detail(tableId),
+          context.previousData,
+        );
       }
     },
     onSettled: () => {
@@ -254,7 +272,9 @@ export const useTable = (baseId: string, tableId: string) => {
         latestMutationRef.current === "updateCell" &&
         !addBulkRowsMutation.isPending
       ) {
-        void queryClient.invalidateQueries({ queryKey: ["table", tableId] });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.tables.detail(tableId),
+        });
       }
     },
   });
@@ -276,27 +296,34 @@ export const useTable = (baseId: string, tableId: string) => {
       return result;
     },
     onMutate: async (params: { optimisticRows: Row[] }) => {
-      await queryClient.cancelQueries({ queryKey: ["table", tableId] });
-      const previousData = queryClient.getQueryData<TableResponse>([
-        "table",
-        tableId,
-      ]);
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.tables.detail(tableId),
+      });
+      const previousData = queryClient.getQueryData<TableResponse>(
+        queryKeys.tables.detail(tableId),
+      );
 
       if (previousData?.table) {
-        queryClient.setQueryData<TableResponse>(["table", tableId], {
-          ...previousData,
-          table: {
-            ...previousData.table,
-            data: [...previousData.table.data, ...params.optimisticRows],
+        queryClient.setQueryData<TableResponse>(
+          queryKeys.tables.detail(tableId),
+          {
+            ...previousData,
+            table: {
+              ...previousData.table,
+              data: [...previousData.table.data, ...params.optimisticRows],
+            },
           },
-        });
+        );
       }
 
       return { previousData };
     },
     onError: (err, variables, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(["table", tableId], context.previousData);
+        queryClient.setQueryData(
+          queryKeys.tables.detail(tableId),
+          context.previousData,
+        );
       }
     },
     onSettled: () => {
@@ -304,7 +331,9 @@ export const useTable = (baseId: string, tableId: string) => {
         latestMutationRef.current === "addBulkRows" &&
         !updateCellMutation.isPending
       ) {
-        void queryClient.invalidateQueries({ queryKey: ["table", tableId] });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.tables.detail(tableId),
+        });
       }
     },
   });
