@@ -4,7 +4,6 @@ import { useState } from "react";
 import { ChevronDown, Plus, Search, Check, MoreHorizontal } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { createTable } from "~/lib/actions/tables.action";
 import { useParams } from "next/navigation";
 import {
   Dialog,
@@ -21,6 +20,7 @@ import type { tables } from "~/server/db/schema";
 import { cn } from "~/lib/utils";
 import { toast } from "sonner";
 import { Separator } from "@radix-ui/react-separator";
+import { useTable } from "~/hooks/useTable";
 
 interface SecondaryNavigationProps {
   currentTableName?: string;
@@ -41,9 +41,10 @@ export function SecondaryNavigation({
   const [searchQuery, setSearchQuery] = useState("");
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [tableName, setTableName] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
   const params = useParams();
+  const baseId = params.baseId as string;
+  const { addTable, isAddingTable } = useTable(baseId, currentTableId ?? "");
 
   const filteredTables = tables.filter((table) =>
     table.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -68,29 +69,43 @@ export function SecondaryNavigation({
       return;
     }
 
-    setIsCreating(true);
+    const nameToCreate = tableName;
+    // Close dialog and reset state immediately
+    setIsCreateTableOpen(false);
+    setTableName("");
     setError("");
 
+    // Show loading toast
+    const loadingToast = toast.loading("Creating table...");
+
     try {
-      const baseId = params.baseId as string;
-      const result = await createTable(baseId, tableName);
-      if (result.success && result.table) {
-        toast.success("Table created successfully");
-        setTableName("");
-        setIsCreateTableOpen(false);
+      const result = await addTable(nameToCreate);
+      if (result?.success && result?.table) {
+        toast.success("Table created successfully", {
+          id: loadingToast,
+        });
         // Optimistically update the UI
         onTableCreated?.(result.table);
       } else {
-        setError(result.error ?? "Failed to create table");
-        toast.error(result.error);
+        const errorMessage = result?.error ?? "Failed to create table";
+        toast.error(errorMessage, {
+          id: loadingToast,
+        });
+        // Reopen dialog with previous input on error
+        setIsCreateTableOpen(true);
+        setTableName(nameToCreate);
+        setError(errorMessage);
       }
-    } catch (error) {
+    } catch (err) {
       const message =
-        error instanceof Error ? error.message : "Failed to create table";
+        err instanceof Error ? err.message : "Failed to create table";
+      toast.error(message, {
+        id: loadingToast,
+      });
+      // Reopen dialog with previous input on error
+      setIsCreateTableOpen(true);
+      setTableName(nameToCreate);
       setError(message);
-      toast.error(message);
-    } finally {
-      setIsCreating(false);
     }
   }
 
@@ -268,8 +283,8 @@ export function SecondaryNavigation({
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isCreating}>
-                  {isCreating ? "Creating..." : "Create"}
+                <Button type="submit" disabled={isAddingTable}>
+                  Create
                 </Button>
               </div>
             </div>

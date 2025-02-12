@@ -11,6 +11,8 @@ import { useTable } from "~/hooks/useTable";
 import { useBase } from "~/hooks/useBase";
 import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 interface BaseClientProps {
   baseId: string;
@@ -21,6 +23,7 @@ interface BaseClientProps {
 export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const queryClient = useQueryClient();
 
   const { baseName, isLoading: isBaseNameLoading } = useBase(baseId);
   const {
@@ -34,6 +37,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     updateCell,
     isAddingRow,
     isBatchAdding,
+    isAddingTable,
     baseTables,
   } = useTable(baseId, tableId);
 
@@ -50,14 +54,26 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     }
   }, [isLoading, baseTables, tableId, baseId, router]);
 
-  const handleTableCreated = (newTable: typeof tables.$inferSelect) => {
-    router.replace(`/${baseId}/${newTable.id}/grid`, { scroll: false });
+  const handleTableCreated = async (newTable: typeof tables.$inferSelect) => {
+    try {
+      // Invalidate the queries to ensure we have fresh data
+      await queryClient.invalidateQueries({ queryKey: ["base", baseId] });
+      await queryClient.invalidateQueries({ queryKey: ["table", newTable.id] });
+      // Now redirect to the new table
+      router.replace(`/${baseId}/${newTable.id}/grid`, { scroll: false });
+    } catch (err) {
+      const error =
+        err instanceof Error ? err.message : "Unknown error occurred";
+      console.error("Error handling table creation:", error);
+      toast.error("Error creating table. Please try again.");
+    }
   };
 
   const handleTableSelect = (tableId: string) => {
     router.replace(`/${baseId}/${tableId}/grid`, { scroll: false });
   };
-
+  console.log("isTableLoading", isTableLoading);
+  console.log("isAddingTable", isAddingTable);
   if (baseError) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -108,10 +124,12 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
               isSidebarOpen && "ml-60",
             )}
           >
-            {isTableLoading ? (
+            {isTableLoading || isAddingTable ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-sm text-gray-500">
-                  Loading table data...
+                  {isAddingTable
+                    ? "Creating table..."
+                    : "Loading table data..."}
                 </div>
               </div>
             ) : tableError ? (

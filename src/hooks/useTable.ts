@@ -13,6 +13,7 @@ import {
   addRow,
   addCell,
   addBulkRows,
+  createTable,
 } from "~/lib/actions/tables.action";
 import { faker } from "@faker-js/faker";
 import { useRef, useEffect } from "react";
@@ -50,6 +51,13 @@ interface TableResponse {
 interface BaseResponse {
   success: boolean;
   tables?: (typeof tables.$inferSelect)[];
+  error?: string;
+}
+
+// Add new interface for table creation
+interface TableCreateResponse {
+  success: boolean;
+  table?: typeof tables.$inferSelect;
   error?: string;
 }
 
@@ -476,6 +484,65 @@ export const useTable = (baseId: string, tableId: string) => {
     },
   });
 
+  // Add new mutation for table creation
+  const addTableMutation = useMutation({
+    mutationFn: async (tableName: string) => {
+      latestMutationRef.current = "addTable";
+      const promise = createTable(baseId, tableName);
+      // Wait for the table to be created
+      const result = await promise;
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to create table");
+      }
+      // Wait for a short delay to ensure the table is fully created
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return result;
+    },
+    onMutate: async (tableName: string) => {
+      // Cancel any in-flight queries
+      await queryClient.cancelQueries({ queryKey: ["base", baseId] });
+
+      // Snapshot current state
+      const previousData = queryClient.getQueryData<BaseResponse>([
+        "base",
+        baseId,
+      ]);
+
+      // Create optimistic table
+      const optimisticTable = {
+        id: crypto.randomUUID(),
+        name: tableName,
+        baseId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        description: null,
+        rowCount: 0,
+      };
+
+      // Optimistically update UI
+      if (previousData?.tables) {
+        queryClient.setQueryData<BaseResponse>(["base", baseId], {
+          ...previousData,
+          tables: [...previousData.tables, optimisticTable],
+        });
+      }
+
+      return { previousData, optimisticTable };
+    },
+    onError: (err, _, context) => {
+      // Revert to previous state on error
+      if (context?.previousData) {
+        queryClient.setQueryData(["base", baseId], context.previousData);
+      }
+    },
+    onSettled: () => {
+      // Invalidate and refetch
+      if (latestMutationRef.current === "addTable") {
+        void queryClient.invalidateQueries({ queryKey: ["base", baseId] });
+      }
+    },
+  });
+
   return {
     addRow: () => {
       const tableData = currentTableQuery?.data;
@@ -500,9 +567,14 @@ export const useTable = (baseId: string, tableId: string) => {
     }) => {
       return updateCellMutation.mutateAsync(params);
     },
+    // Add new method
+    addTable: (tableName: string) => {
+      return addTableMutation.mutateAsync(tableName);
+    },
     isAddingRow: addRowMutation.isPending,
     isUpdatingCell: updateCellMutation.isPending,
     isBatchAdding: addBulkRowsMutation.isPending,
+    isAddingTable: addTableMutation.isPending,
     // Add loading states
     isLoading: baseQuery.isLoading ?? false,
     isTableLoading, // Use the new loading state
@@ -517,4 +589,11 @@ export const useTable = (baseId: string, tableId: string) => {
 };
 
 // Export the types
-export type { Row, Column, TableData, TableResponse, BaseResponse };
+export type {
+  Row,
+  Column,
+  TableData,
+  TableResponse,
+  BaseResponse,
+  TableCreateResponse,
+};
