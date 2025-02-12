@@ -78,9 +78,11 @@ export async function createBase(formData: FormData) {
     }
 
     // Create default table
+    const defaultTableId = crypto.randomUUID();
     const [newTable] = await db
       .insert(tables)
       .values({
+        id: defaultTableId,
         name: "Table 1",
         baseId: newBase.id,
         rowCount: 0,

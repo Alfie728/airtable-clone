@@ -20,7 +20,7 @@ import type { tables } from "~/server/db/schema";
 import { cn } from "~/lib/utils";
 import { toast } from "sonner";
 import { Separator } from "@radix-ui/react-separator";
-import { useTable } from "~/hooks/useTable";
+import type { TableCreateResponse } from "~/hooks/useTable";
 
 interface SecondaryNavigationProps {
   currentTableName?: string;
@@ -28,6 +28,9 @@ interface SecondaryNavigationProps {
   currentTableId?: string | null;
   onTableSelect?: (tableId: string) => void;
   onTableCreated?: (table: typeof tables.$inferSelect) => void;
+  addTable: (tableName: string) => Promise<TableCreateResponse>;
+  isAddingTable: boolean;
+  pendingActiveTableId: string | null;
 }
 
 export function SecondaryNavigation({
@@ -36,6 +39,9 @@ export function SecondaryNavigation({
   currentTableName,
   onTableSelect,
   onTableCreated,
+  addTable,
+  isAddingTable,
+  pendingActiveTableId,
 }: SecondaryNavigationProps) {
   const [isCreateTableOpen, setIsCreateTableOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -44,7 +50,6 @@ export function SecondaryNavigation({
   const [error, setError] = useState("");
   const params = useParams();
   const baseId = params.baseId as string;
-  const { addTable, isAddingTable } = useTable(baseId, currentTableId ?? "");
 
   const filteredTables = tables.filter((table) =>
     table.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -84,6 +89,7 @@ export function SecondaryNavigation({
         toast.success("Table created successfully", {
           id: loadingToast,
         });
+
         // Optimistically update the UI
         onTableCreated?.(result.table);
       } else {
@@ -123,25 +129,32 @@ export function SecondaryNavigation({
         <div className="relative flex items-center">
           <div className="flex items-center">
             <div className="flex items-center">
-              {tables.map((table) => (
-                <Button
-                  key={table.id}
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "relative gap-1 rounded-none rounded-t-[3px] bg-white px-3 text-[13px] font-normal leading-[18px] hover:bg-[#4E535B]",
-                    currentTableId === table.id && "bg-white hover:bg-white",
-                    currentTableId !== table.id &&
-                      "bg-[#575C65] text-[rgba(255,255,255,0.85)] hover:text-[rgba(255,255,255,0.95)]",
-                  )}
-                  onClick={() => onTableSelect?.(table.id)}
-                >
-                  {table.name}
-                  {currentTableId === table.id && (
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              ))}
+              {tables.map((table, index) => {
+                const isActive = isAddingTable
+                  ? isAddingTable && index === tables.length - 1
+                  : table.id === pendingActiveTableId ||
+                    (!pendingActiveTableId && currentTableId === table.id);
+
+                return (
+                  <Button
+                    key={table.id}
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "relative gap-1 rounded-none rounded-t-[3px] px-3 text-[13px] font-normal leading-[18px]",
+                      isActive
+                        ? "bg-white hover:bg-white"
+                        : "bg-[#575C65] text-[rgba(255,255,255,0.85)] hover:bg-[#4E535B] hover:text-[rgba(255,255,255,0.95)]",
+                    )}
+                    onClick={() => {
+                      onTableSelect?.(table.id);
+                    }}
+                  >
+                    {table.name}
+                    {isActive && <ChevronDown className="h-3.5 w-3.5" />}
+                  </Button>
+                );
+              })}
             </div>
             <div className="relative">
               <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>

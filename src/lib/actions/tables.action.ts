@@ -11,6 +11,7 @@ import type { Row } from "~/hooks/useTable";
 export async function createTable(
   baseId: string,
   name: string,
+  clientProvidedId: string,
   description?: string,
 ) {
   const user = await currentUser();
@@ -32,10 +33,11 @@ export async function createTable(
       return { success: false, error: "A table with this name already exists" };
     }
 
-    // Create the table with zero rows
+    // Create the table with zero rows using the client-provided ID
     const [newTable] = await db
       .insert(tables)
       .values({
+        id: clientProvidedId,
         baseId,
         name,
         description,

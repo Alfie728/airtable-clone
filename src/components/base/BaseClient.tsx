@@ -23,6 +23,9 @@ interface BaseClientProps {
 export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [pendingActiveTableId, setPendingActiveTableId] = useState<
+    string | null
+  >(null);
   const queryClient = useQueryClient();
 
   const { baseName, isLoading: isBaseNameLoading } = useBase(baseId);
@@ -39,26 +42,38 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     isBatchAdding,
     isAddingTable,
     baseTables,
+    addTable,
   } = useTable(baseId, tableId);
 
-  // Handle invalid table ID
+  // Handle navigation for empty base and invalid table ID
   useEffect(() => {
-    if (!isLoading && baseTables && baseTables.length > 0) {
-      const firstTable = baseTables[0];
-      if (
-        firstTable &&
+    if (!isLoading) {
+      if (!baseTables || baseTables.length === 0) {
+        router.replace("/");
+      } else if (
+        !isAddingTable &&
+        baseTables.length > 0 &&
         (tableId === "tables" || !baseTables.some((t) => t.id === tableId))
       ) {
-        router.replace(`/${baseId}/${firstTable.id}/grid`, { scroll: false });
+        const firstTable = baseTables[0];
+        if (firstTable) {
+          router.replace(`/${baseId}/${firstTable.id}/grid`, { scroll: false });
+        }
       }
     }
-  }, [isLoading, baseTables, tableId, baseId, router]);
+  }, [isLoading, baseTables, isAddingTable, tableId, baseId, router]);
 
   const handleTableCreated = async (newTable: typeof tables.$inferSelect) => {
     try {
-      // Invalidate the queries to ensure we have fresh data
-      await queryClient.invalidateQueries({ queryKey: ["base", baseId] });
-      await queryClient.invalidateQueries({ queryKey: ["table", newTable.id] });
+      // Set the pending active table ID
+      setPendingActiveTableId(newTable.id);
+
+      // Invalidate and wait for the queries to complete
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["base", baseId] }),
+        queryClient.invalidateQueries({ queryKey: ["table", newTable.id] }),
+      ]);
+
       // Now redirect to the new table
       router.replace(`/${baseId}/${newTable.id}/grid`, { scroll: false });
     } catch (err) {
@@ -70,10 +85,10 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   };
 
   const handleTableSelect = (tableId: string) => {
+    setPendingActiveTableId(null);
     router.replace(`/${baseId}/${tableId}/grid`, { scroll: false });
   };
-  console.log("isTableLoading", isTableLoading);
-  console.log("isAddingTable", isAddingTable);
+
   if (baseError) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -85,8 +100,18 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     );
   }
 
+  // Remove the direct navigation logic from render
   if (!isLoading && (!baseTables || baseTables.length === 0)) {
-    router.replace("/");
+    return null;
+  }
+
+  // Remove the direct navigation logic from render
+  if (
+    !isLoading &&
+    !isAddingTable &&
+    baseTables?.length > 0 &&
+    (tableId === "tables" || !baseTables.some((t) => t.id === tableId))
+  ) {
     return null;
   }
 
@@ -100,36 +125,47 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           currentTableId={tableId}
           onTableSelect={handleTableSelect}
           onTableCreated={handleTableCreated}
+          addTable={addTable}
+          isAddingTable={isAddingTable}
+          pendingActiveTableId={pendingActiveTableId}
         />
         <GridControls
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
         <div className="relative flex flex-1 overflow-hidden">
-          <div
-            className={cn(
-              "absolute bottom-0 left-0 top-0 z-10 w-60 border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
-              !isSidebarOpen && "-translate-x-full",
-            )}
-          >
-            <Sidebar
-              tables={baseTables ?? []}
-              currentTableId={tableId}
-              onTableSelect={handleTableSelect}
-            />
-          </div>
+          {!isAddingTable && (
+            <div
+              className={cn(
+                "absolute bottom-0 left-0 top-0 z-10 w-60 border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
+                !isSidebarOpen && "-translate-x-full",
+              )}
+            >
+              <Sidebar
+                isAddingTable={isAddingTable}
+                tables={baseTables ?? []}
+                currentTableId={tableId}
+                onTableSelect={handleTableSelect}
+                pendingActiveTableId={pendingActiveTableId}
+              />
+            </div>
+          )}
+
           <div
             className={cn(
               "flex-1 transition-[margin] duration-200 ease-in-out",
-              isSidebarOpen && "ml-60",
+              isSidebarOpen && !isAddingTable && "ml-60",
             )}
           >
-            {isTableLoading || isAddingTable ? (
+            {isAddingTable ||
+            (pendingActiveTableId && tableId === pendingActiveTableId) ? (
+              <div className="flex h-full items-center justify-center">
+                <div className="text-sm text-gray-500">Creating table...</div>
+              </div>
+            ) : isTableLoading ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-sm text-gray-500">
-                  {isAddingTable
-                    ? "Creating table..."
-                    : "Loading table data..."}
+                  Loading table data...
                 </div>
               </div>
             ) : tableError ? (
@@ -142,7 +178,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                 </div>
               </div>
             ) : (
-              tableData && (
+              tableData &&
+              !pendingActiveTableId && (
                 <EnhancedDataGrid
                   baseId={baseId}
                   tableId={tableId}

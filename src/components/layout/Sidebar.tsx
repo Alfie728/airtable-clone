@@ -23,12 +23,16 @@ interface SidebarProps {
   tables: (typeof tables.$inferSelect)[];
   currentTableId: string | null;
   onTableSelect: (tableId: string) => void;
+  isAddingTable: boolean;
+  pendingActiveTableId: string | null;
 }
 
 export function Sidebar({
   tables,
   currentTableId,
+  isAddingTable,
   onTableSelect,
+  pendingActiveTableId,
 }: SidebarProps) {
   const [isViewsOpen, setIsViewsOpen] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -71,9 +75,12 @@ export function Sidebar({
                   variant={currentTableId === table.id ? "secondary" : "ghost"}
                   className={cn(
                     "h-7 w-full justify-start gap-2 rounded px-2 text-xs font-normal",
-                    currentTableId === table.id
+                    isAddingTable && tables.indexOf(table) === tables.length - 1
                       ? "bg-blue-50 text-blue-700"
-                      : "bg-gray-50 text-gray-500",
+                      : table.id === pendingActiveTableId ||
+                          (!pendingActiveTableId && currentTableId === table.id)
+                        ? "bg-blue-50 text-blue-700"
+                        : "bg-gray-50 text-gray-500",
                   )}
                   onClick={() => onTableSelect(table.id)}
                 >

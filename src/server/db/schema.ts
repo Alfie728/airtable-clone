@@ -92,7 +92,7 @@ export const bases = createTable(
 export const tables = createTable(
   "tables",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
+    id: uuid("id").primaryKey(),
     name: text("name").notNull(),
     description: text("description"),
     baseId: uuid("base_id")

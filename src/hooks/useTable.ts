@@ -486,19 +486,21 @@ export const useTable = (baseId: string, tableId: string) => {
 
   // Add new mutation for table creation
   const addTableMutation = useMutation({
-    mutationFn: async (tableName: string) => {
+    mutationFn: async (params: { tableName: string; optimisticId: string }) => {
       latestMutationRef.current = "addTable";
-      const promise = createTable(baseId, tableName);
+      const promise = createTable(
+        baseId,
+        params.tableName,
+        params.optimisticId,
+      );
       // Wait for the table to be created
       const result = await promise;
       if (!result.success) {
         throw new Error(result.error ?? "Failed to create table");
       }
-      // Wait for a short delay to ensure the table is fully created
-      await new Promise((resolve) => setTimeout(resolve, 500));
       return result;
     },
-    onMutate: async (tableName: string) => {
+    onMutate: async (params) => {
       // Cancel any in-flight queries
       await queryClient.cancelQueries({ queryKey: ["base", baseId] });
 
@@ -510,8 +512,8 @@ export const useTable = (baseId: string, tableId: string) => {
 
       // Create optimistic table
       const optimisticTable = {
-        id: crypto.randomUUID(),
-        name: tableName,
+        id: params.optimisticId,
+        name: params.tableName,
         baseId,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -569,7 +571,8 @@ export const useTable = (baseId: string, tableId: string) => {
     },
     // Add new method
     addTable: (tableName: string) => {
-      return addTableMutation.mutateAsync(tableName);
+      const optimisticId = crypto.randomUUID();
+      return addTableMutation.mutateAsync({ tableName, optimisticId });
     },
     isAddingRow: addRowMutation.isPending,
     isUpdatingCell: updateCellMutation.isPending,
