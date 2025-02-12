@@ -9,7 +9,7 @@ const isPublicRoute = createRouteMatcher([
 export default clerkMiddleware(async (auth, request) => {
   // const authState = await auth();
 
-  // // Detailed logging of the request and auth state
+  // Detailed logging of the request and auth state
   // console.log("[Middleware] Request details:", {
   //   path: request.nextUrl.pathname,
   //   isPublic: isPublicRoute(request),

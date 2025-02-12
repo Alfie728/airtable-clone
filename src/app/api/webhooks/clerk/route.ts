@@ -1,7 +1,7 @@
 import { Webhook } from "svix";
 import { headers } from "next/headers";
 import { type WebhookEvent } from "@clerk/nextjs/server";
-import { createUser, updateUser } from "~/lib/actions/users.action";
+import { createUser, updateUser, deleteUser } from "~/lib/actions/users.action";
 
 export async function POST(req: Request) {
   const SIGNING_SECRET = process.env.SIGNING_SECRET;
@@ -79,6 +79,24 @@ export async function POST(req: Request) {
       email: email,
     };
     await updateUser(user);
+  }
+  if (eventType === "user.deleted") {
+    const { id } = evt.data;
+    if (!id) {
+      console.log("No user ID in webhook data");
+      return new Response("Error: No user ID found", {
+        status: 400,
+      });
+    }
+    console.log(`Attempting to delete user with clerk ID: ${id}`);
+    const result = await deleteUser(id);
+    if (!result.success) {
+      console.error("Failed to delete user:", result.error);
+      return new Response("Error: Failed to delete user", {
+        status: 500,
+      });
+    }
+    console.log(`Successfully deleted user ${id}`);
   }
 
   return new Response("Webhook received", { status: 200 });
