@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, desc } from "drizzle-orm";
 import { db } from "~/server/db";
 import {
   bases,
@@ -42,7 +42,8 @@ export const getUserBases = async (userId: string) => {
     const userBases = await db
       .select()
       .from(bases)
-      .where(eq(bases.userId, user.id));
+      .where(eq(bases.userId, user.id))
+      .orderBy(desc(bases.createdAt));
 
     const serializedBases = userBases.map(serializeBase);
     return { success: true, bases: serializedBases };
@@ -225,6 +226,29 @@ export async function deleteBase(baseId: string) {
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to delete base",
+    };
+  }
+}
+
+export async function renameBase(baseId: string, newName: string) {
+  try {
+    const [updatedBase] = await db
+      .update(bases)
+      .set({ name: newName, updatedAt: new Date() })
+      .where(eq(bases.id, baseId))
+      .returning();
+
+    if (!updatedBase) {
+      throw new Error("Base not found");
+    }
+
+    revalidatePath("/");
+    return { success: true, base: serializeBase(updatedBase) };
+  } catch (error) {
+    console.error("Error renaming base:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to rename base",
     };
   }
 }

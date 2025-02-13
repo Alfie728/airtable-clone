@@ -26,9 +26,9 @@
 ## Core Features
 - [ ] Base Management
   - [x] Create base
-  - [ ] Delete base
+  - [x] Delete base
   - [ ] Rename base
-  - [ ] List bases
+  - [x] List bases
 
 - [ ] Table Management
   - [x] Create table
@@ -46,13 +46,13 @@
   - [ ] Support number type
 
 - [ ] Row Management
-  - [ ] Add row
+  - [x] Add row
   - [ ] Delete row
   - [ ] Reorder rows
-  - [ ] Bulk actions
+  - [x] Bulk actions
 
 - [ ] Cell Management
-  - [ ] Edit cell contents
+  - [x] Edit cell contents
   - [ ] Keyboard navigation
   - [ ] Copy/Paste functionality
   - [ ] Data validation
@@ -92,7 +92,7 @@
 - [ ] Add Redis caching layer
 - [ ] Optimize database queries
 - [ ] Implement request batching
-- [ ] Add client-side caching
+- [x] Add client-side caching
 - [ ] Optimize bundle size
 
 ## Testing

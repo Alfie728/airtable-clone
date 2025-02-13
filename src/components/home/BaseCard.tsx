@@ -23,6 +23,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { DeleteBaseDialog } from "~/components/base/DeleteBaseDialog";
+import { EditableBaseName } from "~/components/home/EditableBaseName";
+import { useBase } from "~/hooks/useBase";
+import { toast } from "sonner";
 
 interface BaseCardProps {
   base: SerializedBase;
@@ -31,26 +34,39 @@ interface BaseCardProps {
 
 export function BaseCard({ base, onHover }: BaseCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const { renameBase, isRenaming } = useBase(base.id);
+
+  const handleRename = async (newName: string) => {
+    try {
+      await renameBase(newName);
+      toast.success("Base renamed successfully");
+    } catch (error) {
+      toast.error("Failed to rename base");
+    }
+  };
 
   return (
     <div
       onMouseEnter={() => onHover?.(base.id)}
       className="group relative flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md"
     >
-      <Link
-        href={`/${base.id}/tables/grid`}
-        className="flex flex-1 flex-col p-6"
-      >
-        <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600">
-          {base.name}
-        </h3>
+      <div className="flex flex-1 flex-col p-6">
+        <EditableBaseName
+          name={base.name}
+          isEditing={isEditing}
+          onRename={handleRename}
+          onEditingChange={setIsEditing}
+          className="text-lg font-semibold text-gray-900 group-hover:text-blue-600"
+          baseId={base.id}
+        />
         {base.description && (
           <p className="mt-2 text-sm text-gray-500">{base.description}</p>
         )}
         <div className="mt-4 text-xs text-gray-400">
           Created {new Date(base.createdAt).toLocaleDateString()}
         </div>
-      </Link>
+      </div>
 
       <div className="absolute right-2 top-2">
         <DropdownMenu>
@@ -63,7 +79,7 @@ export function BaseCard({ base, onHover }: BaseCardProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[220px]">
-            <DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setIsEditing(true)}>
               <Pencil className="mr-2 h-4 w-4" />
               Rename base
             </DropdownMenuItem>

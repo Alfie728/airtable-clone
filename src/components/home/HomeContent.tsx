@@ -8,32 +8,46 @@ import { HomeSidebar } from "~/components/layout/HomeSidebar";
 import { HomeTopNavigation } from "~/components/layout/TopNavigation";
 import { cn } from "~/lib/utils";
 import { prefetchBaseTables } from "~/lib/query/prefetch";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { BaseCard } from "~/components/home/BaseCard";
+import { queryKeys } from "~/lib/query/keys";
 
 interface HomeContentProps {
   bases: SerializedBase[];
 }
 
-export function HomeContent({ bases }: HomeContentProps) {
+export function HomeContent({ bases: initialBases }: HomeContentProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const queryClient = useQueryClient();
 
-  const tableData = {
-    rows: bases.map((base: SerializedBase) => ({
-      id: base.id,
-      name: base.name,
-      description: base.description,
-      createdAt: base.createdAt,
-      updatedAt: base.updatedAt,
-    })),
-    columns: [
-      { key: "name", name: "Name" },
-      { key: "description", name: "Description" },
-      { key: "createdAt", name: "Created" },
-      { key: "updatedAt", name: "Last modified" },
-    ],
-  };
+  // Configure the bases list query with strict refetch settings
+  const { data: basesData } = useQuery({
+    queryKey: queryKeys.bases.list(),
+    queryFn: () => ({ success: true, bases: initialBases }),
+    initialData: { success: true, bases: initialBases },
+    staleTime: Infinity, // Never mark the data as stale
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  const bases = basesData?.bases ?? initialBases;
+
+  // const tableData = {
+  //   rows: bases.map((base: SerializedBase) => ({
+  //     id: base.id,
+  //     name: base.name,
+  //     description: base.description,
+  //     createdAt: base.createdAt,
+  //     updatedAt: base.updatedAt,
+  //   })),
+  //   columns: [
+  //     { key: "name", name: "Name" },
+  //     { key: "description", name: "Description" },
+  //     { key: "createdAt", name: "Created" },
+  //     { key: "updatedAt", name: "Last modified" },
+  //   ],
+  // };
 
   const handleBaseHover = async (baseId: string) => {
     console.log("Hovering over base:", baseId);

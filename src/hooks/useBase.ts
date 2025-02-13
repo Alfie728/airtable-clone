@@ -1,7 +1,11 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getBaseById } from "~/lib/actions/bases.action";
+import {
+  getBaseById,
+  renameBase,
+  type SerializedBase,
+} from "~/lib/actions/bases.action";
 import { getTables, createTable } from "~/lib/actions/tables.action";
 import type { BaseResponse, TableCreateResponse } from "~/types/table";
 import { queryKeys } from "~/lib/query/keys";
@@ -81,6 +85,75 @@ export const useBase = (baseId: string) => {
     },
   });
 
+  const renameMutation = useMutation({
+    mutationFn: async (newName: string) => {
+      const result = await renameBase(baseId, newName);
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to rename base");
+      }
+      return result;
+    },
+    onMutate: async (newName) => {
+      // Cancel any outgoing refetches
+      await Promise.all([
+        queryClient.cancelQueries({
+          queryKey: queryKeys.bases.info(baseId),
+        }),
+        queryClient.cancelQueries({
+          queryKey: queryKeys.bases.list(),
+        }),
+      ]);
+
+      // Get previous data
+      const previousBaseInfo = queryClient.getQueryData(
+        queryKeys.bases.info(baseId),
+      );
+      const previousBasesList = queryClient.getQueryData<{
+        success: boolean;
+        bases: SerializedBase[];
+      }>(queryKeys.bases.list());
+
+      // Update base info
+      queryClient.setQueryData(
+        queryKeys.bases.info(baseId),
+        (old: SerializedBase | undefined) => ({
+          ...old,
+          name: newName,
+        }),
+      );
+
+      // Update bases list while maintaining order
+      if (previousBasesList?.bases) {
+        queryClient.setQueryData(queryKeys.bases.list(), {
+          ...previousBasesList,
+          bases: previousBasesList.bases.map((base) =>
+            base.id === baseId ? { ...base, name: newName } : base,
+          ),
+        });
+      }
+
+      return { previousBaseInfo, previousBasesList };
+    },
+    onError: (err, _, context) => {
+      if (context?.previousBaseInfo) {
+        queryClient.setQueryData(
+          queryKeys.bases.info(baseId),
+          context.previousBaseInfo,
+        );
+      }
+      if (context?.previousBasesList) {
+        queryClient.setQueryData(
+          queryKeys.bases.list(),
+          context.previousBasesList,
+        );
+      }
+    },
+    onSettled: () => {
+      // We don't need to invalidate since we already have the correct data
+      // from optimistic updates and server response
+    },
+  });
+
   return {
     baseName: baseInfoQuery.data?.name ?? "Untitled Base",
     isLoading: baseInfoQuery.isLoading || baseTablesQuery.isLoading,
@@ -93,5 +166,7 @@ export const useBase = (baseId: string) => {
     },
     isAddingTable: addTableMutation.isPending,
     error: baseInfoQuery.error ?? baseTablesQuery.error ?? null,
+    renameBase: (newName: string) => renameMutation.mutateAsync(newName),
+    isRenaming: renameMutation.isPending,
   };
 };
