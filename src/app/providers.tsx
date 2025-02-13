@@ -1,25 +1,16 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { useState } from "react";
 import { AuthRedirect } from "~/components/auth/AuthRedirect";
 import { Toaster } from "sonner";
+import { getQueryClient } from "~/lib/query/client";
+import { type ReactNode } from "react";
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            // With SSR, we usually want to set some default staleTime
-            // above 0 to avoid refetching immediately on the client
-            staleTime: 60 * 1000,
-          },
-        },
-      }),
-  );
+// This ensures we have a single provider instance across the app
+const queryClient = getQueryClient();
 
+export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthRedirect />

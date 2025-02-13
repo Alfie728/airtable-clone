@@ -1,5 +1,4 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { getUserBases } from "~/lib/actions/bases.action";
 import { HomeContent } from "~/components/home/HomeContent";
 import { createUser } from "~/lib/actions/users.action";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";

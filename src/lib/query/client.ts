@@ -1,18 +1,29 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, isServer } from "@tanstack/react-query";
 
-// Ensure we only create one instance during SSR
-let queryClient: QueryClient | undefined = undefined;
+export const queryClientOptions = {
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000, // 1 minute by default
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+};
+
+function makeQueryClient() {
+  return new QueryClient(queryClientOptions);
+}
+
+// This ensures we have a single client instance across the app
+let browserQueryClient: QueryClient | undefined = undefined;
 
 export function getQueryClient() {
-  if (!queryClient) {
-    queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          // During SSR, we want to keep data fresh
-          staleTime: Infinity,
-        },
-      },
-    });
+  if (isServer) {
+    // Server: always make a new query client to avoid cross-request state pollution
+    return makeQueryClient();
   }
-  return queryClient;
+
+  // Browser: make a new query client if we don't already have one
+  if (!browserQueryClient) browserQueryClient = makeQueryClient();
+  return browserQueryClient;
 }
