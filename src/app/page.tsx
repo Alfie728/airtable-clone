@@ -17,49 +17,29 @@ export default async function Page() {
 
   const queryClient = getQueryClient();
 
-  // Try to prefetch bases list
+  // First check if user exists
+  const user = await currentUser();
+  if (!user?.emailAddresses?.[0]?.emailAddress) {
+    throw new Error("No email address found for user");
+  }
+
+  // Create user if doesn't exist
+  const createResult = await createUser({
+    clerkId: userId,
+    email: user.emailAddresses[0].emailAddress,
+  });
+
+  if (!createResult.success) {
+    throw new Error("Failed to create user");
+  }
+
+  // Only prefetch bases list after we confirm user exists
   await prefetchBasesList(queryClient, userId);
   const basesData = queryClient.getQueryData<{
     success: boolean;
     bases?: SerializedBase[];
     error?: string;
   }>(["bases", "list"]);
-
-  // If user not found, create them and try again
-  if (!basesData?.success && basesData?.error === "User not found") {
-    // Get user email from Clerk
-    const user = await currentUser();
-    if (!user?.emailAddresses?.[0]?.emailAddress) {
-      throw new Error("No email address found for user");
-    }
-
-    // Create user in our database
-    const createResult = await createUser({
-      clerkId: userId,
-      email: user.emailAddresses[0].emailAddress,
-    });
-
-    if (!createResult.success) {
-      throw new Error("Failed to create user");
-    }
-
-    // Try prefetching bases again
-    await prefetchBasesList(queryClient, userId);
-    const retryBasesData = queryClient.getQueryData<{
-      success: boolean;
-      bases?: SerializedBase[];
-      error?: string;
-    }>(["bases", "list"]);
-    if (!retryBasesData?.success || !retryBasesData.bases) {
-      throw new Error(retryBasesData?.error ?? "Failed to get user bases");
-    }
-
-    return (
-      <HydrationBoundary state={dehydrate(queryClient)}>
-        <HomeContent bases={retryBasesData.bases} />
-      </HydrationBoundary>
-    );
-  }
 
   if (!basesData?.success || !basesData.bases) {
     throw new Error(basesData?.error ?? "Failed to get user bases");

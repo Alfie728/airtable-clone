@@ -52,7 +52,18 @@ export const createUser = async (user: { clerkId: string; email: string }) => {
       .limit(1);
 
     if (existingEmail.length > 0 && existingEmail[0]?.clerkId) {
-      await deleteUser(existingEmail[0].clerkId);
+      // If email exists with different clerkId, update the clerkId
+      const [updatedUser] = await db
+        .update(users)
+        .set({ clerkId: user.clerkId })
+        .where(eq(users.id, existingEmail[0].id))
+        .returning();
+
+      if (!updatedUser) {
+        throw new Error("Failed to update existing user");
+      }
+
+      return { success: true, user: updatedUser };
     }
 
     // Create the new user

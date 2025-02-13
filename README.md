@@ -24,10 +24,10 @@
 - [ ] Add API authentication
 
 ## Core Features
-- [ ] Base Management
+- [x] Base Management
   - [x] Create base
   - [x] Delete base
-  - [ ] Rename base
+  - [x] Rename base
   - [x] List bases
 
 - [ ] Table Management
