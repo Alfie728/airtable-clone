@@ -23,7 +23,7 @@ interface BaseClientProps {
 
 export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   const router = useRouter();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [pendingActiveTableId, setPendingActiveTableId] = useState<
     string | null
   >(null);
