@@ -23,6 +23,7 @@ import { ColumnManagement } from "./ColumnManagement";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "~/lib/query/keys";
 import { queryClient } from "~/lib/query";
+import { th } from "@faker-js/faker";
 
 interface TableMeta {
   updateData: (rowIndex: number, columnId: string, value: unknown) => void;
@@ -242,7 +243,7 @@ export function EnhancedDataGrid({
         },
       },
       header: () => (
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center justify-between">
           <span>{col.name}</span>
           <ColumnManagement
             tableId={tableId}
@@ -395,13 +396,12 @@ export function EnhancedDataGrid({
                   <th
                     key={header.id}
                     style={{
-                      display: "flex",
                       width: header.getSize() ?? "auto",
                     }}
-                    className="border-b border-r border-gray-200 px-2 py-1 text-left text-xs font-medium text-gray-600 last:border-r-0"
+                    className="flex border-b border-r border-gray-200 px-2 py-1 text-left text-xs font-medium text-gray-600"
                   >
                     <div
-                      className={`flex items-center gap-1 ${
+                      className={`flex w-full items-center ${
                         header.column.getCanSort()
                           ? "cursor-pointer select-none"
                           : ""
@@ -412,14 +412,10 @@ export function EnhancedDataGrid({
                         header.column.columnDef.header,
                         header.getContext(),
                       )}
-                      {{
-                        asc: " 🔼",
-                        desc: " 🔽",
-                      }[header.column.getIsSorted() as string] ?? null}
                     </div>
                   </th>
                 ))}
-                <th className="w-10 border-b border-gray-200 px-1 py-1">
+                <th className="border-b border-r border-gray-200 px-1 py-1">
                   <ColumnManagement
                     tableId={tableId}
                     onColumnUpdated={() => {
@@ -461,7 +457,7 @@ export function EnhancedDataGrid({
                         display: "flex",
                         width: cell.column.getSize() ?? "auto",
                       }}
-                      className="border-b border-r border-gray-100 px-2 py-[3px] text-sm last:border-r-0"
+                      className="border-b border-r border-gray-100 px-2 py-[3px] text-sm"
                     >
                       {flexRender(
                         cell.column.columnDef.cell,
@@ -469,7 +465,6 @@ export function EnhancedDataGrid({
                       )}
                     </td>
                   ))}
-                  <td className="w-10 border-b border-gray-100" />
                 </tr>
               );
             })}

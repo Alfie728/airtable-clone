@@ -36,6 +36,7 @@ import {
   EyeOff,
   MoreHorizontal,
   HelpCircle,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useColumns } from "~/hooks/useColumns";
@@ -179,7 +180,7 @@ export function ColumnManagement({
             className="h-6 w-6 p-0 hover:bg-transparent"
             aria-label="Column options"
           >
-            <MoreHorizontal className="h-3.5 w-3.5" />
+            <ChevronDown className="h-3.5 w-3.5" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
