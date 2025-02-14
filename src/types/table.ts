@@ -51,6 +51,12 @@ export interface TableRenameResponse {
   table?: SerializedTable;
 }
 
+export interface TableDeleteResponse {
+  success: boolean;
+  error?: string;
+  table?: SerializedTable;
+}
+
 export interface TableListResponse {
   success: boolean;
   error?: string;

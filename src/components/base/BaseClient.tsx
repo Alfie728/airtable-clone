@@ -13,7 +13,6 @@ import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { TableRenameResponse } from "~/types/table";
 
 interface BaseClientProps {
   baseId: string;

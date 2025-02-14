@@ -14,6 +14,7 @@ import {
   addCell,
   addBulkRows,
   renameTable,
+  deleteTable,
 } from "~/lib/actions/tables.action";
 import type {
   Row,
@@ -21,6 +22,7 @@ import type {
   TableResponse,
   SerializedTable,
   TableRenameResponse,
+  TableDeleteResponse,
 } from "~/types/table";
 import { useBase } from "./useBase";
 import { queryKeys } from "~/lib/query/keys";
@@ -76,6 +78,14 @@ interface RenameContext {
     tables: SerializedTable[];
   };
   previousTableData?: TableResponse;
+}
+
+interface DeleteContext {
+  previousTableData?: TableResponse;
+  previousTables?: {
+    success: boolean;
+    tables: SerializedTable[];
+  };
 }
 
 function isTableRenameResponse(value: unknown): value is TableRenameResponse {
@@ -465,6 +475,110 @@ export const useTable = (baseId: string, tableId: string) => {
     },
   });
 
+  const deleteMutation = useMutation<
+    TableDeleteResponse,
+    Error,
+    void,
+    DeleteContext
+  >({
+    mutationFn: async () => {
+      console.log("[Delete Mutation] Starting mutation function");
+      latestMutationRef.current = "deleteTable";
+
+      try {
+        console.log(
+          "[Delete Mutation] Calling server action, baseId:",
+          baseId,
+          "tableId:",
+          tableId,
+        );
+        const result = await deleteTable(baseId, tableId);
+        console.log("[Delete Mutation] Server action returned:", result);
+
+        if (!result) {
+          console.error("[Delete Mutation] Server action returned no result");
+          throw new Error("No response from server");
+        }
+
+        if (!result.success) {
+          console.error(
+            "[Delete Mutation] Server action failed:",
+            result.error,
+          );
+          throw new Error(result.error ?? "Failed to delete table");
+        }
+
+        console.log("[Delete Mutation] Server action succeeded:", result);
+        return result;
+      } catch (error: unknown) {
+        console.error("[Delete Mutation] Caught error:", error);
+        if (error instanceof Error) {
+          console.error("[Delete Mutation] Error stack:", error.stack);
+        }
+        throw error;
+      }
+    },
+    onMutate: async () => {
+      console.log("[Delete Mutation] Starting onMutate");
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.tables.detail(tableId),
+      });
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.bases.tables.list(baseId),
+      });
+
+      // Get previous data for rollback
+      const previousTableData = queryClient.getQueryData<TableResponse>(
+        queryKeys.tables.detail(tableId),
+      );
+      const previousTables = queryClient.getQueryData<{
+        success: boolean;
+        tables: SerializedTable[];
+      }>(queryKeys.bases.tables.list(baseId));
+
+      console.log("[Delete Mutation] Previous data captured");
+
+      // Optimistically remove table from tables list
+      if (previousTables?.tables) {
+        queryClient.setQueryData(queryKeys.bases.tables.list(baseId), {
+          ...previousTables,
+          tables: previousTables.tables.filter((table) => table.id !== tableId),
+        });
+        console.log("[Delete Mutation] Optimistically removed table from list");
+      }
+
+      return { previousTableData, previousTables };
+    },
+    onError: (error, _, context) => {
+      console.log("[Delete Mutation] Error occurred:", error);
+      // Revert optimistic updates on error
+      if (context?.previousTableData) {
+        queryClient.setQueryData(
+          queryKeys.tables.detail(tableId),
+          context.previousTableData,
+        );
+      }
+      if (context?.previousTables) {
+        queryClient.setQueryData(
+          queryKeys.bases.tables.list(baseId),
+          context.previousTables,
+        );
+      }
+      console.log("[Delete Mutation] Reverted optimistic updates");
+    },
+    onSettled: () => {
+      // console.log("[Delete Mutation] Mutation settled, invalidating queries");
+      // // Invalidate queries to ensure we have the latest data
+      // void queryClient.invalidateQueries({
+      //   queryKey: queryKeys.bases.tables.list(baseId),
+      // });
+      // void queryClient.invalidateQueries({
+      //   queryKey: queryKeys.tables.detail(tableId),
+      // });
+    },
+  });
+
   const wrappedRenameTable = async (
     newName: string,
   ): Promise<TableRenameResponse> => {
@@ -507,5 +621,10 @@ export const useTable = (baseId: string, tableId: string) => {
     tableData: currentTableQuery?.data?.table,
     renameTable: wrappedRenameTable,
     isRenaming: renameMutation.isPending,
+    deleteTable: () => {
+      console.log("Starting delete mutation...");
+      return deleteMutation.mutateAsync();
+    },
+    isDeleting: deleteMutation.isPending,
   };
 };

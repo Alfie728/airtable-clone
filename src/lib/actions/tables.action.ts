@@ -460,3 +460,107 @@ export async function addBulkRows(
     return { success: false, error: "Failed to add bulk rows" };
   }
 }
+
+export async function deleteTable(baseId: string, tableId: string) {
+  // Production-friendly structured logging
+  console.log(
+    JSON.stringify({
+      level: "info",
+      action: "deleteTable",
+      stage: "start",
+      params: { baseId, tableId },
+      timestamp: new Date().toISOString(),
+    }),
+  );
+
+  try {
+    // 1. Delete view filters and views
+    const deleteViewsResult = await db.execute(sql`
+      WITH deleted_views AS (
+        DELETE FROM "airtable-clone_views"
+        WHERE table_id = ${tableId}
+        RETURNING id
+      )
+      DELETE FROM "airtable-clone_view_filters"
+      WHERE view_id IN (SELECT id FROM deleted_views);
+    `);
+
+    // 2. Delete cells and columns
+    const deleteColumnsResult = await db.execute(sql`
+      WITH deleted_columns AS (
+        DELETE FROM "airtable-clone_columns"
+        WHERE table_id = ${tableId}
+        RETURNING id
+      )
+      DELETE FROM "airtable-clone_cells"
+      WHERE column_id IN (SELECT id FROM deleted_columns);
+    `);
+
+    // 3. Delete cells and rows
+    const deleteRowsResult = await db.execute(sql`
+      WITH deleted_rows AS (
+        DELETE FROM "airtable-clone_rows"
+        WHERE table_id = ${tableId}
+        RETURNING id
+      )
+      DELETE FROM "airtable-clone_cells"
+      WHERE row_id IN (SELECT id FROM deleted_rows);
+    `);
+
+    // 4. Finally delete the table
+    const [deletedTable] = await db
+      .delete(tables)
+      .where(eq(tables.id, tableId))
+      .returning();
+
+    if (!deletedTable) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          action: "deleteTable",
+          stage: "tableDelete",
+          error: "Table not found during deletion",
+          params: { baseId, tableId },
+          timestamp: new Date().toISOString(),
+        }),
+      );
+      return { success: false, error: "Table not found during deletion" };
+    }
+
+    revalidatePath(`/${baseId}`, "page");
+
+    console.log(
+      JSON.stringify({
+        level: "info",
+        action: "deleteTable",
+        stage: "complete",
+        params: { baseId, tableId },
+        timestamp: new Date().toISOString(),
+      }),
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        action: "deleteTable",
+        stage: "error",
+        error:
+          error instanceof Error
+            ? {
+                message: error.message,
+                stack: error.stack,
+              }
+            : "Unknown error",
+        params: { baseId, tableId },
+        timestamp: new Date().toISOString(),
+      }),
+    );
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to delete table",
+    };
+  }
+}
