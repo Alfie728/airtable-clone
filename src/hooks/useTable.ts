@@ -14,7 +14,7 @@ import {
   addCell,
   addBulkRows,
   renameTable,
-  deleteTable,
+  deleteTableAction,
 } from "~/lib/actions/tables.action";
 import type {
   Row,
@@ -27,6 +27,9 @@ import type {
 import { useBase } from "./useBase";
 import { queryKeys } from "~/lib/query/keys";
 import type { tables } from "~/server/db/schema";
+
+// Add proper type for the server action response
+type DeleteTableResponse = { success: boolean; error?: string };
 
 function generateMockRow(columns: Column[]): Row {
   const row: Row = { id: crypto.randomUUID() };
@@ -146,7 +149,7 @@ export const useTable = (baseId: string, tableId: string) => {
         queryClient.getQueryData<TableResponse>(
           queryKeys.tables.detail(table.id),
         ),
-      gcTime: 0,
+      gcTime: 300000,
     })),
   });
 
@@ -475,25 +478,32 @@ export const useTable = (baseId: string, tableId: string) => {
     },
   });
 
-  const deleteMutation = useMutation<
-    TableDeleteResponse,
+  const deleteTableMutation = useMutation<
+    DeleteTableResponse,
     Error,
     void,
     DeleteContext
   >({
     mutationFn: async () => {
+      const startTime = Date.now();
       console.log("[Client] Delete mutation started");
       latestMutationRef.current = "deleteTable";
 
       try {
-        console.log("[Client] Calling server action with params:", {
+        console.log("[Client] About to call server action with params:", {
           baseId,
           tableId,
+          timestamp: new Date().toISOString(),
+          timeSinceStart: `${Date.now() - startTime}ms`,
         });
 
-        const result = await deleteTable(baseId, tableId);
+        const result = await deleteTableAction(baseId, tableId);
 
-        console.log("[Client] Server action response:", result);
+        console.log("[Client] Server action returned:", {
+          result,
+          timestamp: new Date().toISOString(),
+          timeSinceStart: `${Date.now() - startTime}ms`,
+        });
 
         if (!result) {
           console.error("[Client] Server action returned no result");
@@ -510,11 +520,14 @@ export const useTable = (baseId: string, tableId: string) => {
         console.error("[Client] Delete mutation error:", {
           error: error instanceof Error ? error.message : "Unknown error",
           stack: error instanceof Error ? error.stack : undefined,
+          timestamp: new Date().toISOString(),
+          timeSinceStart: `${Date.now() - startTime}ms`,
         });
         throw error;
       }
     },
     onMutate: async () => {
+      const startTime = Date.now();
       console.log("[Client] Starting optimistic update");
       await queryClient.cancelQueries({
         queryKey: queryKeys.tables.detail(tableId),
@@ -538,10 +551,18 @@ export const useTable = (baseId: string, tableId: string) => {
         });
       }
 
+      console.log("[Client] Optimistic update completed", {
+        timestamp: new Date().toISOString(),
+        timeSinceStart: `${Date.now() - startTime}ms`,
+      });
+
       return { previousTableData, previousTables };
     },
     onError: (error, _, context) => {
-      console.error("[Client] Delete mutation error in onError:", error);
+      console.error("[Client] Delete mutation error in onError:", {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      });
       if (context?.previousTableData) {
         queryClient.setQueryData(
           queryKeys.tables.detail(tableId),
@@ -556,7 +577,9 @@ export const useTable = (baseId: string, tableId: string) => {
       }
     },
     onSettled: () => {
-      console.log("[Client] Delete mutation settled");
+      console.log("[Client] Delete mutation settled", {
+        timestamp: new Date().toISOString(),
+      });
     },
   });
 
@@ -604,8 +627,8 @@ export const useTable = (baseId: string, tableId: string) => {
     isRenaming: renameMutation.isPending,
     deleteTable: () => {
       console.log("Starting delete mutation...");
-      return deleteMutation.mutateAsync();
+      return deleteTableMutation.mutateAsync();
     },
-    isDeleting: deleteMutation.isPending,
+    isDeleting: deleteTableMutation.isPending,
   };
 };

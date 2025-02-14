@@ -3,7 +3,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "~/server/db";
 import { tables, columns, rows, cells } from "~/server/db/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getBaseById } from "./bases.action";
 import type {
@@ -12,6 +12,7 @@ import type {
   SerializedTable,
   TableRenameResponse,
   TableCreateResponse,
+  TableDeleteResponse,
 } from "~/types/table";
 
 export async function createTable(
@@ -122,13 +123,20 @@ export async function renameTable(
   tableId: string,
   newName: string,
 ): Promise<TableRenameResponse> {
+  console.log("RENAME_TABLE_ENTRY_POINT", { tableId, newName });
+  const startTime = Date.now();
+
   try {
     const user = await currentUser();
+    console.log(`[${Date.now() - startTime}ms] User auth check completed`);
+
     if (!user) {
+      console.log(`[${Date.now() - startTime}ms] Unauthorized - no user found`);
       return { success: false, error: "Unauthorized" };
     }
 
     // Check if table exists and get its baseId
+    console.log(`[${Date.now() - startTime}ms] Checking if table exists`);
     const existingTable = await db
       .select()
       .from(tables)
@@ -136,12 +144,15 @@ export async function renameTable(
       .limit(1);
 
     if (!existingTable[0]) {
+      console.log(`[${Date.now() - startTime}ms] Table not found`);
       return { success: false, error: "Table not found" };
     }
 
     const baseId = existingTable[0].baseId;
+    console.log(`[${Date.now() - startTime}ms] Found table in base ${baseId}`);
 
     // Check if new name already exists in this base
+    console.log(`[${Date.now() - startTime}ms] Checking for duplicate names`);
     const duplicateTable = await db
       .select()
       .from(tables)
@@ -155,10 +166,12 @@ export async function renameTable(
       .limit(1);
 
     if (duplicateTable.length > 0) {
+      console.log(`[${Date.now() - startTime}ms] Duplicate name found`);
       return { success: false, error: "A table with this name already exists" };
     }
 
     // Update table name
+    console.log(`[${Date.now() - startTime}ms] Updating table name`);
     const [updatedTable] = await db
       .update(tables)
       .set({ name: newName, updatedAt: new Date() })
@@ -166,12 +179,18 @@ export async function renameTable(
       .returning();
 
     if (!updatedTable) {
+      console.log(`[${Date.now() - startTime}ms] Failed to update table`);
       return { success: false, error: "Failed to rename table" };
     }
 
+    console.log(`[${Date.now() - startTime}ms] Table renamed successfully`);
+    console.log(`[${Date.now() - startTime}ms] Starting path revalidation`);
     revalidatePath(`/base/${baseId}`, "page");
+    console.log(`[${Date.now() - startTime}ms] Operation complete`);
+
     return { success: true, table: serializeTable(updatedTable) };
   } catch (err) {
+    console.error(`[${Date.now() - startTime}ms] Operation failed:`, err);
     const error = err instanceof Error ? err.message : "Failed to rename table";
     return { success: false, error };
   }
@@ -461,81 +480,108 @@ export async function addBulkRows(
   }
 }
 
-export async function deleteTable(baseId: string, tableId: string) {
+export async function deleteTableAction(
+  baseId: string,
+  tableId: string,
+): Promise<TableDeleteResponse> {
+  console.log("DELETE_TABLE_ENTRY_POINT", { baseId, tableId });
+  const startTime = Date.now();
+
   try {
-    // Log immediately when the server action starts
-    console.log(
-      `[Server Action] DELETE TABLE STARTED - baseId: ${baseId}, tableId: ${tableId}`,
-    );
+    const user = await currentUser();
+    console.log(`[${Date.now() - startTime}ms] User auth check completed`);
 
-    // Log before each database operation
-    console.log(
-      "[Server Action] Step 1: Attempting to delete views and filters",
-    );
-    const deleteViewsResult = await db.execute(sql`
-      WITH deleted_views AS (
-        DELETE FROM "airtable-clone_views"
-        WHERE table_id = ${tableId}
-        RETURNING id
-      )
+    if (!user) {
+      console.log(`[${Date.now() - startTime}ms] Unauthorized - no user found`);
+      return { success: false, error: "Unauthorized" };
+    }
+
+    // Check if table exists
+    console.log(`[${Date.now() - startTime}ms] Checking if table exists`);
+    const existingTable = await db
+      .select()
+      .from(tables)
+      .where(eq(tables.id, tableId))
+      .limit(1);
+
+    if (!existingTable[0]) {
+      console.log(`[${Date.now() - startTime}ms] Table not found`);
+      return { success: false, error: "Table not found" };
+    }
+
+    console.log(`[${Date.now() - startTime}ms] Starting cascading delete`);
+
+    // Delete view filters first
+    console.log(`[${Date.now() - startTime}ms] Deleting view filters`);
+    await db.execute(sql`
       DELETE FROM "airtable-clone_view_filters"
-      WHERE view_id IN (SELECT id FROM deleted_views);
-    `);
-    console.log("[Server Action] Views and filters deleted");
-
-    console.log(
-      "[Server Action] Step 2: Attempting to delete cells and columns",
-    );
-    const deleteColumnsResult = await db.execute(sql`
-      WITH deleted_columns AS (
-        DELETE FROM "airtable-clone_columns"
+      WHERE view_id IN (
+        SELECT id FROM "airtable-clone_views"
         WHERE table_id = ${tableId}
-        RETURNING id
-      )
-      DELETE FROM "airtable-clone_cells"
-      WHERE column_id IN (SELECT id FROM deleted_columns);
+      );
     `);
-    console.log("[Server Action] Cells and columns deleted");
 
-    console.log("[Server Action] Step 3: Attempting to delete cells and rows");
-    const deleteRowsResult = await db.execute(sql`
-      WITH deleted_rows AS (
-        DELETE FROM "airtable-clone_rows"
+    // Delete views
+    console.log(`[${Date.now() - startTime}ms] Deleting views`);
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_views"
+      WHERE table_id = ${tableId};
+    `);
+
+    // Delete cells
+    console.log(`[${Date.now() - startTime}ms] Deleting cells`);
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_cells"
+      WHERE row_id IN (
+        SELECT id FROM "airtable-clone_rows"
         WHERE table_id = ${tableId}
-        RETURNING id
       )
-      DELETE FROM "airtable-clone_cells"
-      WHERE row_id IN (SELECT id FROM deleted_rows);
+      OR column_id IN (
+        SELECT id FROM "airtable-clone_columns"
+        WHERE table_id = ${tableId}
+      );
     `);
-    console.log("[Server Action] Cells and rows deleted");
 
-    console.log("[Server Action] Step 4: Attempting to delete table");
+    // Delete rows
+    console.log(`[${Date.now() - startTime}ms] Deleting rows`);
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_rows"
+      WHERE table_id = ${tableId};
+    `);
+
+    // Delete columns
+    console.log(`[${Date.now() - startTime}ms] Deleting columns`);
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_columns"
+      WHERE table_id = ${tableId};
+    `);
+
+    // Finally delete the table
+    console.log(`[${Date.now() - startTime}ms] Deleting table`);
     const [deletedTable] = await db
       .delete(tables)
       .where(eq(tables.id, tableId))
       .returning();
 
     if (!deletedTable) {
-      console.error("[Server Action] ERROR: Table not found for deletion");
-      return { success: false, error: "Table not found during deletion" };
+      throw new Error("Table not found during deletion");
     }
 
-    console.log("[Server Action] Table deleted successfully");
-    revalidatePath(`/${baseId}`, "page");
+    console.log(`[${Date.now() - startTime}ms] All deletions completed`);
+
+    console.log(`[${Date.now() - startTime}ms] Operation complete`);
 
     return { success: true };
   } catch (error) {
-    // Log the full error details
-    console.error("[Server Action] Delete table error:", {
-      error: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-      baseId,
-      tableId,
-    });
-
+    console.error(`[${Date.now() - startTime}ms] Operation failed:`, error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to delete table",
     };
   }
+}
+
+export async function testLog() {
+  console.log("Test server action log");
+  return { success: true };
 }
