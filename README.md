@@ -1,6 +1,7 @@
 # Airtable Clone
 
 ## Project Setup
+
 - [x] Initialize T3 Stack project
 - [x] Set up PostgreSQL database with Neon
 - [x] Configure Drizzle ORM
@@ -8,6 +9,7 @@
 - [x] Set up authentication with Clerk
 
 ## Database Schema & Models
+
 - [x] Implement base model
 - [x] Implement table model
 - [x] Implement column model
@@ -17,6 +19,7 @@
 - [x] Set up database indexes
 
 ## Authentication & Authorization
+
 - [ ] Set up user authentication flow
 - [ ] Implement session management
 - [ ] Add role-based access control
@@ -24,34 +27,39 @@
 - [ ] Add API authentication
 
 ## Core Features
+
 - [x] Base Management
+
   - [x] Create base
   - [x] Delete base
   - [x] Rename base
   - [x] List bases
 
-- [ ] Table Management
+- [x] Table Management
+
   - [x] Create table
-  - [ ] Delete table
-  - [ ] Rename table
+  - [x] Delete table
+  - [x] Rename table
   - [x] Generate fake data using Faker.js
-  - [ ] Import/Export functionality
 
 - [ ] Column Management
-  - [ ] Add column
-  - [ ] Delete column
-  - [ ] Rename column
+
+  - [x] Add column
+  - [x] Delete column
+  - [x] Rename column
   - [ ] Reorder columns
   - [ ] Support text type
   - [ ] Support number type
 
 - [ ] Row Management
+
   - [x] Add row
   - [ ] Delete row
   - [ ] Reorder rows
   - [x] Bulk actions
 
 - [ ] Cell Management
+
   - [x] Edit cell contents
   - [ ] Keyboard navigation
   - [ ] Copy/Paste functionality
@@ -64,21 +72,21 @@
   - [ ] Save view state
 
 ## Data Operations
+
 - [ ] Implement filtering
   - [ ] Text filters (contains, equals, etc.)
   - [ ] Number filters (greater than, less than, etc.)
   - [ ] Empty/Not empty filters
-  
 - [ ] Implement sorting
   - [ ] Text sorting (A→Z, Z→A)
   - [ ] Number sorting (ascending/descending)
-  
 - [ ] Search Functionality
   - [ ] Global search across cells
   - [ ] Column-specific search
   - [ ] Implement search indexing
 
 ## UI/UX Features
+
 - [ ] Implement virtual scrolling
 - [ ] Add loading states
 - [ ] Add error states
@@ -88,6 +96,7 @@
 - [ ] Add context menus
 
 ## Performance Optimizations
+
 - [ ] Implement cursor-based pagination
 - [ ] Add Redis caching layer
 - [ ] Optimize database queries
@@ -96,6 +105,7 @@
 - [ ] Optimize bundle size
 
 ## Testing
+
 - [ ] Set up testing framework
 - [ ] Write unit tests
 - [ ] Write integration tests
@@ -104,9 +114,11 @@
 - [ ] Test with large datasets (100k+ rows)
 
 ## Known Issues
+
 - None yet
 
 ## Notes
+
 - Priority should be given to core table functionality
 - Focus on performance from the start
 - Keep the UI simple and functional initially

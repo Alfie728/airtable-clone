@@ -135,7 +135,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           currentTableId={tableId}
           onTableSelect={handleTableSelect}
           onTableCreated={handleTableCreated}
-          addTable={addTable}
+          addTableAction={addTable}
           isAddingTable={isAddingTable}
           pendingActiveTableId={pendingActiveTableId}
           renameTable={async (newName) => {

@@ -19,6 +19,11 @@ import { Plus, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import type { Row, Column } from "~/types/table";
+import { ColumnManagement } from "./ColumnManagement";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "~/lib/query/keys";
+import { queryClient } from "~/lib/query";
+import { th } from "@faker-js/faker";
 
 interface TableMeta {
   updateData: (rowIndex: number, columnId: string, value: unknown) => void;
@@ -182,6 +187,8 @@ export function EnhancedDataGrid({
   const [sorting, setSorting] = useState<SortingState>([]);
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
+  const queryClient = useQueryClient();
+
   const columns = useMemo<Column[]>(() => {
     // Use initial columns directly since we're not fetching here
     return initialColumns ?? [];
@@ -236,20 +243,21 @@ export function EnhancedDataGrid({
         },
       },
       header: () => (
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center justify-between">
           <span>{col.name}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            onClick={() => handleDeleteColumn(col.id)}
-          >
-            <X className="h-4 w-4" />
-          </Button>
+          <ColumnManagement
+            tableId={tableId}
+            column={col}
+            onColumnUpdated={() => {
+              void queryClient.invalidateQueries({
+                queryKey: queryKeys.tables.detail(tableId),
+              });
+            }}
+          />
         </div>
       ),
     }));
-  }, [columns, initialData]);
+  }, [columns, initialData, tableId]);
 
   function handleTabNavigation(
     currentRowId: string,
@@ -306,25 +314,6 @@ export function EnhancedDataGrid({
     }
   }
 
-  const handleAddColumn = () => {
-    const newColumn: Column = {
-      id: crypto.randomUUID(),
-      name: `Column ${columns.length + 1}`,
-      type: "text",
-      order: columns.length,
-      width: 100,
-      isSearchable: true,
-      isSortable: true,
-      isVisible: true,
-    };
-
-    onColumnsChange?.([...columns, newColumn]);
-  };
-
-  const handleDeleteColumn = (columnId: string) => {
-    onColumnsChange?.(columns.filter((col) => col.id !== columnId));
-  };
-
   async function handleAddBulkRows() {
     void addBulkRowsAction(BULK_ADD_ROWS_COUNT);
   }
@@ -378,20 +367,6 @@ export function EnhancedDataGrid({
     overscan: 5,
   });
 
-  function handleCellChange(
-    rowId: string,
-    columnId: string,
-    value: string,
-    isNewRow: boolean,
-  ) {
-    const rowIndex = table
-      .getRowModel()
-      .rows.findIndex((row) => row.original.id === rowId);
-    if (rowIndex === -1) return;
-
-    (table.options.meta as TableMeta).updateData(rowIndex, columnId, value);
-  }
-
   return (
     <div className="flex h-full flex-col">
       <div
@@ -421,13 +396,12 @@ export function EnhancedDataGrid({
                   <th
                     key={header.id}
                     style={{
-                      display: "flex",
                       width: header.getSize() ?? "auto",
                     }}
-                    className="border-b border-r border-gray-200 px-2 py-1 text-left text-xs font-medium text-gray-600 last:border-r-0"
+                    className="flex border-b border-r border-gray-200 px-2 py-1 text-left text-xs font-medium text-gray-600"
                   >
                     <div
-                      className={`flex items-center gap-1 ${
+                      className={`flex w-full items-center ${
                         header.column.getCanSort()
                           ? "cursor-pointer select-none"
                           : ""
@@ -438,22 +412,18 @@ export function EnhancedDataGrid({
                         header.column.columnDef.header,
                         header.getContext(),
                       )}
-                      {{
-                        asc: " 🔼",
-                        desc: " 🔽",
-                      }[header.column.getIsSorted() as string] ?? null}
                     </div>
                   </th>
                 ))}
-                <th className="w-10 border-b border-gray-200 px-1 py-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleAddColumn}
-                    className="h-5 w-5 p-0"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
+                <th className="border-b border-r border-gray-200 px-1 py-1">
+                  <ColumnManagement
+                    tableId={tableId}
+                    onColumnUpdated={() => {
+                      void queryClient.invalidateQueries({
+                        queryKey: queryKeys.tables.detail(tableId),
+                      });
+                    }}
+                  />
                 </th>
               </tr>
             ))}
@@ -487,7 +457,7 @@ export function EnhancedDataGrid({
                         display: "flex",
                         width: cell.column.getSize() ?? "auto",
                       }}
-                      className="border-b border-r border-gray-100 px-2 py-[3px] text-sm last:border-r-0"
+                      className="border-b border-r border-gray-100 px-2 py-[3px] text-sm"
                     >
                       {flexRender(
                         cell.column.columnDef.cell,
@@ -495,7 +465,6 @@ export function EnhancedDataGrid({
                       )}
                     </td>
                   ))}
-                  <td className="w-10 border-b border-gray-100" />
                 </tr>
               );
             })}

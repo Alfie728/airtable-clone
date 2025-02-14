@@ -20,7 +20,6 @@ import {
   getBaseRelatedQueryKeys,
   getTableRelatedQueryKeys,
 } from "~/lib/query/keys";
-import type { BaseResponse } from "~/types/table";
 import type { tables } from "~/server/db/schema";
 
 type TableType = typeof tables.$inferSelect;
