@@ -1,9 +1,4 @@
-import { type tables } from "~/server/db/schema";
-
-export interface Row {
-  id: string;
-  [key: string]: string | number;
-}
+import type { tables } from "~/server/db/schema";
 
 export interface Column {
   id: string;
@@ -16,6 +11,21 @@ export interface Column {
   isVisible: boolean;
 }
 
+export interface Row {
+  id: string;
+  [key: string]: string | number;
+}
+
+export interface SerializedTable {
+  id: string;
+  name: string;
+  baseId: string;
+  description: string | null;
+  rowCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TableData {
   id: string;
   name: string;
@@ -25,18 +35,24 @@ export interface TableData {
 
 export interface TableResponse {
   success: boolean;
+  error?: string;
   table?: TableData;
-  error?: string;
-}
-
-export interface BaseResponse {
-  success: boolean;
-  tables?: (typeof tables.$inferSelect)[];
-  error?: string;
 }
 
 export interface TableCreateResponse {
   success: boolean;
-  table?: typeof tables.$inferSelect;
   error?: string;
+  table?: typeof tables.$inferSelect;
+}
+
+export interface TableRenameResponse {
+  success: boolean;
+  error?: string;
+  table?: SerializedTable;
+}
+
+export interface TableListResponse {
+  success: boolean;
+  error?: string;
+  tables?: SerializedTable[];
 }

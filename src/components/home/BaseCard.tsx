@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { SerializedBase } from "~/lib/actions/bases.action";
+import type { SerializedBase } from "~/types/base";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,10 +39,18 @@ export function BaseCard({ base, onHover }: BaseCardProps) {
 
   const handleRename = async (newName: string) => {
     try {
-      await renameBase(newName);
-      toast.success("Base renamed successfully");
+      const result = await renameBase(newName);
+      if (result.success) {
+        toast.success("Base renamed successfully");
+      } else {
+        toast.error(result.error ?? "Failed to rename base");
+      }
+      return result;
     } catch (error) {
-      toast.error("Failed to rename base");
+      const message =
+        error instanceof Error ? error.message : "Failed to rename base";
+      toast.error(message);
+      throw error;
     }
   };
 

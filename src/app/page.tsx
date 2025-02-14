@@ -4,7 +4,7 @@ import { createUser } from "~/lib/actions/users.action";
 import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { getQueryClient } from "~/lib/query/client";
 import { prefetchBasesList } from "~/lib/query/prefetch";
-import type { SerializedBase } from "~/lib/actions/bases.action";
+import type { SerializedBase } from "~/types/base";
 
 export const dynamic = "force-dynamic";
 

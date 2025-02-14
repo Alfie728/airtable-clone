@@ -1,7 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Plus, Search, Check, MoreHorizontal } from "lucide-react";
+import {
+  ChevronDown,
+  Plus,
+  Search,
+  Check,
+  MoreHorizontal,
+  Import,
+  Pencil,
+  Eye,
+  Settings2,
+  Copy,
+  CalendarClock,
+  Info,
+  Lock,
+  XCircle,
+  Trash2,
+  HelpCircle,
+} from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { useParams } from "next/navigation";
@@ -10,6 +27,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "~/components/ui/dialog";
 import {
   Popover,
@@ -20,7 +38,15 @@ import type { tables } from "~/server/db/schema";
 import { cn } from "~/lib/utils";
 import { toast } from "sonner";
 import { Separator } from "@radix-ui/react-separator";
-import type { TableCreateResponse } from "~/types/table";
+import type { TableCreateResponse, TableRenameResponse } from "~/types/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
+import { EditableTableName } from "../table/EditableTableName";
 
 interface SecondaryNavigationProps {
   currentTableName?: string;
@@ -31,6 +57,8 @@ interface SecondaryNavigationProps {
   addTable: (tableName: string) => Promise<TableCreateResponse>;
   isAddingTable: boolean;
   pendingActiveTableId: string | null;
+  renameTable?: (newName: string) => Promise<TableRenameResponse>;
+  isRenaming?: boolean;
 }
 
 export function SecondaryNavigation({
@@ -42,14 +70,62 @@ export function SecondaryNavigation({
   addTable,
   isAddingTable,
   pendingActiveTableId,
+  renameTable,
+  isRenaming,
 }: SecondaryNavigationProps) {
   const [isCreateTableOpen, setIsCreateTableOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [tableName, setTableName] = useState("");
   const [error, setError] = useState("");
+  const [editingTableId, setEditingTableId] = useState<string | null>(null);
+  const [editedTableName, setEditedTableName] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const params = useParams();
   const baseId = params.baseId as string;
+
+  const handleRenameTable = async (tableId: string) => {
+    setEditingTableId(tableId);
+    const table = tables.find((t) => t.id === tableId);
+    if (table) {
+      setEditedTableName(table.name);
+    }
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!editingTableId || !renameTable) return;
+
+    // Close dropdown immediately for better UX
+    setEditingTableId(null);
+    setIsDropdownOpen(false);
+
+    try {
+      const result = await renameTable(editedTableName);
+      if (result.success) {
+        toast.success("Table renamed successfully");
+      } else {
+        toast.error(result.error ?? "Failed to rename table");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to rename table",
+      );
+    }
+  };
+
+  const handleRenameCancel = () => {
+    setEditingTableId(null);
+    setIsDropdownOpen(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      handleRenameCancel();
+    }
+  };
 
   const filteredTables = tables.filter((table) =>
     table.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -122,7 +198,7 @@ export function SecondaryNavigation({
       setError("");
     }
   }
-
+  console.log(editingTableId);
   return (
     <>
       <div className="flex h-8 items-center overflow-hidden border-gray-200 bg-[#575C65] px-2">
@@ -150,8 +226,157 @@ export function SecondaryNavigation({
                       onTableSelect?.(table.id);
                     }}
                   >
-                    {table.name}
-                    {isActive && <ChevronDown className="h-3.5 w-3.5" />}
+                    <div className="flex items-center gap-1">
+                      <span
+                        className={cn(
+                          "truncate",
+                          isActive
+                            ? "text-black"
+                            : "text-[rgba(255,255,255,0.85)]",
+                        )}
+                      >
+                        {table.name}
+                      </span>
+                      {isActive ? (
+                        editingTableId ? (
+                          <DropdownMenu
+                            open={isDropdownOpen}
+                            onOpenChange={setIsDropdownOpen}
+                          >
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 hover:bg-transparent"
+                              >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-[400px] p-4">
+                              <div className="mb-2 text-sm font-medium text-gray-700">
+                                What should each record be called?
+                              </div>
+                              <div className="flex flex-col gap-3">
+                                <div className="relative">
+                                  <Input
+                                    value={editedTableName}
+                                    onChange={(e) =>
+                                      setEditedTableName(e.target.value)
+                                    }
+                                    onKeyDown={handleKeyDown}
+                                    className="h-9 pr-8 text-sm"
+                                    placeholder="Record"
+                                    autoFocus
+                                  />
+                                  <HelpCircle className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  Examples:{" "}
+                                  <Button
+                                    variant="link"
+                                    className="h-auto p-0 text-xs font-normal text-gray-500 hover:text-gray-700"
+                                  >
+                                    Add record
+                                  </Button>{" "}
+                                  <Button
+                                    variant="link"
+                                    className="h-auto p-0 text-xs font-normal text-gray-500 hover:text-gray-700"
+                                  >
+                                    Send records
+                                  </Button>
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 text-sm"
+                                    onClick={handleRenameCancel}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="h-8 text-sm"
+                                    onClick={() => void handleRenameSubmit()}
+                                    disabled={isRenaming}
+                                  >
+                                    Save
+                                  </Button>
+                                </div>
+                              </div>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : (
+                          <DropdownMenu
+                            open={isDropdownOpen}
+                            onOpenChange={setIsDropdownOpen}
+                          >
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 hover:bg-transparent"
+                              >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="start"
+                              className="w-[220px]"
+                            >
+                              <DropdownMenuItem>
+                                <Import className="mr-2 h-4 w-4" />
+                                Import data
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onSelect={(e) => {
+                                  e.preventDefault();
+                                  setIsDropdownOpen(true);
+                                  void handleRenameTable(table.id);
+                                }}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Rename table
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Eye className="mr-2 h-4 w-4" />
+                                Hide table
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Settings2 className="mr-2 h-4 w-4" />
+                                Manage fields
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Copy className="mr-2 h-4 w-4" />
+                                Duplicate table
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem>
+                                <CalendarClock className="mr-2 h-4 w-4" />
+                                Configure date dependencies
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Info className="mr-2 h-4 w-4" />
+                                Edit table description
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Lock className="mr-2 h-4 w-4" />
+                                Edit table permissions
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem>
+                                <XCircle className="mr-2 h-4 w-4" />
+                                Clear data
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete table
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )
+                      ) : null}
+                    </div>
                   </Button>
                 );
               })}
@@ -204,13 +429,23 @@ export function SecondaryNavigation({
                               {currentTableId === table.id && (
                                 <Check className="h-3.5 w-3.5" />
                               )}
-                              <span>{table.name}</span>
+                              <span
+                                className={cn(
+                                  "truncate",
+                                  currentTableId === table.id
+                                    ? "text-black"
+                                    : "text-[rgba(255,255,255,0.85)]",
+                                )}
+                              >
+                                {table.name}
+                              </span>
                             </div>
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             className="h-7 w-7 rounded-sm p-0 opacity-0 hover:bg-gray-200 group-hover:opacity-100"
+                            onClick={() => handleRenameTable(table.id)}
                           >
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
@@ -304,6 +539,49 @@ export function SecondaryNavigation({
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>What should each record be called?</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <div className="relative">
+              <Input
+                value={editedTableName}
+                onChange={(e) => setEditedTableName(e.target.value)}
+                className="pr-12"
+              />
+              <HelpCircle className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            </div>
+            <div className="text-sm text-gray-500">
+              Examples:{" "}
+              <Button variant="link" className="h-auto p-0 text-sm font-normal">
+                Add record
+              </Button>{" "}
+              <Button variant="link" className="h-auto p-0 text-sm font-normal">
+                Send records
+              </Button>
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsRenameDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              onClick={handleRenameSubmit}
+              disabled={isRenaming}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog> */}
     </>
   );
 }

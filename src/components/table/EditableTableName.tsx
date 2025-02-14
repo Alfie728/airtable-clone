@@ -1,30 +1,27 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
-import type { BaseResponse } from "~/types/base";
+import { cn } from "~/lib/utils";
+import type { TableRenameResponse } from "~/types/table";
 
-interface EditableBaseNameProps {
+interface EditableTableNameProps {
   name: string;
   isEditing: boolean;
-  onRename: (newName: string) => Promise<BaseResponse>;
+  onRename: (newName: string) => Promise<TableRenameResponse>;
   onEditingChange: (isEditing: boolean) => void;
   className?: string;
-  baseId?: string;
 }
 
-export function EditableBaseName({
+export function EditableTableName({
   name,
   isEditing,
   onRename,
   onEditingChange,
   className,
-  baseId,
-}: EditableBaseNameProps) {
+}: EditableTableNameProps) {
   const [editedName, setEditedName] = useState(name);
   const inputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -56,25 +53,8 @@ export function EditableBaseName({
     }
   };
 
-  const handleClick = (e: React.MouseEvent) => {
-    if (!isEditing && baseId) {
-      router.push(`/${baseId}/tables/grid`);
-    }
-  };
-
   if (!isEditing) {
-    return (
-      <span
-        onClick={handleClick}
-        className={cn(
-          "cursor-pointer truncate",
-          baseId && "hover:text-blue-600",
-          className,
-        )}
-      >
-        {name}
-      </span>
-    );
+    return <span className={cn("truncate", className)}>{name}</span>;
   }
 
   return (

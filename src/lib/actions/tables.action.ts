@@ -6,7 +6,13 @@ import { tables, columns, rows, cells } from "~/server/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getBaseById } from "./bases.action";
-import type { Row } from "~/types/table";
+import type {
+  Row,
+  TableResponse,
+  SerializedTable,
+  TableRenameResponse,
+  TableCreateResponse,
+} from "~/types/table";
 
 export async function createTable(
   baseId: string,
@@ -96,6 +102,78 @@ export async function getTables(baseId: string) {
       return { success: false, error: error.message };
     }
     return { success: false, error: "Failed to get tables" };
+  }
+}
+
+function serializeTable(table: typeof tables.$inferSelect): SerializedTable {
+  return {
+    ...table,
+    id: table.id,
+    name: table.name,
+    baseId: table.baseId,
+    description: table.description,
+    rowCount: table.rowCount,
+    createdAt: table.createdAt.toISOString(),
+    updatedAt: table.updatedAt?.toISOString() ?? table.createdAt.toISOString(),
+  };
+}
+
+export async function renameTable(
+  tableId: string,
+  newName: string,
+): Promise<TableRenameResponse> {
+  try {
+    const user = await currentUser();
+    if (!user) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    // Check if table exists and get its baseId
+    const existingTable = await db
+      .select()
+      .from(tables)
+      .where(eq(tables.id, tableId))
+      .limit(1);
+
+    if (!existingTable[0]) {
+      return { success: false, error: "Table not found" };
+    }
+
+    const baseId = existingTable[0].baseId;
+
+    // Check if new name already exists in this base
+    const duplicateTable = await db
+      .select()
+      .from(tables)
+      .where(
+        and(
+          eq(tables.baseId, baseId),
+          eq(tables.name, newName),
+          sql`${tables.id} != ${tableId}`,
+        ),
+      )
+      .limit(1);
+
+    if (duplicateTable.length > 0) {
+      return { success: false, error: "A table with this name already exists" };
+    }
+
+    // Update table name
+    const [updatedTable] = await db
+      .update(tables)
+      .set({ name: newName, updatedAt: new Date() })
+      .where(eq(tables.id, tableId))
+      .returning();
+
+    if (!updatedTable) {
+      return { success: false, error: "Failed to rename table" };
+    }
+
+    revalidatePath(`/base/${baseId}`, "page");
+    return { success: true, table: serializeTable(updatedTable) };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "Failed to rename table";
+    return { success: false, error };
   }
 }
 

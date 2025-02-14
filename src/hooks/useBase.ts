@@ -1,13 +1,14 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  getBaseById,
-  renameBase,
-  type SerializedBase,
-} from "~/lib/actions/bases.action";
+import { getBaseById, renameBase } from "~/lib/actions/bases.action";
 import { getTables, createTable } from "~/lib/actions/tables.action";
-import type { BaseResponse, TableCreateResponse } from "~/types/table";
+import type {
+  BaseResponse,
+  BaseListResponse,
+  SerializedBase,
+} from "~/types/base";
+import type { TableCreateResponse, TableListResponse } from "~/types/table";
 import { queryKeys } from "~/lib/query/keys";
 
 export const useBase = (baseId: string) => {
@@ -44,7 +45,7 @@ export const useBase = (baseId: string) => {
       await queryClient.cancelQueries({
         queryKey: queryKeys.bases.tables.list(baseId),
       });
-      const previousData = queryClient.getQueryData<BaseResponse>(
+      const previousData = queryClient.getQueryData<TableListResponse>(
         queryKeys.bases.tables.list(baseId),
       );
 
@@ -52,14 +53,14 @@ export const useBase = (baseId: string) => {
         id: params.optimisticId,
         name: params.tableName,
         baseId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         description: null,
         rowCount: 0,
       };
 
       if (previousData?.tables) {
-        queryClient.setQueryData<BaseResponse>(
+        queryClient.setQueryData<TableListResponse>(
           queryKeys.bases.tables.list(baseId),
           {
             ...previousData,

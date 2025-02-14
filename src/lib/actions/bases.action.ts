@@ -14,15 +14,11 @@ import {
 import { getUserByClerkId } from "./users.action";
 import { revalidatePath } from "next/cache";
 import { sql } from "drizzle-orm";
-
-export interface SerializedBase {
-  id: string;
-  name: string;
-  description: string | null;
-  userId: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import type {
+  SerializedBase,
+  BaseResponse,
+  BaseListResponse,
+} from "~/types/base";
 
 function serializeBase(base: typeof bases.$inferSelect): SerializedBase {
   return {

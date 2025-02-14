@@ -13,6 +13,8 @@ import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import type { TableRenameResponse } from "~/types/table";
+
 interface BaseClientProps {
   baseId: string;
   tableId: string;
@@ -44,6 +46,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     updateCell,
     isAddingRow,
     isBatchAdding,
+    renameTable,
+    isRenaming,
   } = useTable(baseId, tableId);
 
   // Handle navigation for empty base and invalid table ID
@@ -138,6 +142,18 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           addTable={addTable}
           isAddingTable={isAddingTable}
           pendingActiveTableId={pendingActiveTableId}
+          renameTable={async (newName) => {
+            const result = await renameTable(newName);
+            if (!result.success) {
+              throw new Error(
+                typeof result.error === "string"
+                  ? result.error
+                  : "Failed to rename table",
+              );
+            }
+            return result;
+          }}
+          isRenaming={isRenaming}
         />
         <GridControls
           isSidebarOpen={isSidebarOpen}

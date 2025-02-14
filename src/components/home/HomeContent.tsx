@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import Link from "next/link";
-import type { SerializedBase } from "~/lib/actions/bases.action";
+import type { SerializedBase } from "~/types/base";
 import { HomeSidebar } from "~/components/layout/HomeSidebar";
 import { HomeTopNavigation } from "~/components/layout/TopNavigation";
 import { cn } from "~/lib/utils";

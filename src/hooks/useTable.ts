@@ -13,10 +13,18 @@ import {
   addRow,
   addCell,
   addBulkRows,
+  renameTable,
 } from "~/lib/actions/tables.action";
-import type { Row, Column, TableResponse } from "~/types/table";
+import type {
+  Row,
+  Column,
+  TableResponse,
+  SerializedTable,
+  TableRenameResponse,
+} from "~/types/table";
 import { useBase } from "./useBase";
 import { queryKeys } from "~/lib/query/keys";
+import type { tables } from "~/server/db/schema";
 
 function generateMockRow(columns: Column[]): Row {
   const row: Row = { id: crypto.randomUUID() };
@@ -60,6 +68,49 @@ function generateNumberValue(columnName: string): number {
     default:
       return faker.number.int({ min: 0, max: 100 });
   }
+}
+
+interface RenameContext {
+  previousTables?: {
+    success: boolean;
+    tables: SerializedTable[];
+  };
+  previousTableData?: TableResponse;
+}
+
+function isTableRenameResponse(value: unknown): value is TableRenameResponse {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "success" in value &&
+    typeof (value as { success: unknown }).success === "boolean"
+  ) {
+    const response = value as {
+      success: boolean;
+      error?: unknown;
+      table?: unknown;
+    };
+    if (!response.success) {
+      return (
+        typeof response.error === "undefined" ||
+        typeof response.error === "string"
+      );
+    }
+    if (response.table) {
+      const table = response.table as Record<string, unknown>;
+      return (
+        typeof table.id === "string" &&
+        typeof table.name === "string" &&
+        typeof table.baseId === "string" &&
+        (table.description === null || typeof table.description === "string") &&
+        typeof table.rowCount === "number" &&
+        table.createdAt instanceof Date &&
+        (table.updatedAt === null || table.updatedAt instanceof Date)
+      );
+    }
+    return true;
+  }
+  return false;
 }
 
 export const useTable = (baseId: string, tableId: string) => {
@@ -338,6 +389,92 @@ export const useTable = (baseId: string, tableId: string) => {
     },
   });
 
+  const renameMutation = useMutation<
+    TableRenameResponse,
+    Error,
+    string,
+    RenameContext
+  >({
+    mutationFn: async (newName: string): Promise<TableRenameResponse> => {
+      latestMutationRef.current = "renameTable";
+      // We know this is a TableRenameResponse because that's what the server action returns
+      const result = await renameTable(tableId, newName);
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to rename table");
+      }
+      return result;
+    },
+    onMutate: async (newName) => {
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.bases.tables.list(baseId),
+      });
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.tables.detail(tableId),
+      });
+
+      // Snapshot the previous value
+      const previousTables = queryClient.getQueryData<{
+        success: boolean;
+        tables: SerializedTable[];
+      }>(queryKeys.bases.tables.list(baseId));
+
+      // Optimistically update tables list
+      if (previousTables?.tables) {
+        queryClient.setQueryData(queryKeys.bases.tables.list(baseId), {
+          ...previousTables,
+          tables: previousTables.tables.map((table) =>
+            table.id === tableId ? { ...table, name: newName } : table,
+          ),
+        });
+      }
+
+      // Optimistically update table detail
+      const previousTableData = queryClient.getQueryData<TableResponse>(
+        queryKeys.tables.detail(tableId),
+      );
+
+      if (previousTableData?.table) {
+        queryClient.setQueryData(queryKeys.tables.detail(tableId), {
+          ...previousTableData,
+          table: {
+            ...previousTableData.table,
+            name: newName,
+          },
+        });
+      }
+
+      return { previousTables, previousTableData };
+    },
+    onError: (error: Error, newName, context) => {
+      // Revert optimistic updates on error
+      if (context?.previousTables) {
+        queryClient.setQueryData(
+          queryKeys.bases.tables.list(baseId),
+          context.previousTables,
+        );
+      }
+      if (context?.previousTableData) {
+        queryClient.setQueryData(
+          queryKeys.tables.detail(tableId),
+          context.previousTableData,
+        );
+      }
+    },
+    onSettled: () => {
+      // We don't need to do anything here because the server action already invalidates the queries
+    },
+  });
+
+  const wrappedRenameTable = async (
+    newName: string,
+  ): Promise<TableRenameResponse> => {
+    const result = await renameMutation.mutateAsync(newName);
+    if (!result.success) {
+      throw new Error(result.error ?? "Failed to rename table");
+    }
+    return result;
+  };
+
   return {
     addRow: () => {
       const tableData = currentTableQuery?.data;
@@ -368,5 +505,7 @@ export const useTable = (baseId: string, tableId: string) => {
     isLoading: isTableLoading,
     tableError: currentTableQuery?.error ?? null,
     tableData: currentTableQuery?.data?.table,
+    renameTable: wrappedRenameTable,
+    isRenaming: renameMutation.isPending,
   };
 };
