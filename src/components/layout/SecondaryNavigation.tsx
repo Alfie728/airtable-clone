@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { useParams } from "next/navigation";
@@ -8,7 +8,11 @@ import type { tables } from "~/server/db/schema";
 import { cn } from "~/lib/utils";
 import { toast } from "sonner";
 import { Separator } from "@radix-ui/react-separator";
-import type { TableCreateResponse, TableRenameResponse } from "~/types/table";
+import type {
+  TableCreateResponse,
+  TableRenameResponse,
+  SerializedTable,
+} from "~/types/table";
 import { TableListDropdown } from "../table/TableListDropdown";
 import { TableOptionsDropdown } from "../table/TableOptionsDropdown";
 import { CreateTableDropdown } from "../table/CreateTableDropdown";
@@ -19,7 +23,7 @@ interface SecondaryNavigationProps {
   currentTableName?: string;
   onTableSelect?: (tableId: string) => void;
   onTableCreated?: (table: typeof tables.$inferSelect) => void;
-  addTable: (tableName: string) => Promise<TableCreateResponse>;
+  addTableAction: (tableName: string) => Promise<TableCreateResponse>;
   isAddingTable: boolean;
   pendingActiveTableId: string | null;
   renameTable?: (newName: string) => Promise<TableRenameResponse>;
@@ -32,7 +36,7 @@ export function SecondaryNavigation({
   currentTableName,
   onTableSelect,
   onTableCreated,
-  addTable,
+  addTableAction,
   isAddingTable,
   pendingActiveTableId,
   renameTable,
@@ -40,14 +44,13 @@ export function SecondaryNavigation({
 }: SecondaryNavigationProps) {
   const [isCreateTableOpen, setIsCreateTableOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [tableName, setTableName] = useState("");
   const [error, setError] = useState("");
   const [editingTableId, setEditingTableId] = useState<string | null>(null);
   const [editedTableName, setEditedTableName] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const params = useParams();
-  const baseId = params.baseId as string;
+  const [lastUsedNumber, setLastUsedNumber] = useState(tables.length);
+  const activeTabRef = useRef<HTMLButtonElement>(null);
 
   const handleRenameTable = async (tableId: string) => {
     setEditingTableId(tableId);
@@ -96,22 +99,16 @@ export function SecondaryNavigation({
     table.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const validateTableName = (name: string): string => {
-    if (tables.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
-      return "A table with this name already exists";
-    }
-    return "";
-  };
-
   const handleCreateTable = async () => {
-    const validationError = validateTableName(tableName);
-    if (validationError) {
-      setError(validationError);
-      console.log(validationError);
-      return;
+    let nextNumber = lastUsedNumber + 1;
+    let nameToCreate = `Table ${nextNumber}`;
+
+    // Keep incrementing the number until we find an unused name
+    while (tables.some((t) => t.name === nameToCreate)) {
+      nextNumber++;
+      nameToCreate = `Table ${nextNumber}`;
     }
 
-    const nameToCreate = tableName || `Table ${tables.length + 1}`;
     setTableName("");
     setError("");
     setIsCreateTableOpen(false);
@@ -119,8 +116,9 @@ export function SecondaryNavigation({
     const loadingToast = toast.loading("Creating table...");
 
     try {
-      const result = await addTable(nameToCreate);
+      const result = await addTableAction(nameToCreate);
       if (result?.success && result?.table) {
+        setLastUsedNumber(nextNumber);
         toast.success("Table created successfully", {
           id: loadingToast,
         });
@@ -161,6 +159,7 @@ export function SecondaryNavigation({
                 return (
                   <Button
                     key={table.id}
+                    ref={isActive ? activeTabRef : undefined}
                     variant="ghost"
                     size="sm"
                     className={cn(
@@ -197,6 +196,7 @@ export function SecondaryNavigation({
                           onKeyDown={handleKeyDown}
                           tableName={table.name}
                           tableId={table.id}
+                          tabRef={activeTabRef}
                         />
                       )}
                     </div>

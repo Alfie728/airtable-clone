@@ -23,6 +23,7 @@ import {
 import { HelpCircle } from "lucide-react";
 import { DeleteTableDialog } from "./DeleteTableDialog";
 import { useParams } from "next/navigation";
+import { useState, useRef, useLayoutEffect } from "react";
 
 interface TableOptionsDropdownProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ interface TableOptionsDropdownProps {
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   tableName: string;
   tableId: string;
+  tabRef: React.RefObject<HTMLButtonElement>;
 }
 
 export function TableOptionsDropdown({
@@ -50,15 +52,28 @@ export function TableOptionsDropdown({
   onKeyDown,
   tableName,
   tableId,
+  tabRef,
 }: TableOptionsDropdownProps) {
   const params = useParams();
   const baseId = params.baseId as string;
+  const [alignOffset, setAlignOffset] = useState(0);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useLayoutEffect(() => {
+    if (isOpen && triggerRef.current && tabRef.current) {
+      const tabRect = tabRef.current.getBoundingClientRect();
+      const triggerRect = triggerRef.current.getBoundingClientRect();
+      const offset = triggerRect.left - tabRect.left;
+      setAlignOffset(-offset);
+    }
+  }, [isOpen, tabRef]);
 
   if (isRenaming) {
     return (
       <DropdownMenu open={isOpen} onOpenChange={onOpenChange}>
         <DropdownMenuTrigger asChild>
           <Button
+            ref={triggerRef}
             variant="ghost"
             size="sm"
             className="h-6 w-6 p-0 hover:bg-transparent"
@@ -69,7 +84,12 @@ export function TableOptionsDropdown({
             </div>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-[400px] p-4">
+        <DropdownMenuContent
+          align="start"
+          alignOffset={alignOffset}
+          className="w-[400px] p-4"
+          sideOffset={10}
+        >
           <div className="mb-2 text-sm font-medium text-gray-700">
             What should each record be called?
           </div>
@@ -127,6 +147,7 @@ export function TableOptionsDropdown({
     <DropdownMenu open={isOpen} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
+          ref={triggerRef}
           variant="ghost"
           size="sm"
           className="h-6 w-6 p-0 hover:bg-transparent"
@@ -137,7 +158,12 @@ export function TableOptionsDropdown({
           </div>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[220px]">
+      <DropdownMenuContent
+        align="start"
+        alignOffset={alignOffset}
+        sideOffset={10}
+        className="w-[220px]"
+      >
         <DropdownMenuItem>
           <Import className="mr-2 h-4 w-4" />
           Import data
