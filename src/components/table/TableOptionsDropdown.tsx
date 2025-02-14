@@ -21,6 +21,8 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { HelpCircle } from "lucide-react";
+import { DeleteTableDialog } from "./DeleteTableDialog";
+import { useParams } from "next/navigation";
 
 interface TableOptionsDropdownProps {
   isOpen: boolean;
@@ -32,6 +34,8 @@ interface TableOptionsDropdownProps {
   onRenameSubmit: () => void;
   onRenameCancel: () => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  tableName: string;
+  tableId: string;
 }
 
 export function TableOptionsDropdown({
@@ -44,7 +48,12 @@ export function TableOptionsDropdown({
   onRenameSubmit,
   onRenameCancel,
   onKeyDown,
+  tableName,
+  tableId,
 }: TableOptionsDropdownProps) {
+  const params = useParams();
+  const baseId = params.baseId as string;
+
   if (isRenaming) {
     return (
       <DropdownMenu open={isOpen} onOpenChange={onOpenChange}>
@@ -172,10 +181,19 @@ export function TableOptionsDropdown({
           <XCircle className="mr-2 h-4 w-4" />
           Clear data
         </DropdownMenuItem>
-        <DropdownMenuItem className="text-red-600 focus:bg-red-50 focus:text-red-600">
-          <Trash2 className="mr-2 h-4 w-4" />
-          Delete table
-        </DropdownMenuItem>
+        <DeleteTableDialog
+          baseId={baseId}
+          tableId={tableId}
+          tableName={tableName}
+        >
+          <DropdownMenuItem
+            className="text-red-600 focus:bg-red-50 focus:text-red-600"
+            onSelect={(e) => e.preventDefault()}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete table
+          </DropdownMenuItem>
+        </DeleteTableDialog>
       </DropdownMenuContent>
     </DropdownMenu>
   );

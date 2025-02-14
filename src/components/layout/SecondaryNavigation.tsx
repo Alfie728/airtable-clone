@@ -195,6 +195,8 @@ export function SecondaryNavigation({
                           onRenameSubmit={handleRenameSubmit}
                           onRenameCancel={handleRenameCancel}
                           onKeyDown={handleKeyDown}
+                          tableName={table.name}
+                          tableId={table.id}
                         />
                       )}
                     </div>

@@ -13,7 +13,6 @@ import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { TableRenameResponse } from "~/types/table";
 
 interface BaseClientProps {
   baseId: string;
@@ -114,19 +113,16 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     );
   }
 
-  // Remove the direct navigation logic from render
-  if (!isBaseLoading && (!baseTables || baseTables.length === 0)) {
-    return null;
-  }
-
-  // Remove the direct navigation logic from render
-  if (
-    !isBaseLoading &&
-    !isAddingTable &&
-    baseTables?.length > 0 &&
-    (tableId === "tables" || !baseTables.some((t) => t.id === tableId))
-  ) {
-    return null;
+  // Instead, show loading state during transitions
+  if (isBaseLoading || (!baseTables && !isBaseLoading)) {
+    return (
+      <div className="flex h-screen flex-col bg-white">
+        <BaseTopNavigation baseName={baseName} />
+        <div className="flex h-full items-center justify-center">
+          <div className="text-sm text-gray-500">Loading...</div>
+        </div>
+      </div>
+    );
   }
 
   return (
