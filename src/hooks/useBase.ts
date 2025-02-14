@@ -7,6 +7,7 @@ import type {
   BaseResponse,
   BaseListResponse,
   SerializedBase,
+  BaseRenameResponse,
 } from "~/types/base";
 import type { TableCreateResponse, TableListResponse } from "~/types/table";
 import { queryKeys } from "~/lib/query/keys";
@@ -86,8 +87,16 @@ export const useBase = (baseId: string) => {
     },
   });
 
-  const renameMutation = useMutation({
-    mutationFn: async (newName: string) => {
+  const renameMutation = useMutation<
+    BaseRenameResponse,
+    Error,
+    string,
+    {
+      previousBaseInfo: BaseResponse | undefined;
+      previousBasesList: BaseListResponse | undefined;
+    }
+  >({
+    mutationFn: async (newName: string): Promise<BaseRenameResponse> => {
       const result = await renameBase(baseId, newName);
       if (!result.success) {
         throw new Error(result.error ?? "Failed to rename base");
@@ -106,13 +115,12 @@ export const useBase = (baseId: string) => {
       ]);
 
       // Get previous data
-      const previousBaseInfo = queryClient.getQueryData(
+      const previousBaseInfo = queryClient.getQueryData<BaseResponse>(
         queryKeys.bases.info(baseId),
       );
-      const previousBasesList = queryClient.getQueryData<{
-        success: boolean;
-        bases: SerializedBase[];
-      }>(queryKeys.bases.list());
+      const previousBasesList = queryClient.getQueryData<BaseListResponse>(
+        queryKeys.bases.list(),
+      );
 
       // Update base info
       queryClient.setQueryData(

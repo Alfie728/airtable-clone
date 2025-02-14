@@ -17,6 +17,22 @@ const config = {
       bodySizeLimit: "3mb",
     },
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "www.airtable.com",
+      },
+      {
+        protocol: "https",
+        hostname: "ssl.gstatic.com",
+      },
+      {
+        protocol: "https",
+        hostname: "www.salesforce.com",
+      },
+    ],
+  },
 };
 
 export default config;

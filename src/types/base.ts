@@ -13,6 +13,18 @@ export interface BaseResponse {
   base?: SerializedBase;
 }
 
+export interface BaseCreateResponse {
+  success: boolean;
+  error?: string;
+  base?: SerializedBase;
+}
+
+export interface BaseRenameResponse {
+  success: boolean;
+  error?: string;
+  base?: SerializedBase;
+}
+
 export interface BaseListResponse {
   success: boolean;
   error?: string;

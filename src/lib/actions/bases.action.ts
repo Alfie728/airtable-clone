@@ -18,6 +18,7 @@ import type {
   SerializedBase,
   BaseResponse,
   BaseListResponse,
+  BaseRenameResponse,
 } from "~/types/base";
 
 function serializeBase(base: typeof bases.$inferSelect): SerializedBase {
@@ -226,7 +227,10 @@ export async function deleteBase(baseId: string) {
   }
 }
 
-export async function renameBase(baseId: string, newName: string) {
+export async function renameBase(
+  baseId: string,
+  newName: string,
+): Promise<BaseRenameResponse> {
   try {
     const [updatedBase] = await db
       .update(bases)
