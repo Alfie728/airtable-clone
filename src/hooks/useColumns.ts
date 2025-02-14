@@ -6,9 +6,8 @@ import {
   deleteColumn,
   renameColumn,
 } from "~/lib/actions/columns.action";
-import type { Column } from "~/types/table";
+import type { Column, Row } from "~/types/table";
 import { queryKeys } from "~/lib/query/keys";
-import type { TableResponse } from "~/types/table";
 
 interface AddColumnContext {
   previousData?: TableResponse;
@@ -20,6 +19,18 @@ interface DeleteColumnContext {
 
 interface RenameColumnContext {
   previousData?: TableResponse;
+}
+
+interface TableResponse {
+  success: boolean;
+  error?: string;
+  table?: {
+    id: string;
+    name: string;
+    baseId: string;
+    columns: Column[];
+    rows: Row[];
+  };
 }
 
 export const useColumns = (tableId: string) => {
@@ -107,27 +118,54 @@ export const useColumns = (tableId: string) => {
       return result;
     },
     onMutate: async (columnId) => {
+      // Cancel any outgoing refetches
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.detail(tableId),
+        queryKey: [...queryKeys.tables.detail(tableId)],
       });
 
+      // Snapshot the previous value
       const previousData = queryClient.getQueryData<TableResponse>(
         queryKeys.tables.detail(tableId),
       );
 
-      if (previousData?.table) {
-        queryClient.setQueryData<TableResponse>(
-          queryKeys.tables.detail(tableId),
-          {
-            ...previousData,
-            table: {
-              ...previousData.table,
-              columns: previousData.table.columns.filter(
-                (col) => col.id !== columnId,
-              ),
-            },
-          },
+      if (previousData?.table?.columns) {
+        // Get the column being deleted
+        const deletedColumn = previousData.table.columns.find(
+          (col) => col.id === columnId,
         );
+
+        if (deletedColumn) {
+          // Update columns with new order
+          const updatedColumns = previousData.table.columns
+            .filter((col) => col.id !== columnId)
+            .map((col) =>
+              col.order > deletedColumn.order
+                ? { ...col, order: col.order - 1 }
+                : col,
+            );
+
+          // Update rows by removing the deleted column's data
+          const updatedRows = (previousData.table.rows ?? []).map(
+            (row: Row) => {
+              const newRow = { ...row };
+              delete newRow[deletedColumn.name];
+              return newRow;
+            },
+          );
+
+          // Update the cache
+          queryClient.setQueryData<TableResponse>(
+            queryKeys.tables.detail(tableId),
+            {
+              ...previousData,
+              table: {
+                ...previousData.table,
+                columns: updatedColumns,
+                rows: updatedRows,
+              },
+            },
+          );
+        }
       }
 
       return { previousData };
@@ -141,6 +179,7 @@ export const useColumns = (tableId: string) => {
       }
     },
     onSettled: () => {
+      // Only invalidate the specific table's data
       void queryClient.invalidateQueries({
         queryKey: queryKeys.tables.detail(tableId),
       });

@@ -2,7 +2,7 @@
 
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "~/server/db";
-import { columns } from "~/server/db/schema";
+import { columns, cells } from "~/server/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import type { Column } from "~/types/table";
 
@@ -65,17 +65,27 @@ export async function deleteColumn(
       return { success: false, error: "Unauthorized" };
     }
 
+    // Get the column to be deleted first to check if it exists and get its order
+    const [columnToDelete] = await db
+      .select()
+      .from(columns)
+      .where(and(eq(columns.id, columnId), eq(columns.tableId, tableId)))
+      .limit(1);
+
+    if (!columnToDelete) {
+      return { success: false, error: "Column not found" };
+    }
+
+    // Delete all cells for this column
+    await db.delete(cells).where(eq(cells.columnId, columnId));
+
     // Delete the column
     const [deletedColumn] = await db
       .delete(columns)
       .where(and(eq(columns.id, columnId), eq(columns.tableId, tableId)))
       .returning();
 
-    if (!deletedColumn) {
-      return { success: false, error: "Column not found" };
-    }
-
-    // Reorder remaining columns
+    // Update the order of remaining columns
     await db
       .update(columns)
       .set({
@@ -84,7 +94,7 @@ export async function deleteColumn(
       .where(
         and(
           eq(columns.tableId, tableId),
-          sql`${columns.order} > ${deletedColumn.order}`,
+          sql`${columns.order} > ${columnToDelete.order}`,
         ),
       );
 
@@ -133,7 +143,10 @@ export async function renameColumn(
       .limit(1);
 
     if (duplicateColumn.length > 0) {
-      return { success: false, error: "A column with this name already exists" };
+      return {
+        success: false,
+        error: "A column with this name already exists",
+      };
     }
 
     // Update column name
@@ -150,4 +163,4 @@ export async function renameColumn(
       error: error instanceof Error ? error.message : "Failed to rename column",
     };
   }
-} 
+}
