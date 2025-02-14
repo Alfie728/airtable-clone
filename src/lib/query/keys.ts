@@ -1,20 +1,19 @@
 export const queryKeys = {
   bases: {
     root: ["bases"] as const,
-    list: () => [...queryKeys.bases.root, "list"] as const,
-    detail: (baseId: string) => [...queryKeys.bases.root, baseId] as const,
+    list: () => ["bases"],
+    detail: (baseId: string) => ["bases", baseId],
     info: (baseId: string) =>
       [...queryKeys.bases.detail(baseId), "info"] as const,
     tables: {
-      list: (baseId: string) =>
-        [...queryKeys.bases.detail(baseId), "tables", "list"] as const,
+      list: (baseId: string) => ["bases", baseId, "tables"],
       detail: (baseId: string, tableId: string) =>
         [...queryKeys.bases.detail(baseId), "tables", tableId] as const,
     },
   },
   tables: {
     root: ["tables"] as const,
-    detail: (tableId: string) => [...queryKeys.tables.root, tableId] as const,
+    detail: (tableId: string) => ["tables", tableId],
     columns: (tableId: string) =>
       [...queryKeys.tables.detail(tableId), "columns"] as const,
     rows: (tableId: string) =>

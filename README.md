@@ -30,12 +30,11 @@
   - [x] Rename base
   - [x] List bases
 
-- [ ] Table Management
+- [x] Table Management
   - [x] Create table
-  - [ ] Delete table
-  - [ ] Rename table
+  - [x] Delete table
+  - [x] Rename table
   - [x] Generate fake data using Faker.js
-  - [ ] Import/Export functionality
 
 - [ ] Column Management
   - [ ] Add column
