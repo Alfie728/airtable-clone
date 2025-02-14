@@ -462,19 +462,16 @@ export async function addBulkRows(
 }
 
 export async function deleteTable(baseId: string, tableId: string) {
-  // Production-friendly structured logging
-  console.log(
-    JSON.stringify({
-      level: "info",
-      action: "deleteTable",
-      stage: "start",
-      params: { baseId, tableId },
-      timestamp: new Date().toISOString(),
-    }),
-  );
-
   try {
-    // 1. Delete view filters and views
+    // Log immediately when the server action starts
+    console.log(
+      `[Server Action] DELETE TABLE STARTED - baseId: ${baseId}, tableId: ${tableId}`,
+    );
+
+    // Log before each database operation
+    console.log(
+      "[Server Action] Step 1: Attempting to delete views and filters",
+    );
     const deleteViewsResult = await db.execute(sql`
       WITH deleted_views AS (
         DELETE FROM "airtable-clone_views"
@@ -484,8 +481,11 @@ export async function deleteTable(baseId: string, tableId: string) {
       DELETE FROM "airtable-clone_view_filters"
       WHERE view_id IN (SELECT id FROM deleted_views);
     `);
+    console.log("[Server Action] Views and filters deleted");
 
-    // 2. Delete cells and columns
+    console.log(
+      "[Server Action] Step 2: Attempting to delete cells and columns",
+    );
     const deleteColumnsResult = await db.execute(sql`
       WITH deleted_columns AS (
         DELETE FROM "airtable-clone_columns"
@@ -495,8 +495,9 @@ export async function deleteTable(baseId: string, tableId: string) {
       DELETE FROM "airtable-clone_cells"
       WHERE column_id IN (SELECT id FROM deleted_columns);
     `);
+    console.log("[Server Action] Cells and columns deleted");
 
-    // 3. Delete cells and rows
+    console.log("[Server Action] Step 3: Attempting to delete cells and rows");
     const deleteRowsResult = await db.execute(sql`
       WITH deleted_rows AS (
         DELETE FROM "airtable-clone_rows"
@@ -506,57 +507,31 @@ export async function deleteTable(baseId: string, tableId: string) {
       DELETE FROM "airtable-clone_cells"
       WHERE row_id IN (SELECT id FROM deleted_rows);
     `);
+    console.log("[Server Action] Cells and rows deleted");
 
-    // 4. Finally delete the table
+    console.log("[Server Action] Step 4: Attempting to delete table");
     const [deletedTable] = await db
       .delete(tables)
       .where(eq(tables.id, tableId))
       .returning();
 
     if (!deletedTable) {
-      console.error(
-        JSON.stringify({
-          level: "error",
-          action: "deleteTable",
-          stage: "tableDelete",
-          error: "Table not found during deletion",
-          params: { baseId, tableId },
-          timestamp: new Date().toISOString(),
-        }),
-      );
+      console.error("[Server Action] ERROR: Table not found for deletion");
       return { success: false, error: "Table not found during deletion" };
     }
 
+    console.log("[Server Action] Table deleted successfully");
     revalidatePath(`/${baseId}`, "page");
-
-    console.log(
-      JSON.stringify({
-        level: "info",
-        action: "deleteTable",
-        stage: "complete",
-        params: { baseId, tableId },
-        timestamp: new Date().toISOString(),
-      }),
-    );
 
     return { success: true };
   } catch (error) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        action: "deleteTable",
-        stage: "error",
-        error:
-          error instanceof Error
-            ? {
-                message: error.message,
-                stack: error.stack,
-              }
-            : "Unknown error",
-        params: { baseId, tableId },
-        timestamp: new Date().toISOString(),
-      }),
-    );
+    // Log the full error details
+    console.error("[Server Action] Delete table error:", {
+      error: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+      baseId,
+      tableId,
+    });
 
     return {
       success: false,

@@ -482,45 +482,40 @@ export const useTable = (baseId: string, tableId: string) => {
     DeleteContext
   >({
     mutationFn: async () => {
-      console.log("[Delete Mutation] Starting mutation function");
+      console.log("[Client] Delete mutation started");
       latestMutationRef.current = "deleteTable";
 
       try {
-        console.log(
-          "[Delete Mutation] Calling server action, baseId:",
+        console.log("[Client] Calling server action with params:", {
           baseId,
-          "tableId:",
           tableId,
-        );
+        });
+
         const result = await deleteTable(baseId, tableId);
-        console.log("[Delete Mutation] Server action returned:", result);
+
+        console.log("[Client] Server action response:", result);
 
         if (!result) {
-          console.error("[Delete Mutation] Server action returned no result");
+          console.error("[Client] Server action returned no result");
           throw new Error("No response from server");
         }
 
         if (!result.success) {
-          console.error(
-            "[Delete Mutation] Server action failed:",
-            result.error,
-          );
+          console.error("[Client] Server action failed:", result.error);
           throw new Error(result.error ?? "Failed to delete table");
         }
 
-        console.log("[Delete Mutation] Server action succeeded:", result);
         return result;
-      } catch (error: unknown) {
-        console.error("[Delete Mutation] Caught error:", error);
-        if (error instanceof Error) {
-          console.error("[Delete Mutation] Error stack:", error.stack);
-        }
+      } catch (error) {
+        console.error("[Client] Delete mutation error:", {
+          error: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         throw error;
       }
     },
     onMutate: async () => {
-      console.log("[Delete Mutation] Starting onMutate");
-      // Cancel any outgoing refetches
+      console.log("[Client] Starting optimistic update");
       await queryClient.cancelQueries({
         queryKey: queryKeys.tables.detail(tableId),
       });
@@ -528,7 +523,6 @@ export const useTable = (baseId: string, tableId: string) => {
         queryKey: queryKeys.bases.tables.list(baseId),
       });
 
-      // Get previous data for rollback
       const previousTableData = queryClient.getQueryData<TableResponse>(
         queryKeys.tables.detail(tableId),
       );
@@ -537,22 +531,17 @@ export const useTable = (baseId: string, tableId: string) => {
         tables: SerializedTable[];
       }>(queryKeys.bases.tables.list(baseId));
 
-      console.log("[Delete Mutation] Previous data captured");
-
-      // Optimistically remove table from tables list
       if (previousTables?.tables) {
         queryClient.setQueryData(queryKeys.bases.tables.list(baseId), {
           ...previousTables,
           tables: previousTables.tables.filter((table) => table.id !== tableId),
         });
-        console.log("[Delete Mutation] Optimistically removed table from list");
       }
 
       return { previousTableData, previousTables };
     },
     onError: (error, _, context) => {
-      console.log("[Delete Mutation] Error occurred:", error);
-      // Revert optimistic updates on error
+      console.error("[Client] Delete mutation error in onError:", error);
       if (context?.previousTableData) {
         queryClient.setQueryData(
           queryKeys.tables.detail(tableId),
@@ -565,17 +554,9 @@ export const useTable = (baseId: string, tableId: string) => {
           context.previousTables,
         );
       }
-      console.log("[Delete Mutation] Reverted optimistic updates");
     },
     onSettled: () => {
-      // console.log("[Delete Mutation] Mutation settled, invalidating queries");
-      // // Invalidate queries to ensure we have the latest data
-      // void queryClient.invalidateQueries({
-      //   queryKey: queryKeys.bases.tables.list(baseId),
-      // });
-      // void queryClient.invalidateQueries({
-      //   queryKey: queryKeys.tables.detail(tableId),
-      // });
+      console.log("[Client] Delete mutation settled");
     },
   });
 

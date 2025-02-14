@@ -37,13 +37,20 @@ export function DeleteTableDialog({
 
   const handleDelete = async () => {
     try {
-      console.log("Starting client-side delete process...");
+      console.log("[UI] Delete process started", {
+        baseId,
+        tableId,
+        tableName,
+      });
       setIsOpen(false);
+
+      console.log("[UI] Calling delete mutation");
       const result = await deleteTable();
-      console.log("Delete table result:", result);
+      console.log("[UI] Delete mutation result:", result);
 
       if (!result.success) {
-        throw new Error(result.error);
+        console.error("[UI] Delete mutation failed:", result.error);
+        throw new Error(result.error ?? "Unknown error");
       }
 
       // Get all tables for this base
@@ -56,7 +63,7 @@ export function DeleteTableDialog({
         }>;
       }>(queryKeys.bases.tables.list(baseId));
 
-      console.log("Remaining tables:", baseTablesData);
+      console.log("[UI] Remaining tables:", baseTablesData);
 
       const remainingTables = baseTablesData?.success
         ? baseTablesData.tables.filter((t) => t.id !== tableId)
@@ -65,23 +72,24 @@ export function DeleteTableDialog({
       // If there are remaining tables, navigate to the first one
       const firstTable = remainingTables[0];
       if (firstTable) {
-        console.log("Navigating to first remaining table:", firstTable);
+        console.log("[UI] Navigating to first remaining table:", firstTable);
         router.replace(`/${baseId}/${firstTable.id}/grid`);
       } else {
-        console.log("No tables remaining, navigating to home");
+        console.log("[UI] No tables remaining, navigating to home");
         router.replace("/");
       }
 
-      toast.success("Table deleted successfully", {
-        duration: 5000, // Show for 5 seconds
-      });
+      toast.success("Table deleted successfully");
     } catch (error) {
-      console.error("Error in handleDelete:", error);
+      console.error("[UI] Error in handleDelete:", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+        baseId,
+        tableId,
+      });
+
       toast.error(
         error instanceof Error ? error.message : "Failed to delete table",
-        {
-          duration: 5000, // Show for 5 seconds
-        },
       );
       setIsOpen(true);
     }
