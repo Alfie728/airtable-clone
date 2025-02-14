@@ -1,7 +1,7 @@
 import { type QueryClient } from "@tanstack/react-query";
 import { getTables, getTableData } from "~/lib/actions/tables.action";
 import { getBaseById } from "~/lib/actions/bases.action";
-import type { BaseResponse } from "~/types/table";
+import type { BaseResponse } from "~/types/base";
 import { type tables } from "~/server/db/schema";
 import { queryKeys } from "./keys";
 import { getUserBases } from "~/lib/actions/bases.action";
