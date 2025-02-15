@@ -117,7 +117,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   if (isBaseLoading || (!baseTables && !isBaseLoading)) {
     return (
       <div className="flex h-screen flex-col bg-white">
-        <BaseTopNavigation baseName={baseName} />
+        <BaseTopNavigation baseName={baseName} baseId={baseId} />
         <div className="flex h-full items-center justify-center">
           <div className="text-sm text-gray-500">Loading...</div>
         </div>
@@ -127,7 +127,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
   return (
     <div className="flex h-screen flex-col bg-white">
-      <BaseTopNavigation baseName={baseName} />
+      <BaseTopNavigation baseName={baseName} baseId={baseId} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <SecondaryNavigation
           currentTableName={tableData?.name}

@@ -390,7 +390,7 @@ export function EnhancedDataGrid({
               <tr
                 key={headerGroup.id}
                 style={{ display: "flex", width: "100%" }}
-                className="bg-gray-50"
+                className="border-b border-gray-200 bg-gray-50"
               >
                 {headerGroup.headers.map((header) => (
                   <th
@@ -398,7 +398,7 @@ export function EnhancedDataGrid({
                     style={{
                       width: header.getSize() ?? "auto",
                     }}
-                    className="flex border-b border-r border-gray-200 px-2 py-1 text-left text-xs font-medium text-gray-600"
+                    className="flex border-r border-gray-200 px-2 py-1 text-left text-xs font-medium text-gray-600"
                   >
                     <div
                       className={`flex w-full items-center ${
@@ -415,7 +415,7 @@ export function EnhancedDataGrid({
                     </div>
                   </th>
                 ))}
-                <th className="border-b border-r border-gray-200 px-1 py-1">
+                <th className="border-r border-gray-200 px-1 py-1">
                   <ColumnManagement
                     tableId={tableId}
                     onColumnUpdated={() => {
