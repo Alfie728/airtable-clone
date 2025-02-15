@@ -111,7 +111,7 @@
 - [ ] Write integration tests
 - [ ] Write E2E tests
 - [ ] Add performance tests
-- [ ] Test with large datasets (100k+ rows)
+- [ ] Test with large datasets (100k+ `rows`)
 
 ## Known Issues
 

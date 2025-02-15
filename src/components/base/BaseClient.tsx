@@ -155,24 +155,25 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
-        <div className="relative flex flex-1 overflow-hidden">
-          {!isAddingTable && (
-            <div
-              className={cn(
-                "absolute bottom-0 left-0 top-0 z-10 w-60 border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
-                !isSidebarOpen && "-translate-x-full",
-              )}
-            >
-              <Sidebar
-                isAddingTable={isAddingTable}
-                tables={baseTables ?? []}
-                currentTableId={tableId}
-                onTableSelect={handleTableSelect}
-                pendingActiveTableId={pendingActiveTableId}
-              />
-            </div>
-          )}
 
+        {!isAddingTable && (
+          <div
+            className={cn(
+              "absolute bottom-0 left-0 top-[136px] z-10 w-60 border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
+              !isSidebarOpen && "-translate-x-full",
+            )}
+          >
+            <Sidebar
+              isAddingTable={isAddingTable}
+              tables={baseTables ?? []}
+              currentTableId={tableId}
+              onTableSelect={handleTableSelect}
+              pendingActiveTableId={pendingActiveTableId}
+            />
+          </div>
+        )}
+
+        <div className="relative flex flex-1 overflow-scroll scrollbar-hide">
           <div
             className={cn(
               "flex-1 transition-[margin] duration-200 ease-in-out",

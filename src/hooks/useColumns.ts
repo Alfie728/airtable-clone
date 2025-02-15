@@ -5,9 +5,11 @@ import {
   addColumn,
   deleteColumn,
   renameColumn,
+  updateColumnsOrder,
 } from "~/lib/actions/columns.action";
 import type { Column, Row } from "~/types/table";
 import { queryKeys } from "~/lib/query/keys";
+import { toast } from "sonner";
 
 interface AddColumnContext {
   previousData?: TableResponse;
@@ -18,6 +20,10 @@ interface DeleteColumnContext {
 }
 
 interface RenameColumnContext {
+  previousData?: TableResponse;
+}
+
+interface ReorderColumnsContext {
   previousData?: TableResponse;
 }
 
@@ -43,64 +49,85 @@ export const useColumns = (tableId: string) => {
     AddColumnContext
   >({
     mutationFn: async ({ name, type }) => {
-      const result = await addColumn(tableId, name, type);
-      if (!result.success) {
-        throw new Error(result.error ?? "Failed to add column");
-      }
-      return result;
-    },
-    onMutate: async (newColumn) => {
-      // Cancel any outgoing refetches
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.detail(tableId),
-      });
-
-      // Snapshot the previous value
       const previousData = queryClient.getQueryData<TableResponse>(
         queryKeys.tables.detail(tableId),
       );
 
-      // Optimistically update to the new value
-      if (previousData?.table) {
-        const optimisticColumn: Column = {
-          id: crypto.randomUUID(),
-          name: newColumn.name,
-          type: newColumn.type,
-          order: previousData.table.columns.length,
-          width: 200,
-          isSearchable: true,
-          isSortable: true,
-          isVisible: true,
-        };
+      if (!previousData?.table) {
+        throw new Error("No table data found");
+      }
 
+      // Generate unique name based on client state
+      const existingColumns = previousData.table.columns;
+      let uniqueName = name;
+      let counter = 1;
+      while (existingColumns.some((col) => col.name === uniqueName)) {
+        uniqueName = `${name} ${counter}`;
+        counter++;
+      }
+
+      // Create optimistic column
+      const optimisticColumn: Column = {
+        id: crypto.randomUUID(),
+        name: uniqueName,
+        type,
+        order: previousData.table.columns.length,
+        width: 200,
+        isSearchable: true,
+        isSortable: true,
+        isVisible: true,
+      };
+
+      // Update client state immediately
+      queryClient.setQueryData<TableResponse>(
+        queryKeys.tables.detail(tableId),
+        {
+          ...previousData,
+          table: {
+            ...previousData.table,
+            columns: [...previousData.table.columns, optimisticColumn],
+          },
+        },
+      );
+
+      // Sync with server
+      const result = await addColumn(tableId, uniqueName, type);
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to add column");
+      }
+
+      // Update the client state with the server's column ID
+      const updatedData = queryClient.getQueryData<TableResponse>(
+        queryKeys.tables.detail(tableId),
+      );
+
+      if (updatedData?.table) {
         queryClient.setQueryData<TableResponse>(
           queryKeys.tables.detail(tableId),
           {
-            ...previousData,
+            ...updatedData,
             table: {
-              ...previousData.table,
-              columns: [...previousData.table.columns, optimisticColumn],
+              ...updatedData.table,
+              columns: updatedData.table.columns.map((col) =>
+                col.id === optimisticColumn.id ? result.column! : col,
+              ),
             },
           },
         );
       }
 
-      return { previousData };
+      return result;
     },
-    onError: (err, newColumn, context) => {
-      // Rollback to the previous value on error
+    onError: (error, newColumn, context) => {
       if (context?.previousData) {
         queryClient.setQueryData(
           queryKeys.tables.detail(tableId),
           context.previousData,
         );
+        toast.error(
+          error instanceof Error ? error.message : "Failed to add column",
+        );
       }
-    },
-    onSettled: () => {
-      // Refetch after error or success
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.tables.detail(tableId),
-      });
     },
   });
 
@@ -240,6 +267,72 @@ export const useColumns = (tableId: string) => {
     },
   });
 
+  const reorderColumnsMutation = useMutation<
+    { success: boolean; columns?: Column[] },
+    Error,
+    { columnOrders: { id: string; order: number }[] },
+    ReorderColumnsContext
+  >({
+    mutationFn: async ({ columnOrders }) => {
+      const result = await updateColumnsOrder(tableId, columnOrders);
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to reorder columns");
+      }
+      return result;
+    },
+    onMutate: async ({ columnOrders }) => {
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.tables.detail(tableId),
+      });
+
+      const previousData = queryClient.getQueryData<TableResponse>(
+        queryKeys.tables.detail(tableId),
+      );
+
+      if (previousData?.table) {
+        // Create a map of new orders
+        const orderMap = new Map(
+          columnOrders.map((col) => [col.id, col.order]),
+        );
+
+        // Update columns with new orders
+        const updatedColumns = previousData.table.columns.map((col) => ({
+          ...col,
+          order: orderMap.get(col.id) ?? col.order,
+        }));
+
+        // Sort columns by new order
+        updatedColumns.sort((a, b) => a.order - b.order);
+
+        queryClient.setQueryData<TableResponse>(
+          queryKeys.tables.detail(tableId),
+          {
+            ...previousData,
+            table: {
+              ...previousData.table,
+              columns: updatedColumns,
+            },
+          },
+        );
+      }
+
+      return { previousData };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(
+          queryKeys.tables.detail(tableId),
+          context.previousData,
+        );
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.tables.detail(tableId),
+      });
+    },
+  });
+
   return {
     addColumn: (params: { name: string; type: "text" | "number" }) =>
       addColumnMutation.mutateAsync(params),
@@ -247,8 +340,12 @@ export const useColumns = (tableId: string) => {
       deleteColumnMutation.mutateAsync(columnId),
     renameColumn: (params: { columnId: string; newName: string }) =>
       renameColumnMutation.mutateAsync(params),
+    reorderColumns: (params: {
+      columnOrders: { id: string; order: number }[];
+    }) => reorderColumnsMutation.mutateAsync(params),
     isAddingColumn: addColumnMutation.isPending,
     isDeletingColumn: deleteColumnMutation.isPending,
     isRenamingColumn: renameColumnMutation.isPending,
+    isReorderingColumns: reorderColumnsMutation.isPending,
   };
 };
