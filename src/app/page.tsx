@@ -5,8 +5,6 @@ import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
 import { getQueryClient } from "~/lib/query/client";
 import { prefetchBasesList } from "~/lib/query/prefetch";
 import { getUserBases } from "~/lib/actions/bases.action";
-import type { SerializedBase } from "~/types/base";
-
 export const dynamic = "force-dynamic";
 
 export default async function Page() {

@@ -25,6 +25,7 @@ interface BaseTopNavigationProps {
 }
 
 interface HomeTopNavigationProps {
+  isSidebarOpen: boolean;
   onMenuToggle?: (isOpen: boolean) => void;
 }
 
@@ -214,12 +215,12 @@ export function BaseTopNavigation({
   );
 }
 
-export function HomeTopNavigation({ onMenuToggle }: HomeTopNavigationProps) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
+export function HomeTopNavigation({
+  isSidebarOpen,
+  onMenuToggle,
+}: HomeTopNavigationProps) {
   const handleMenuToggle = () => {
     const newState = !isSidebarOpen;
-    setIsSidebarOpen(newState);
     onMenuToggle?.(newState);
   };
 
