@@ -323,10 +323,20 @@ export function EnhancedDataGrid({
       .sort((a, b) => a.order - b.order)
       .map((col) => col.id),
   );
+  const [rowOrder, setRowOrder] = useState<Row[]>(() =>
+    (initialData ?? []).sort((a, b) => a.order - b.order),
+  );
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const { bulkDeleteRows, isBulkDeletingRows } = useRows(tableId);
+
+  // Update row order when initialData changes
+  useEffect(() => {
+    if (initialData) {
+      setRowOrder(initialData.sort((a, b) => a.order - b.order));
+    }
+  }, [initialData]);
 
   // Update column order when columns change (new columns added/removed)
   useEffect(() => {
@@ -348,8 +358,52 @@ export function EnhancedDataGrid({
   }, [initialColumns]);
 
   const data = useMemo<Row[]>(() => {
-    return initialData ?? [];
-  }, [initialData]);
+    return rowOrder;
+  }, [rowOrder]);
+
+  // Function to handle row deletion
+  const handleRowDeleted = (deletedRowId: string) => {
+    setRowOrder((prevRows) => {
+      const deletedRow = prevRows.find((row) => row.id === deletedRowId);
+      if (!deletedRow) return prevRows;
+
+      return prevRows
+        .filter((row) => row.id !== deletedRowId)
+        .map((row) => {
+          if (row.order > deletedRow.order) {
+            return { ...row, order: row.order - 1 };
+          }
+          return row;
+        });
+    });
+
+    // Also update selection state if needed
+    setSelectedRows((prev) => prev.filter((id) => id !== deletedRowId));
+  };
+
+  // Function to handle bulk row deletion
+  const handleBulkRowsDeleted = (deletedRowIds: string[]) => {
+    setRowOrder((prevRows) => {
+      const rowsToDelete = prevRows.filter((row) =>
+        deletedRowIds.includes(row.id),
+      );
+      if (rowsToDelete.length === 0) return prevRows;
+
+      const minOrder = Math.min(...rowsToDelete.map((row) => row.order));
+
+      return prevRows
+        .filter((row) => !deletedRowIds.includes(row.id))
+        .map((row) => {
+          if (row.order > minOrder) {
+            return { ...row, order: row.order - rowsToDelete.length };
+          }
+          return row;
+        });
+    });
+
+    // Clear selection after bulk delete
+    setSelectedRows([]);
+  };
 
   useEffect(() => {
     onDataChange?.(data);
@@ -578,10 +632,15 @@ export function EnhancedDataGrid({
 
   const handleBulkDelete = async () => {
     try {
+      // Update local state immediately
+      handleBulkRowsDeleted(selectedRows);
+
+      // Call server action
       await bulkDeleteRows(selectedRows);
-      setSelectedRows([]);
       toast.success("Rows deleted successfully");
     } catch (error) {
+      // Revert to initial data on error
+      setRowOrder(initialData ?? []);
       toast.error(
         error instanceof Error ? error.message : "Failed to delete rows",
       );
@@ -670,11 +729,7 @@ export function EnhancedDataGrid({
                             onSelectionChange={(selected: boolean) =>
                               handleRowSelectionChange(rowData.id, selected)
                             }
-                            onRowUpdated={() => {
-                              void queryClient.invalidateQueries({
-                                queryKey: queryKeys.tables.detail(tableId),
-                              });
-                            }}
+                            onRowDeleted={handleRowDeleted}
                             dragHandleProps={{
                               attributes: {
                                 "data-index": virtualRow.index,

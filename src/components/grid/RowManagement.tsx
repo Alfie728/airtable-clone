@@ -35,7 +35,7 @@ interface RowManagementProps {
   row: Row;
   isSelected: boolean;
   onSelectionChange: (selected: boolean) => void;
-  onRowUpdated?: () => void;
+  onRowDeleted: (rowId: string) => void;
   dragHandleProps?: {
     listeners?: {
       onKeyDown?: (event: React.KeyboardEvent) => void;
@@ -57,7 +57,7 @@ export function RowManagement({
   row,
   isSelected,
   onSelectionChange,
-  onRowUpdated,
+  onRowDeleted,
   dragHandleProps,
   isDragging,
 }: RowManagementProps) {
@@ -78,12 +78,14 @@ export function RowManagement({
       setShowDeleteDialog(false);
       setIsOpen(false);
 
+      // Update local state immediately
+      onRowDeleted(row.id);
+
       // Call the delete mutation
       const result = await deleteRow(row.id);
 
       if (result.success) {
         toast.success("Row deleted successfully");
-        onRowUpdated?.();
       }
     } catch (error) {
       toast.error(
