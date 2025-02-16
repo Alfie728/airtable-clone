@@ -37,7 +37,7 @@ export default function NewBasePage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      <HomeTopNavigation />
+      <HomeTopNavigation isSidebarOpen={false} />
       <Toaster position="top-center" />
       <main className="flex-1 p-6">
         <div className="mx-auto max-w-2xl">

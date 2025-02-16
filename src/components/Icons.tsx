@@ -1,8 +1,12 @@
 import Link from "next/link";
 
-export const AirtableLogo = () => {
+interface AirtableLogoProps {
+  ref?: React.RefObject<HTMLAnchorElement>;
+}
+
+export const AirtableLogo = ({ ref }: AirtableLogoProps) => {
   return (
-    <Link href="/" className="mr-[5px] mt-1 size-6">
+    <Link href="/" className="mr-[5px] mt-1 size-6" ref={ref}>
       <svg
         width="24"
         height="20.4"

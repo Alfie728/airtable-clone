@@ -12,6 +12,12 @@ export interface ColumnResponse {
   column?: Column;
 }
 
+export interface ColumnOrderResponse {
+  success: boolean;
+  error?: string;
+  columns?: Column[];
+}
+
 export async function addColumn(
   tableId: string,
   name: string,
@@ -31,7 +37,7 @@ export async function addColumn(
 
     const newOrder = (maxOrderResult?.maxOrder ?? -1) + 1;
 
-    // Create the new column
+    // Create the new column with the client-provided name
     const [newColumn] = await db
       .insert(columns)
       .values({
@@ -161,6 +167,53 @@ export async function renameColumn(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to rename column",
+    };
+  }
+}
+
+export async function updateColumnsOrder(
+  tableId: string,
+  columnOrders: { id: string; order: number }[],
+): Promise<ColumnOrderResponse> {
+  try {
+    const user = await currentUser();
+    if (!user) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    // Validate input
+    if (!columnOrders.length) {
+      return { success: false, error: "No columns to update" };
+    }
+
+    // Update each column order sequentially
+    const updatedColumns = [];
+    for (const col of columnOrders) {
+      const [updatedColumn] = await db
+        .update(columns)
+        .set({ order: col.order })
+        .where(and(eq(columns.id, col.id), eq(columns.tableId, tableId)))
+        .returning();
+
+      if (!updatedColumn) {
+        // If any update fails, return error
+        return { success: false, error: `Failed to update column ${col.id}` };
+      }
+      updatedColumns.push(updatedColumn);
+    }
+
+    if (!updatedColumns.length) {
+      return { success: false, error: "Failed to update column orders" };
+    }
+
+    return { success: true, columns: updatedColumns };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to update column orders",
     };
   }
 }

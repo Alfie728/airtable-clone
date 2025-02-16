@@ -83,9 +83,8 @@ export function ColumnManagement({
 
   const handleAddColumn = async () => {
     try {
-      await addColumn({ name: "New Column", type: "text" });
+      await addColumn({ name: "Field", type: "text" });
       toast.success("Column added successfully");
-      onColumnUpdated?.();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to add column",
@@ -155,14 +154,14 @@ export function ColumnManagement({
         size="sm"
         onClick={handleAddColumn}
         disabled={isAddingColumn}
-        className="h-7 gap-2 text-xs hover:bg-gray-50"
+        className="h-8 gap-2 text-xs hover:bg-gray-50"
       >
         {isAddingColumn ? (
           "Adding..."
         ) : (
           <>
             <Plus className="h-3 w-3" />
-            Add column
+            Add field
           </>
         )}
       </Button>

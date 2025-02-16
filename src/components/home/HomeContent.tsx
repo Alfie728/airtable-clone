@@ -33,22 +33,6 @@ export function HomeContent({ bases: initialBases }: HomeContentProps) {
 
   const bases = basesData?.bases ?? initialBases;
 
-  // const tableData = {
-  //   rows: bases.map((base: SerializedBase) => ({
-  //     id: base.id,
-  //     name: base.name,
-  //     description: base.description,
-  //     createdAt: base.createdAt,
-  //     updatedAt: base.updatedAt,
-  //   })),
-  //   columns: [
-  //     { key: "name", name: "Name" },
-  //     { key: "description", name: "Description" },
-  //     { key: "createdAt", name: "Created" },
-  //     { key: "updatedAt", name: "Last modified" },
-  //   ],
-  // };
-
   const handleBaseHover = async (baseId: string) => {
     console.log("Hovering over base:", baseId);
     await prefetchBaseTables(queryClient, baseId);
@@ -56,7 +40,10 @@ export function HomeContent({ bases: initialBases }: HomeContentProps) {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      <HomeTopNavigation onMenuToggle={setIsSidebarOpen} />
+      <HomeTopNavigation
+        isSidebarOpen={isSidebarOpen}
+        onMenuToggle={setIsSidebarOpen}
+      />
       <div className="flex flex-1">
         <HomeSidebar isOpen={isSidebarOpen} />
         <main

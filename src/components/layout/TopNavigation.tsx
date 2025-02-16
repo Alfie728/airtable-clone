@@ -12,15 +12,20 @@ import {
   Menu,
 } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { cn } from "~/lib/utils";
 import { AirtableLogo, AirtableLogoWithText } from "~/components/Icons";
+import { BaseOptionsDropdown } from "~/components/base/BaseOptionsDropdown";
+import { useBase } from "~/hooks/useBase";
+import { toast } from "sonner";
 
 interface BaseTopNavigationProps {
   baseName: string;
+  baseId: string;
 }
 
 interface HomeTopNavigationProps {
+  isSidebarOpen: boolean;
   onMenuToggle?: (isOpen: boolean) => void;
 }
 
@@ -55,22 +60,87 @@ function TopNavButton({
   );
 }
 
-export function BaseTopNavigation({ baseName }: BaseTopNavigationProps) {
+export function BaseTopNavigation({
+  baseName,
+  baseId,
+}: BaseTopNavigationProps) {
   const [activeButton, setActiveButton] = useState<string | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [editedBaseName, setEditedBaseName] = useState(baseName);
+  const triggerRef = useRef<HTMLAnchorElement>(null);
+  const { renameBase } = useBase(baseId);
+
+  const handleRename = () => {
+    setIsRenaming(true);
+    setEditedBaseName(baseName);
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!editedBaseName.trim() || editedBaseName === baseName) {
+      setIsRenaming(false);
+      setIsDropdownOpen(false);
+      return;
+    }
+
+    try {
+      const result = await renameBase(editedBaseName);
+      if (result.success) {
+        toast.success("Base renamed successfully");
+      } else {
+        toast.error(result.error ?? "Failed to rename base");
+        setEditedBaseName(baseName);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to rename base",
+      );
+      setEditedBaseName(baseName);
+    }
+    setIsRenaming(false);
+    setIsDropdownOpen(false);
+  };
+
+  const handleRenameCancel = () => {
+    setIsRenaming(false);
+    setIsDropdownOpen(false);
+    setEditedBaseName(baseName);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void handleRenameSubmit();
+    } else if (e.key === "Escape") {
+      handleRenameCancel();
+    }
+  };
+
   return (
     <header className="flex h-[56px] items-center bg-[#616670] px-4 pl-5">
       <div className="flex h-12 flex-1 items-center justify-between">
         <div className="flex items-center">
-          <div className="flex min-w-[60px] items-center">
-            <AirtableLogo />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 rounded text-[17px] font-[675] leading-6 tracking-[-0.16px] text-white"
-            >
-              {baseName}
-              <ChevronDown className="h-4 w-4" />
-            </Button>
+          <div className="flex min-w-[60px] items-center gap-3">
+            <AirtableLogo ref={triggerRef} />
+            <div className="flex items-center">
+              <span className="text-[17px] font-[675] leading-6 tracking-[-0.16px] text-white">
+                {baseName}
+              </span>
+              <BaseOptionsDropdown
+                isOpen={isDropdownOpen}
+                onOpenChange={setIsDropdownOpen}
+                onRename={handleRename}
+                isRenaming={isRenaming}
+                editedBaseName={editedBaseName}
+                onEditedBaseNameChange={setEditedBaseName}
+                onRenameSubmit={handleRenameSubmit}
+                onRenameCancel={handleRenameCancel}
+                onKeyDown={handleKeyDown}
+                baseName={baseName}
+                baseId={baseId}
+                triggerRef={triggerRef}
+              />
+            </div>
           </div>
           <nav className="flex items-center">
             <TopNavButton
@@ -145,12 +215,12 @@ export function BaseTopNavigation({ baseName }: BaseTopNavigationProps) {
   );
 }
 
-export function HomeTopNavigation({ onMenuToggle }: HomeTopNavigationProps) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
+export function HomeTopNavigation({
+  isSidebarOpen,
+  onMenuToggle,
+}: HomeTopNavigationProps) {
   const handleMenuToggle = () => {
     const newState = !isSidebarOpen;
-    setIsSidebarOpen(newState);
     onMenuToggle?.(newState);
   };
 

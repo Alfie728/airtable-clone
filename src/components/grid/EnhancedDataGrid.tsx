@@ -15,15 +15,36 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
-import { Plus, X } from "lucide-react";
+import { Plus, X, GripVertical } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import type { Row, Column } from "~/types/table";
 import { ColumnManagement } from "./ColumnManagement";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "~/lib/query/keys";
-import { queryClient } from "~/lib/query";
-import { th } from "@faker-js/faker";
+import {
+  DndContext,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  type DragEndEvent,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { toast } from "sonner";
+import { useColumns } from "~/hooks/useColumns";
+import type { Transform } from "@dnd-kit/utilities";
+import { cn } from "~/lib/utils";
+import { height } from "tailwindcss/defaultTheme";
 
 interface TableMeta {
   updateData: (rowIndex: number, columnId: string, value: unknown) => void;
@@ -98,6 +119,7 @@ function EditableCell({ getValue, row, column, table }: EditableCellProps) {
   const [value, setValue] = useState<string | number>(initialValue);
   const [isEditing, setIsEditing] = useState(false);
 
+  // Reset value when the cell's actual value changes
   useEffect(() => {
     setValue(initialValue);
   }, [initialValue]);
@@ -105,16 +127,9 @@ function EditableCell({ getValue, row, column, table }: EditableCellProps) {
   const onBlur = () => {
     setIsEditing(false);
     const columnDef = column as ColumnDefWithMeta;
-    const isNewRow = columnDef.meta?.isNew?.(row.original) ?? false;
 
-    if (isNewRow) {
-      const rowId = row.original.id;
-      const columnId = columnDef.id;
-      const tableMeta = table.options.meta as TableMeta;
-      if (tableMeta?.updateData) {
-        tableMeta.updateData(row.index, columnId, value);
-      }
-    } else {
+    // Only update if value has changed
+    if (value !== initialValue) {
       const tableMeta = table.options.meta as TableMeta;
       if (tableMeta?.updateData) {
         tableMeta.updateData(row.index, columnDef.id, value);
@@ -136,6 +151,9 @@ function EditableCell({ getValue, row, column, table }: EditableCellProps) {
           e.shiftKey,
         );
       }
+    } else if (e.key === "Escape") {
+      setIsEditing(false);
+      setValue(initialValue); // Reset to initial value on escape
     }
   };
 
@@ -167,6 +185,118 @@ function EditableCell({ getValue, row, column, table }: EditableCellProps) {
   );
 }
 
+interface SortableHeaderProps {
+  header: HeaderType;
+}
+
+interface DraggableColumnProps {
+  header: HeaderType;
+  cells: CellType[];
+  virtualizer: ReturnType<
+    typeof useVirtualizer<HTMLDivElement, HTMLTableRowElement>
+  >;
+}
+
+function DraggableColumn({ header, cells, virtualizer }: DraggableColumnProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useSortable({
+      id: header.id,
+      animateLayoutChanges: () => false,
+    });
+
+  const style = {
+    opacity: isDragging ? 0.8 : 1,
+    position: "relative" as const,
+    transform: CSS.Translate.toString(transform),
+    whiteSpace: "nowrap" as const,
+    width: header.getSize() ?? "auto",
+    zIndex: isDragging ? 1 : 0,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "flex flex-col border-r border-gray-200 bg-white",
+        isDragging && "shadow-xl ring-1 ring-gray-200",
+        !isDragging && "cursor-default",
+      )}
+    >
+      <div className="sticky top-0 z-20 border-b border-gray-200 bg-gray-50 shadow-sm">
+        <div className="group flex h-8 items-center px-2 text-left text-xs font-medium text-gray-600">
+          <div
+            className={`flex w-full items-center ${
+              header.column.getCanSort() ? "cursor-pointer select-none" : ""
+            }`}
+            onClick={header.column.getToggleSortingHandler()}
+          >
+            {flexRender(header.column.columnDef.header, header.getContext())}
+          </div>
+          <button
+            {...attributes}
+            {...listeners}
+            className={cn(
+              "ml-1 p-0.5 opacity-0 hover:opacity-100 group-hover:opacity-100",
+              isDragging ? "cursor-grabbing" : "cursor-grab",
+            )}
+          >
+            <GripVertical className="h-3 w-3 text-gray-400" />
+          </button>
+        </div>
+      </div>
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          position: "relative",
+        }}
+      >
+        {virtualizer.getVirtualItems().map((virtualRow) => {
+          const cell = cells[virtualRow.index];
+          if (!cell) {
+            return (
+              <div
+                key={`empty-${virtualRow.index}`}
+                data-index={virtualRow.index}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  transform: `translateY(${virtualRow.start}px)`,
+                  height: `${virtualRow.size}px`,
+                  width: "100%",
+                }}
+                className="flex items-center border-b border-gray-100 px-2 py-1 text-sm text-gray-400"
+              >
+                —
+              </div>
+            );
+          }
+
+          return (
+            <div
+              key={cell.id}
+              data-index={virtualRow.index}
+              style={{
+                position: "absolute",
+                top: 0,
+                transform: `translateY(${virtualRow.start}px)`,
+                height: `${virtualRow.size}px`,
+                width: "100%",
+              }}
+              className={cn(
+                "flex items-center border-b border-gray-100 px-2 py-1 text-sm",
+                !isDragging && "hover:bg-gray-50/50",
+              )}
+            >
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function EnhancedDataGrid({
   baseId,
   tableId,
@@ -185,17 +315,34 @@ export function EnhancedDataGrid({
     columnId: string | null;
   }>({ rowId: null, columnId: null });
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnOrder, setColumnOrder] = useState<string[]>(() =>
+    (initialColumns ?? [])
+      .sort((a, b) => a.order - b.order)
+      .map((col) => col.id),
+  );
   const tableContainerRef = useRef<HTMLDivElement>(null);
-
   const queryClient = useQueryClient();
 
+  // Update column order when columns change (new columns added/removed)
+  useEffect(() => {
+    const sortedColumnIds = (initialColumns ?? [])
+      .sort((a, b) => a.order - b.order)
+      .map((col) => col.id);
+
+    const hasNewColumns = sortedColumnIds.some(
+      (id) => !columnOrder.includes(id),
+    );
+
+    if (hasNewColumns) {
+      setColumnOrder(sortedColumnIds);
+    }
+  }, [initialColumns, columnOrder]);
+
   const columns = useMemo<Column[]>(() => {
-    // Use initial columns directly since we're not fetching here
     return initialColumns ?? [];
   }, [initialColumns]);
 
   const data = useMemo<Row[]>(() => {
-    // Use initial data directly since we're not fetching here
     return initialData ?? [];
   }, [initialData]);
 
@@ -209,22 +356,6 @@ export function EnhancedDataGrid({
 
   const columnHelper = createColumnHelper<Row>();
 
-  // Define default column behavior
-  const defaultColumn: Partial<ColumnDef<Row, string | number>> = useMemo(
-    () => ({
-      cell: (props) => {
-        const cellProps: EditableCellProps = {
-          getValue: props.getValue,
-          row: props.row,
-          column: props.column,
-          table: props.table,
-        };
-        return <EditableCell {...cellProps} />;
-      },
-    }),
-    [],
-  );
-
   const tableColumns = useMemo<ColumnDefWithMeta[]>(() => {
     return columns.map((col) => ({
       id: col.id,
@@ -232,14 +363,25 @@ export function EnhancedDataGrid({
         const value = row[col.name];
         return typeof value === "undefined" ? "" : value;
       },
+      cell: (props) => {
+        const cellProps: EditableCellProps = {
+          getValue: props.getValue,
+          row: props.row,
+          column: props.column,
+          table: props.table,
+        };
+        return (
+          <EditableCell
+            key={`${props.row.id}-${props.column.id}`}
+            {...cellProps}
+          />
+        );
+      },
       meta: {
         name: col.name,
         type: col.type,
         isNew: (row: Row) => {
-          if (!initialData?.some((serverRow) => serverRow.id === row.id)) {
-            return false;
-          }
-          return !initialData.some((serverRow) => serverRow.id === row.id);
+          return !initialData?.some((serverRow) => serverRow.id === row.id);
         },
       },
       header: () => (
@@ -318,17 +460,37 @@ export function EnhancedDataGrid({
     void addBulkRowsAction(BULK_ADD_ROWS_COUNT);
   }
 
+  const { reorderColumns } = useColumns(tableId);
+
   const table = useReactTable<Row>({
     data,
     columns: tableColumns,
-    defaultColumn,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     manualSorting: true,
     state: {
       sorting,
+      columnOrder,
     },
     onSortingChange: setSorting,
+    onColumnOrderChange: (updater) => {
+      const newOrder =
+        typeof updater === "function" ? updater(columnOrder) : updater;
+
+      setColumnOrder(newOrder);
+
+      void reorderColumns({
+        columnOrders: newOrder.map((id, index) => ({
+          id,
+          order: index,
+        })),
+      }).catch((error) => {
+        setColumnOrder(columnOrder);
+        toast.error(
+          error instanceof Error ? error.message : "Failed to reorder columns",
+        );
+      });
+    },
     meta: {
       updateData: (rowIndex: number, columnId: string, value: unknown) => {
         const row = data[rowIndex];
@@ -337,10 +499,30 @@ export function EnhancedDataGrid({
         const column = columns.find((col) => col.id === columnId);
         if (!column) return;
 
+        // Only update the specific cell that was edited
+        const updatedRow = {
+          ...row,
+          [column.name]: value as string | number,
+        } satisfies Row;
+
+        // Update the local data immediately for optimistic updates
+        const newData = [...data];
+        newData[rowIndex] = updatedRow;
+        onDataChange?.(newData);
+
+        // Persist the change to the database
         void updateCellAction({
           rowId: row.id,
           columnId,
           value: String(value),
+        }).then((result) => {
+          if (!result.success) {
+            // Revert the optimistic update if the server update fails
+            const revertedData = [...data];
+            revertedData[rowIndex] = row;
+            onDataChange?.(revertedData);
+            toast.error(result.error ?? "Failed to update cell");
+          }
         });
       },
       handleTabNavigation: (
@@ -357,119 +539,86 @@ export function EnhancedDataGrid({
 
   const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
     count: rows.length,
-    estimateSize: () => 33,
+    estimateSize: () => 36,
     getScrollElement: () => tableContainerRef.current,
-    measureElement:
-      typeof window !== "undefined" && !navigator.userAgent.includes("Firefox")
-        ? (element: HTMLTableRowElement | null) =>
-            element?.getBoundingClientRect().height ?? 33
-        : undefined,
     overscan: 5,
   });
+
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {}),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (active && over && active.id !== over.id) {
+      const oldIndex = columnOrder.indexOf(active.id as string);
+      const newIndex = columnOrder.indexOf(over.id as string);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        table.setColumnOrder((old) => arrayMove(old, oldIndex, newIndex));
+      }
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
       <div
         ref={tableContainerRef}
-        className="flex-1 overflow-auto"
-        style={{
-          position: "relative",
-          scrollBehavior: "smooth",
-        }}
+        className="relative flex-1 overflow-scroll scrollbar-hide"
       >
-        <table style={{ display: "grid", width: "100%" }}>
-          <thead
-            style={{
-              display: "grid",
-              position: "sticky",
-              top: 0,
-              zIndex: 1,
-            }}
-          >
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr
-                key={headerGroup.id}
-                style={{ display: "flex", width: "100%" }}
-                className="bg-gray-50"
-              >
-                {headerGroup.headers.map((header) => (
-                  <th
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToHorizontalAxis]}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="inline-flex min-w-full">
+            <SortableContext
+              items={table.getState().columnOrder}
+              strategy={horizontalListSortingStrategy}
+            >
+              {table.getHeaderGroups()[0]?.headers.map((header) => {
+                const columnCells = rows
+                  .map((row) =>
+                    row
+                      .getVisibleCells()
+                      .find((cell) => cell.column.id === header.id),
+                  )
+                  .filter((cell): cell is CellType => cell !== undefined);
+
+                return (
+                  <DraggableColumn
                     key={header.id}
-                    style={{
-                      width: header.getSize() ?? "auto",
-                    }}
-                    className="flex border-b border-r border-gray-200 px-2 py-1 text-left text-xs font-medium text-gray-600"
-                  >
-                    <div
-                      className={`flex w-full items-center ${
-                        header.column.getCanSort()
-                          ? "cursor-pointer select-none"
-                          : ""
-                      }`}
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                    </div>
-                  </th>
-                ))}
-                <th className="border-b border-r border-gray-200 px-1 py-1">
-                  <ColumnManagement
-                    tableId={tableId}
-                    onColumnUpdated={() => {
-                      void queryClient.invalidateQueries({
-                        queryKey: queryKeys.tables.detail(tableId),
-                      });
-                    }}
+                    header={header}
+                    cells={columnCells}
+                    virtualizer={rowVirtualizer}
                   />
-                </th>
-              </tr>
-            ))}
-          </thead>
-          <tbody
-            style={{
-              display: "grid",
-              height: `${rowVirtualizer.getTotalSize()}px`,
-              position: "relative",
-            }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const row = rows[virtualRow.index] as RowType;
-              return (
-                <tr
-                  key={row.id}
-                  data-index={virtualRow.index}
-                  ref={(node) => rowVirtualizer.measureElement(node)}
-                  style={{
-                    display: "flex",
-                    position: "absolute",
-                    transform: `translateY(${virtualRow.start}px)`,
-                    width: "100%",
-                  }}
-                  className="hover:bg-gray-50/50"
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      style={{
-                        display: "flex",
-                        width: cell.column.getSize() ?? "auto",
-                      }}
-                      className="border-b border-r border-gray-100 px-2 py-[3px] text-sm"
-                    >
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                );
+              }) ?? []}
+            </SortableContext>
+            <div className="sticky right-0 top-0 z-20 flex h-full items-center border-b border-r border-gray-200 bg-gray-50 px-1 shadow-sm">
+              <ColumnManagement
+                tableId={tableId}
+                onColumnUpdated={() => {
+                  void queryClient.invalidateQueries({
+                    queryKey: queryKeys.tables.detail(tableId),
+                  });
+                }}
+              />
+            </div>
+          </div>
+        </DndContext>
       </div>
       <div className="border-t border-gray-200 bg-white p-2">
         <div className="flex gap-2">
