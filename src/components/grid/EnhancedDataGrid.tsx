@@ -838,7 +838,7 @@ export function EnhancedDataGrid({
                               zIndex: isDragging ? 1 : 0,
                             }}
                             className={cn(
-                              "group flex items-center border-b border-gray-100",
+                              "group flex items-center border-b border-gray-300",
                               isDragging &&
                                 "bg-white shadow-xl ring-1 ring-gray-200",
                             )}
