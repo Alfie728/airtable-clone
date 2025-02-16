@@ -17,6 +17,8 @@ import { getDefaultView } from "~/lib/actions/views.action";
 import { useViews } from "~/hooks/useViews";
 import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
 import { queryKeys } from "~/lib/query/keys";
+import { type SortingState } from "@tanstack/react-table";
+import { useTableSort } from "~/hooks/useTableSort";
 
 interface BaseClientProps {
   baseId: string;
@@ -33,7 +35,13 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   const [pendingActiveTableId, setPendingActiveTableId] = useState<
     string | null
   >(null);
+  const [sorting, setSorting] = useState<SortingState>([]);
   const queryClient = useQueryClient();
+  const {
+    initialSortState,
+    updateSort,
+    isUpdating: isUpdatingSort,
+  } = useTableSort(viewId);
 
   const {
     baseName,
@@ -61,6 +69,27 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     isLoading: isViewsLoading,
     error: viewsError,
   } = useViews(tableId);
+
+  // Initialize sorting state from view
+  useEffect(() => {
+    if (initialSortState) {
+      setSorting(initialSortState);
+    }
+  }, [initialSortState]);
+
+  // Handle sorting changes
+  const handleSortingChange = async (newSorting: SortingState) => {
+    setSorting(newSorting);
+    try {
+      await updateSort(newSorting);
+    } catch (error) {
+      toast.error("Failed to update sorting");
+      // Revert to previous state on error
+      if (initialSortState) {
+        setSorting(initialSortState);
+      }
+    }
+  };
 
   // Add error handling for views
   useEffect(() => {
@@ -247,6 +276,9 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         <GridControls
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          columns={tableData?.columns ?? []}
+          sorting={sorting}
+          onSortingChange={handleSortingChange}
         />
 
         {!isAddingTable && (
@@ -310,6 +342,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   updateCellAction={updateCell}
                   isAddingRow={isAddingRow}
                   isBatchAdding={isBatchAdding}
+                  sorting={sorting}
+                  onSortingChange={handleSortingChange}
                 />
               )
             )}

@@ -58,7 +58,7 @@ import { useRows, type RowOperations } from "~/hooks/useRows";
 import { RowManagement } from "./RowManagement";
 import { Checkbox } from "~/components/ui/checkbox";
 import type { Active } from "@dnd-kit/core";
-import { useTableSort } from "~/hooks/useTableSort";
+import { SortControls } from "./SortControls";
 
 interface TableMeta {
   updateData: (rowIndex: number, columnId: string, value: unknown) => void;
@@ -104,6 +104,8 @@ interface EnhancedDataGridProps {
   }) => Promise<{ success: boolean; error?: string }>;
   isAddingRow: boolean;
   isBatchAdding: boolean;
+  sorting: SortingState;
+  onSortingChange: (sorting: SortingState) => void;
 }
 
 // Add useSkipper hook for better pagination handling
@@ -240,12 +242,7 @@ function DraggableColumn({ header, cells, virtualizer }: DraggableColumnProps) {
     >
       <div className="sticky top-0 z-20 border-b border-gray-200 bg-gray-50 shadow-sm">
         <div className="group flex h-8 items-center px-2 text-left text-xs font-medium text-gray-600">
-          <div
-            className={`flex w-full items-center ${
-              header.column.getCanSort() ? "cursor-pointer select-none" : ""
-            }`}
-            onClick={header.column.getToggleSortingHandler()}
-          >
+          <div className="flex w-full items-center">
             {flexRender(header.column.columnDef.header, header.getContext())}
           </div>
           <button
@@ -327,12 +324,13 @@ export function EnhancedDataGrid({
   updateCellAction,
   isAddingRow,
   isBatchAdding,
+  sorting,
+  onSortingChange,
 }: EnhancedDataGridProps) {
   const [editingCell, setEditingCell] = useState<{
     rowId: string | null;
     columnId: string | null;
   }>({ rowId: null, columnId: null });
-  const [sorting, setSorting] = useState<SortingState>([]);
   const [columnOrder, setColumnOrder] = useState<string[]>(() =>
     (initialColumns ?? [])
       .sort((a, b) => a.order - b.order)
@@ -346,21 +344,6 @@ export function EnhancedDataGrid({
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const { bulkDeleteRows, isBulkDeletingRows, reorderRows } = useRows(tableId);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const {
-    initialSortState,
-    updateSort,
-    isUpdating: isUpdatingSort,
-  } = useTableSort(viewId);
-
-  // Update the initialSortState usage
-  useEffect(() => {
-    if (
-      initialSortState &&
-      JSON.stringify(initialSortState) !== JSON.stringify(sorting)
-    ) {
-      setSorting(initialSortState);
-    }
-  }, [initialSortState]);
 
   // Update row order when initialData changes
   useEffect(() => {
@@ -480,10 +463,9 @@ export function EnhancedDataGrid({
           <div className="flex items-center gap-2">
             <span>{col.name}</span>
             {column.getCanSort() && (
-              <button
-                onClick={column.getToggleSortingHandler()}
+              <div
                 className={cn(
-                  "h-4 w-4 text-gray-400 hover:text-gray-600",
+                  "h-4 w-4 text-gray-400",
                   column.getIsSorted() && "text-blue-600",
                 )}
               >
@@ -494,7 +476,7 @@ export function EnhancedDataGrid({
                 ) : (
                   <ArrowUpDown className="h-4 w-4" />
                 )}
-              </button>
+              </div>
             )}
           </div>
           <ColumnManagement
@@ -593,11 +575,7 @@ export function EnhancedDataGrid({
     onSortingChange: (updater) => {
       const newSorting =
         typeof updater === "function" ? updater(sorting) : updater;
-
-      if (JSON.stringify(newSorting) !== JSON.stringify(sorting)) {
-        setSorting(newSorting);
-        void updateSort(newSorting);
-      }
+      onSortingChange(newSorting);
     },
     onColumnOrderChange: (updater) => {
       const newOrder =

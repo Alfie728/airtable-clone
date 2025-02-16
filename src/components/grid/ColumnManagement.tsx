@@ -37,6 +37,8 @@ import {
   MoreHorizontal,
   HelpCircle,
   ChevronDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useColumns } from "~/hooks/useColumns";
@@ -302,11 +304,11 @@ export function ColumnManagement({
                 Edit field permissions
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onSort?.("asc")}>
                 <ArrowDownAZ className="mr-2 h-4 w-4" />
                 Sort A → Z
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onSort?.("desc")}>
                 <ArrowDownZA className="mr-2 h-4 w-4" />
                 Sort Z → A
               </DropdownMenuItem>
