@@ -46,12 +46,16 @@ interface ColumnManagementProps {
   tableId: string;
   column?: Column;
   onColumnUpdated?: () => void;
+  onSort?: (direction: "asc" | "desc" | false) => void;
+  sortDirection?: "asc" | "desc" | null;
 }
 
 export function ColumnManagement({
   tableId,
   column,
   onColumnUpdated,
+  onSort,
+  sortDirection,
 }: ColumnManagementProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);

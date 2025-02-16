@@ -13,6 +13,7 @@ import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { getDefaultView } from "~/lib/actions/views.action";
 
 interface BaseClientProps {
   baseId: string;
@@ -51,21 +52,42 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
   // Handle navigation for empty base and invalid table ID
   useEffect(() => {
-    if (!isBaseLoading && !isTableLoading) {
-      // Only handle navigation after both base and table data are loaded
-      if (!baseTables || baseTables.length === 0) {
-        router.replace("/");
-      } else if (
-        !isAddingTable &&
-        baseTables.length > 0 &&
-        (tableId === "tables" || !baseTables.some((t) => t.id === tableId))
-      ) {
-        const firstTable = baseTables[0];
-        if (firstTable) {
-          router.replace(`/${baseId}/${firstTable.id}/grid`, { scroll: false });
+    async function handleNavigation() {
+      if (!isBaseLoading && !isTableLoading) {
+        // Only handle navigation after both base and table data are loaded
+        if (!baseTables || baseTables.length === 0) {
+          router.replace("/");
+        } else if (
+          !isAddingTable &&
+          baseTables.length > 0 &&
+          (tableId === "tables" || !baseTables.some((t) => t.id === tableId))
+        ) {
+          const firstTable = baseTables[0];
+          if (firstTable) {
+            try {
+              // Get or create the default view ID
+              const { viewId, error } = await getDefaultView(firstTable.id);
+              if (!viewId) {
+                console.error("Failed to get or create default view:", error);
+                toast.error(
+                  "Failed to load table view. Please contact support if this persists.",
+                );
+                return;
+              }
+              router.replace(`/${baseId}/${firstTable.id}/${viewId}`, {
+                scroll: false,
+              });
+            } catch (err) {
+              console.error("Error during navigation:", err);
+              toast.error(
+                "Error loading view. Please contact support if this persists.",
+              );
+            }
+          }
         }
       }
     }
+    void handleNavigation();
   }, [
     isBaseLoading,
     isTableLoading,
@@ -97,9 +119,29 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     }
   };
 
-  const handleTableSelect = (tableId: string) => {
-    setPendingActiveTableId(null);
-    router.replace(`/${baseId}/${tableId}/grid`, { scroll: false });
+  const handleTableSelect = async (tableId: string) => {
+    try {
+      setPendingActiveTableId(null);
+
+      // Get or create the default view ID
+      const { viewId, error } = await getDefaultView(tableId);
+      if (!viewId) {
+        console.error("Failed to get or create default view:", error);
+        toast.error(
+          "Failed to load table view. Please contact support if this persists.",
+        );
+        return;
+      }
+
+      router.replace(`/${baseId}/${tableId}/${viewId}`, { scroll: false });
+    } catch (err) {
+      const error =
+        err instanceof Error ? err.message : "Unknown error occurred";
+      console.error("Error handling table selection:", error);
+      toast.error(
+        "Error selecting table. Please contact support if this persists.",
+      );
+    }
   };
 
   if (baseError) {
@@ -206,6 +248,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                 <EnhancedDataGrid
                   baseId={baseId}
                   tableId={tableId}
+                  viewId={viewId}
                   initialData={tableData.data}
                   initialColumns={tableData.columns}
                   addRowAction={addRow}

@@ -50,6 +50,7 @@ import { useRows, type RowOperations } from "~/hooks/useRows";
 import { RowManagement } from "./RowManagement";
 import { Checkbox } from "~/components/ui/checkbox";
 import type { Active } from "@dnd-kit/core";
+import { useTableSort } from "~/hooks/useTableSort";
 
 interface TableMeta {
   updateData: (rowIndex: number, columnId: string, value: unknown) => void;
@@ -81,6 +82,7 @@ const BULK_ADD_ROWS_COUNT = 100;
 interface EnhancedDataGridProps {
   baseId: string;
   tableId: string;
+  viewId: string;
   initialData?: Row[];
   initialColumns?: Column[];
   onDataChange?: (data: Row[]) => void;
@@ -307,6 +309,7 @@ function DraggableColumn({ header, cells, virtualizer }: DraggableColumnProps) {
 export function EnhancedDataGrid({
   baseId,
   tableId,
+  viewId,
   initialData,
   initialColumns,
   onDataChange,
@@ -335,6 +338,21 @@ export function EnhancedDataGrid({
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const { bulkDeleteRows, isBulkDeletingRows, reorderRows } = useRows(tableId);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const {
+    initialSortState,
+    updateSort,
+    isUpdating: isUpdatingSort,
+  } = useTableSort(viewId);
+
+  // Update the initialSortState usage
+  useEffect(() => {
+    if (
+      initialSortState &&
+      JSON.stringify(initialSortState) !== JSON.stringify(sorting)
+    ) {
+      setSorting(initialSortState);
+    }
+  }, [initialSortState]);
 
   // Update row order when initialData changes
   useEffect(() => {
@@ -441,6 +459,7 @@ export function EnhancedDataGrid({
           />
         );
       },
+      enableSorting: col.isSortable,
       meta: {
         name: col.name,
         type: col.type,
@@ -448,9 +467,11 @@ export function EnhancedDataGrid({
           return !initialData?.some((serverRow) => serverRow.id === row.id);
         },
       },
-      header: () => (
+      header: ({ column }) => (
         <div className="flex w-full items-center justify-between">
-          <span>{col.name}</span>
+          <div className="flex items-center gap-2">
+            <span>{col.name}</span>
+          </div>
           <ColumnManagement
             tableId={tableId}
             column={col}
@@ -459,6 +480,14 @@ export function EnhancedDataGrid({
                 queryKey: queryKeys.tables.detail(tableId),
               });
             }}
+            onSort={(direction) => {
+              if (!direction) {
+                column.clearSorting();
+              } else {
+                column.toggleSorting(direction === "desc");
+              }
+            }}
+            sortDirection={column.getIsSorted() as "asc" | "desc" | null}
           />
         </div>
       ),
@@ -531,12 +560,20 @@ export function EnhancedDataGrid({
     columns: tableColumns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    manualSorting: true,
+    manualSorting: false,
     state: {
       sorting,
       columnOrder,
     },
-    onSortingChange: setSorting,
+    onSortingChange: (updater) => {
+      const newSorting =
+        typeof updater === "function" ? updater(sorting) : updater;
+
+      if (JSON.stringify(newSorting) !== JSON.stringify(sorting)) {
+        setSorting(newSorting);
+        void updateSort(newSorting);
+      }
+    },
     onColumnOrderChange: (updater) => {
       const newOrder =
         typeof updater === "function" ? updater(columnOrder) : updater;
