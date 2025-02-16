@@ -5,6 +5,7 @@ import type { BaseResponse } from "~/types/base";
 import { type tables } from "~/server/db/schema";
 import { queryKeys } from "./keys";
 import { getUserBases } from "~/lib/actions/bases.action";
+import { getDefaultView } from "~/lib/actions/views.action";
 
 type TableType = typeof tables.$inferSelect;
 
@@ -77,16 +78,27 @@ export async function prefetchBaseTables(
     staleTime: 10 * 1000,
   });
 
-  // If we have tables, prefetch each table's data
+  // If we have tables, prefetch each table's data and their default views
   if (tablesResult.success && tablesResult.tables) {
     await Promise.all(
-      tablesResult.tables.map((table) =>
-        queryClient.prefetchQuery({
+      tablesResult.tables.map(async (table) => {
+        // Prefetch table data
+        await queryClient.prefetchQuery({
           queryKey: queryKeys.tables.detail(table.id),
           queryFn: () => getTableData(table.id, table.name),
           staleTime: 5 * 1000,
-        }),
-      ),
+        });
+
+        // Prefetch table views
+        await queryClient.prefetchQuery({
+          queryKey: queryKeys.tables.views.list(table.id),
+          queryFn: async () => {
+            const { viewId } = await getDefaultView(table.id);
+            return viewId;
+          },
+          staleTime: 5 * 1000,
+        });
+      }),
     );
   }
 }

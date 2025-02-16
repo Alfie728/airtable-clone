@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { getDefaultView } from "~/lib/actions/views.action";
 import { useViews } from "~/hooks/useViews";
 import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
+import { queryKeys } from "~/lib/query/keys";
 
 interface BaseClientProps {
   baseId: string;
@@ -70,7 +71,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
   // Handle navigation for empty base and invalid table ID
   useEffect(() => {
-    async function handleNavigation() {
+    function handleNavigation() {
       if (!isBaseLoading && !isTableLoading) {
         // Only handle navigation after both base and table data are loaded
         if (!baseTables || baseTables.length === 0) {
@@ -82,9 +83,23 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         ) {
           const firstTable = baseTables[0];
           if (firstTable) {
-            try {
-              // Get or create the default view ID
-              const { viewId, error } = await getDefaultView(firstTable.id);
+            // Try to get the cached view first
+            const cachedView = queryClient.getQueryData<string>(
+              queryKeys.tables.views.list(firstTable.id),
+            );
+
+            if (cachedView) {
+              router.replace(`/${baseId}/${firstTable.id}/${cachedView}`, {
+                scroll: false,
+              });
+              return;
+            }
+
+            // If no cached view, show loading state and fetch it
+            router.replace(`/${baseId}/${firstTable.id}/loading`, {
+              scroll: false,
+            });
+            void getDefaultView(firstTable.id).then(({ viewId, error }) => {
               if (!viewId) {
                 console.error("Failed to get or create default view:", error);
                 toast.error(
@@ -92,20 +107,20 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                 );
                 return;
               }
+              // Cache the view ID for future use
+              queryClient.setQueryData(
+                queryKeys.tables.views.list(firstTable.id),
+                viewId,
+              );
               router.replace(`/${baseId}/${firstTable.id}/${viewId}`, {
                 scroll: false,
               });
-            } catch (err) {
-              console.error("Error during navigation:", err);
-              toast.error(
-                "Error loading view. Please contact support if this persists.",
-              );
-            }
+            });
           }
         }
       }
     }
-    void handleNavigation();
+    handleNavigation();
   }, [
     isBaseLoading,
     isTableLoading,
@@ -114,6 +129,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     tableId,
     baseId,
     router,
+    queryClient,
   ]);
 
   const handleTableCreated = async (newTable: typeof tables.$inferSelect) => {
@@ -137,21 +153,38 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     }
   };
 
-  const handleTableSelect = async (tableId: string) => {
+  const handleTableSelect = (tableId: string) => {
     try {
       setPendingActiveTableId(null);
 
-      // Get or create the default view ID
-      const { viewId, error } = await getDefaultView(tableId);
-      if (!viewId) {
-        console.error("Failed to get or create default view:", error);
-        toast.error(
-          "Failed to load table view. Please contact support if this persists.",
-        );
+      // Start navigation immediately with a loading state
+      router.prefetch(`/${baseId}/${tableId}/grid`);
+
+      // Try to get the cached view first
+      const cachedView = queryClient.getQueryData<string>(
+        queryKeys.tables.views.list(tableId),
+      );
+      if (cachedView) {
+        router.replace(`/${baseId}/${tableId}/${cachedView}`, {
+          scroll: false,
+        });
         return;
       }
 
-      router.replace(`/${baseId}/${tableId}/${viewId}`, { scroll: false });
+      // If no cached view, show loading state and fetch it
+      router.replace(`/${baseId}/${tableId}/loading`, { scroll: false });
+      void getDefaultView(tableId).then(({ viewId, error }) => {
+        if (!viewId) {
+          console.error("Failed to get or create default view:", error);
+          toast.error(
+            "Failed to load table view. Please contact support if this persists.",
+          );
+          return;
+        }
+        // Cache the view ID for future use
+        queryClient.setQueryData(queryKeys.tables.views.list(tableId), viewId);
+        router.replace(`/${baseId}/${tableId}/${viewId}`, { scroll: false });
+      });
     } catch (err) {
       const error =
         err instanceof Error ? err.message : "Unknown error occurred";
