@@ -15,7 +15,15 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
-import { Plus, X, GripVertical, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import {
+  Plus,
+  X,
+  GripVertical,
+  Trash2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import type { Row, Column } from "~/types/table";
@@ -476,7 +484,7 @@ export function EnhancedDataGrid({
                 onClick={column.getToggleSortingHandler()}
                 className={cn(
                   "h-4 w-4 text-gray-400 hover:text-gray-600",
-                  column.getIsSorted() && "text-blue-600"
+                  column.getIsSorted() && "text-blue-600",
                 )}
               >
                 {column.getIsSorted() === "asc" ? (

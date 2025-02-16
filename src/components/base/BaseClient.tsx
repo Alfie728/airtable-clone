@@ -14,6 +14,8 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { getDefaultView } from "~/lib/actions/views.action";
+import { useViews } from "~/hooks/useViews";
+import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
 
 interface BaseClientProps {
   baseId: string;
@@ -23,7 +25,10 @@ interface BaseClientProps {
 
 export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   const router = useRouter();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useLocalStorageBoolean(
+    "sidebarOpen",
+    true,
+  );
   const [pendingActiveTableId, setPendingActiveTableId] = useState<
     string | null
   >(null);
@@ -49,6 +54,19 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     renameTable,
     isRenaming,
   } = useTable(baseId, tableId);
+
+  const {
+    views: tableViews,
+    isLoading: isViewsLoading,
+    error: viewsError,
+  } = useViews(tableId);
+
+  // Add error handling for views
+  useEffect(() => {
+    if (viewsError) {
+      toast.error(viewsError.message ?? "Failed to load views");
+    }
+  }, [viewsError]);
 
   // Handle navigation for empty base and invalid table ID
   useEffect(() => {
@@ -206,11 +224,14 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
             )}
           >
             <Sidebar
-              isAddingTable={isAddingTable}
-              tables={baseTables ?? []}
-              currentTableId={tableId}
-              onTableSelect={handleTableSelect}
-              pendingActiveTableId={pendingActiveTableId}
+              views={tableViews ?? []}
+              currentViewId={viewId}
+              onViewSelect={(selectedViewId) => {
+                router.push(`/${baseId}/${tableId}/${selectedViewId}`, {
+                  scroll: false,
+                });
+              }}
+              isAddingView={false}
             />
           </div>
         )}

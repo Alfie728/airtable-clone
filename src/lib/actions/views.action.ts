@@ -73,3 +73,21 @@ export async function getDefaultView(
     };
   }
 }
+
+export async function getTableViews(tableId: string) {
+  try {
+    const tableViews = await db
+      .select()
+      .from(views)
+      .where(eq(views.tableId, tableId))
+      .orderBy(views.createdAt);
+
+    return { success: true, views: tableViews };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to get table views",
+    };
+  }
+}
