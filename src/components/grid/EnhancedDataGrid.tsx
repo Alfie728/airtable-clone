@@ -15,7 +15,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
-import { Plus, X, GripVertical } from "lucide-react";
+import { Plus, X, GripVertical, Trash2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import type { Row, Column } from "~/types/table";
@@ -45,6 +45,9 @@ import { useColumns } from "~/hooks/useColumns";
 import type { Transform } from "@dnd-kit/utilities";
 import { cn } from "~/lib/utils";
 import { height } from "tailwindcss/defaultTheme";
+import { useRows, type RowOperations } from "~/hooks/useRows";
+import { RowManagement } from "./RowManagement";
+import { Checkbox } from "~/components/ui/checkbox";
 
 interface TableMeta {
   updateData: (rowIndex: number, columnId: string, value: unknown) => void;
@@ -322,6 +325,8 @@ export function EnhancedDataGrid({
   );
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const [selectedRows, setSelectedRows] = useState<string[]>([]);
+  const { bulkDeleteRows, isBulkDeletingRows } = useRows(tableId);
 
   // Update column order when columns change (new columns added/removed)
   useEffect(() => {
@@ -571,6 +576,30 @@ export function EnhancedDataGrid({
     }
   };
 
+  const handleBulkDelete = async () => {
+    try {
+      await bulkDeleteRows(selectedRows);
+      setSelectedRows([]);
+      toast.success("Rows deleted successfully");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete rows",
+      );
+    }
+  };
+
+  const handleRowSelectionChange = (rowId: string, selected: boolean) => {
+    setSelectedRows((prev) =>
+      selected ? [...prev, rowId] : prev.filter((id) => id !== rowId),
+    );
+  };
+
+  const handleSelectAllRows = (selected: boolean) => {
+    setSelectedRows(
+      selected ? table.getRowModel().rows.map((row) => row.original.id) : [],
+    );
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div
@@ -588,6 +617,75 @@ export function EnhancedDataGrid({
               items={table.getState().columnOrder}
               strategy={horizontalListSortingStrategy}
             >
+              <div
+                className="flex flex-col border-r border-gray-200 bg-white"
+                style={{
+                  width: "69px",
+                }}
+              >
+                <div className="sticky top-0 z-20 border-b border-gray-200 bg-gray-50 shadow-sm">
+                  <div className="flex h-8 items-center px-2">
+                    <Checkbox
+                      checked={
+                        table.getRowModel().rows.length > 0 &&
+                        selectedRows.length === table.getRowModel().rows.length
+                      }
+                      onCheckedChange={handleSelectAllRows}
+                      className="ml-[14px] h-3.5 w-3.5 rounded-[4px] border-gray-300"
+                      aria-label="Select all rows"
+                    />
+                  </div>
+                </div>
+                <div
+                  style={{
+                    height: `${rowVirtualizer.getTotalSize()}px`,
+                    position: "relative",
+                  }}
+                >
+                  {rowVirtualizer
+                    .getVirtualItems()
+                    .map((virtualRow: VirtualItem) => {
+                      const row = rows[virtualRow.index];
+                      if (!row) return null;
+
+                      const rowData = row.original;
+
+                      return (
+                        <div
+                          key={rowData.id}
+                          data-index={virtualRow.index}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            transform: `translateY(${virtualRow.start}px)`,
+                            height: `${virtualRow.size}px`,
+                            width: "100%",
+                          }}
+                          className="group flex items-center border-b border-gray-100"
+                        >
+                          <RowManagement
+                            tableId={tableId}
+                            row={rowData}
+                            isSelected={selectedRows.includes(rowData.id)}
+                            onSelectionChange={(selected: boolean) =>
+                              handleRowSelectionChange(rowData.id, selected)
+                            }
+                            onRowUpdated={() => {
+                              void queryClient.invalidateQueries({
+                                queryKey: queryKeys.tables.detail(tableId),
+                              });
+                            }}
+                            dragHandleProps={{
+                              attributes: {
+                                "data-index": virtualRow.index,
+                              },
+                            }}
+                          />
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
               {table.getHeaderGroups()[0]?.headers.map((header) => {
                 const columnCells = rows
                   .map((row) =>
@@ -622,33 +720,66 @@ export function EnhancedDataGrid({
       </div>
       <div className="border-t border-gray-200 bg-white p-2">
         <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => void addRowAction()}
-            className="h-7 gap-2 text-xs hover:bg-gray-50"
-            disabled={isAddingRow}
-          >
-            {isAddingRow ? (
-              "Adding..."
-            ) : (
-              <>
-                <Plus className="h-3 w-3" />
-                Add record
-              </>
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleAddBulkRows}
-            className="h-7 gap-2 text-xs hover:bg-gray-50"
-            disabled={isBatchAdding}
-          >
-            {isBatchAdding
-              ? `Adding ${BULK_ADD_ROWS_COUNT} rows...`
-              : `Add ${BULK_ADD_ROWS_COUNT} rows`}
-          </Button>
+          {selectedRows.length > 0 ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleBulkDelete()}
+                className="h-7 gap-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-600"
+                disabled={isBulkDeletingRows}
+              >
+                {isBulkDeletingRows ? (
+                  "Deleting..."
+                ) : (
+                  <>
+                    <Trash2 className="h-3 w-3" />
+                    Delete {selectedRows.length} row
+                    {selectedRows.length === 1 ? "" : "s"}
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedRows([])}
+                className="h-7 gap-2 text-xs hover:bg-gray-50"
+              >
+                <X className="h-3 w-3" />
+                Clear selection
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void addRowAction()}
+                className="h-7 gap-2 text-xs hover:bg-gray-50"
+                disabled={isAddingRow}
+              >
+                {isAddingRow ? (
+                  "Adding..."
+                ) : (
+                  <>
+                    <Plus className="h-3 w-3" />
+                    Add record
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleAddBulkRows}
+                className="h-7 gap-2 text-xs hover:bg-gray-50"
+                disabled={isBatchAdding}
+              >
+                {isBatchAdding
+                  ? `Adding ${BULK_ADD_ROWS_COUNT} rows...`
+                  : `Add ${BULK_ADD_ROWS_COUNT} rows`}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>
