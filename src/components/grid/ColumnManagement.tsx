@@ -154,7 +154,7 @@ export function ColumnManagement({
         size="sm"
         onClick={handleAddColumn}
         disabled={isAddingColumn}
-        className="h-7 gap-2 text-xs hover:bg-gray-50"
+        className="h-8 gap-2 text-xs hover:bg-gray-50"
       >
         {isAddingColumn ? (
           "Adding..."

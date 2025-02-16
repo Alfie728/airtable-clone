@@ -290,20 +290,16 @@ export const useColumns = (tableId: string) => {
       );
 
       if (previousData?.table) {
-        // Create a map of new orders
         const orderMap = new Map(
           columnOrders.map((col) => [col.id, col.order]),
         );
 
-        // Update columns with new orders
-        const updatedColumns = previousData.table.columns.map((col) => ({
+        const updatedColumns = [...previousData.table.columns].map((col) => ({
           ...col,
           order: orderMap.get(col.id) ?? col.order,
         }));
 
-        // Sort columns by new order
-        updatedColumns.sort((a, b) => a.order - b.order);
-
+        // Update the cache with sorted columns
         queryClient.setQueryData<TableResponse>(
           queryKeys.tables.detail(tableId),
           {
@@ -324,12 +320,10 @@ export const useColumns = (tableId: string) => {
           queryKeys.tables.detail(tableId),
           context.previousData,
         );
+        toast.error(
+          err instanceof Error ? err.message : "Failed to reorder columns",
+        );
       }
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.tables.detail(tableId),
-      });
     },
   });
 

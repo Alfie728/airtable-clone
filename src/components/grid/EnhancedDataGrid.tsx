@@ -205,13 +205,12 @@ function DraggableColumn({ header, cells, virtualizer }: DraggableColumnProps) {
     });
 
   const style = {
-    opacity: isDragging ? 1 : 1,
+    opacity: isDragging ? 0.8 : 1,
     position: "relative" as const,
     transform: CSS.Translate.toString(transform),
-    transition: isDragging ? undefined : "transform 200ms ease-out",
+    whiteSpace: "nowrap" as const,
     width: header.getSize() ?? "auto",
-    zIndex: isDragging ? 2 : 0,
-    touchAction: "none",
+    zIndex: isDragging ? 1 : 0,
   };
 
   return (
@@ -220,7 +219,7 @@ function DraggableColumn({ header, cells, virtualizer }: DraggableColumnProps) {
       style={style}
       className={cn(
         "flex flex-col border-r border-gray-200 bg-white",
-        isDragging && "rounded-md shadow-xl ring-1 ring-gray-200",
+        isDragging && "shadow-xl ring-1 ring-gray-200",
         !isDragging && "cursor-default",
       )}
     >
@@ -316,23 +315,20 @@ export function EnhancedDataGrid({
     columnId: string | null;
   }>({ rowId: null, columnId: null });
   const [sorting, setSorting] = useState<SortingState>([]);
-  const tableContainerRef = useRef<HTMLDivElement>(null);
-
-  const queryClient = useQueryClient();
-
   const [columnOrder, setColumnOrder] = useState<string[]>(() =>
     (initialColumns ?? [])
       .sort((a, b) => a.order - b.order)
       .map((col) => col.id),
   );
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
-  // Update columnOrder when columns change
+  // Update column order when columns change (new columns added/removed)
   useEffect(() => {
     const sortedColumnIds = (initialColumns ?? [])
       .sort((a, b) => a.order - b.order)
       .map((col) => col.id);
 
-    // Check if we have any new columns that aren't in the current order
     const hasNewColumns = sortedColumnIds.some(
       (id) => !columnOrder.includes(id),
     );
@@ -347,7 +343,6 @@ export function EnhancedDataGrid({
   }, [initialColumns]);
 
   const data = useMemo<Row[]>(() => {
-    // Use initial data directly since we're not fetching here
     return initialData ?? [];
   }, [initialData]);
 
@@ -465,6 +460,8 @@ export function EnhancedDataGrid({
     void addBulkRowsAction(BULK_ADD_ROWS_COUNT);
   }
 
+  const { reorderColumns } = useColumns(tableId);
+
   const table = useReactTable<Row>({
     data,
     columns: tableColumns,
@@ -473,8 +470,27 @@ export function EnhancedDataGrid({
     manualSorting: true,
     state: {
       sorting,
+      columnOrder,
     },
     onSortingChange: setSorting,
+    onColumnOrderChange: (updater) => {
+      const newOrder =
+        typeof updater === "function" ? updater(columnOrder) : updater;
+
+      setColumnOrder(newOrder);
+
+      void reorderColumns({
+        columnOrders: newOrder.map((id, index) => ({
+          id,
+          order: index,
+        })),
+      }).catch((error) => {
+        setColumnOrder(columnOrder);
+        toast.error(
+          error instanceof Error ? error.message : "Failed to reorder columns",
+        );
+      });
+    },
     meta: {
       updateData: (rowIndex: number, columnId: string, value: unknown) => {
         const row = data[rowIndex];
@@ -543,39 +559,15 @@ export function EnhancedDataGrid({
     useSensor(KeyboardSensor, {}),
   );
 
-  const { reorderColumns, isReorderingColumns } = useColumns(tableId);
-
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
-      setColumnOrder((columnOrder) => {
-        const oldIndex = columnOrder.indexOf(active.id as string);
-        const newIndex = columnOrder.indexOf(over.id as string);
-        const newOrder = arrayMove(columnOrder, oldIndex, newIndex);
+      const oldIndex = columnOrder.indexOf(active.id as string);
+      const newIndex = columnOrder.indexOf(over.id as string);
 
-        // Create column orders with new positions
-        const columnOrders = newOrder.map((id, index) => ({
-          id,
-          order: index,
-        }));
-
-        // Optimistically update the order
-        void reorderColumns({ columnOrders }).catch((error) => {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "Failed to reorder columns",
-          );
-          // Reset to original order on error
-          setColumnOrder(
-            (initialColumns ?? [])
-              .sort((a, b) => a.order - b.order)
-              .map((col) => col.id),
-          );
-        });
-
-        return newOrder;
-      });
+      if (oldIndex !== -1 && newIndex !== -1) {
+        table.setColumnOrder((old) => arrayMove(old, oldIndex, newIndex));
+      }
     }
   };
 
@@ -583,7 +575,7 @@ export function EnhancedDataGrid({
     <div className="flex h-full flex-col">
       <div
         ref={tableContainerRef}
-        className="scrollbar-hide relative flex-1 overflow-scroll"
+        className="relative flex-1 overflow-scroll scrollbar-hide"
       >
         <DndContext
           sensors={sensors}
@@ -593,7 +585,7 @@ export function EnhancedDataGrid({
         >
           <div className="inline-flex min-w-full">
             <SortableContext
-              items={columnOrder}
+              items={table.getState().columnOrder}
               strategy={horizontalListSortingStrategy}
             >
               {table.getHeaderGroups()[0]?.headers.map((header) => {
@@ -615,7 +607,7 @@ export function EnhancedDataGrid({
                 );
               }) ?? []}
             </SortableContext>
-            <div className="sticky right-0 top-0 z-20 flex h-8 items-center border-l border-gray-200 bg-gray-50 px-1 shadow-sm">
+            <div className="sticky right-0 top-0 z-20 flex h-full items-center border-b border-r border-gray-200 bg-gray-50 px-1 shadow-sm">
               <ColumnManagement
                 tableId={tableId}
                 onColumnUpdated={() => {
