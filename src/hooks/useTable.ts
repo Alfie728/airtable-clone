@@ -32,7 +32,10 @@ import type { tables } from "~/server/db/schema";
 type DeleteTableResponse = { success: boolean; error?: string };
 
 function generateMockRow(columns: Column[]): Row {
-  const row: Row = { id: crypto.randomUUID() };
+  const row: Row = {
+    id: crypto.randomUUID(),
+    order: 0, // Will be updated with correct order when adding to table data
+  };
 
   columns.forEach((column) => {
     if (column.type === "text") {
@@ -594,41 +597,31 @@ export const useTable = (baseId: string, tableId: string) => {
   };
 
   return {
+    tableData: currentTableQuery?.data?.table,
+    isLoading: isTableLoading,
+    tableError: currentTableQuery?.error ?? null,
     addRow: () => {
-      const tableData = currentTableQuery?.data;
-      if (tableData?.success && tableData.table) {
-        const optimisticRow = generateMockRow(tableData.table.columns);
-        addRowMutation.mutate(optimisticRow);
-      }
+      const optimisticRow = generateMockRow(
+        currentTableQuery?.data?.table?.columns ?? [],
+      );
+      return addRowMutation.mutateAsync(optimisticRow);
     },
     addBulkRows: (count: number) => {
-      const tableData = currentTableQuery?.data;
-      if (tableData?.success && tableData.table?.columns) {
-        const optimisticRows = Array(count)
-          .fill(null)
-          .map(() => generateMockRow(tableData.table!.columns));
-        void addBulkRowsMutation.mutate({ optimisticRows });
-      }
+      const optimisticRows = Array.from({ length: count }, () =>
+        generateMockRow(currentTableQuery?.data?.table?.columns ?? []),
+      );
+      return addBulkRowsMutation.mutateAsync({ optimisticRows });
     },
-    updateCell: (params: {
-      rowId: string;
-      columnId: string;
-      value: string;
-    }) => {
-      return updateCellMutation.mutateAsync(params);
-    },
+    updateCell: updateCellMutation.mutateAsync,
     isAddingRow: addRowMutation.isPending,
     isUpdatingCell: updateCellMutation.isPending,
     isBatchAdding: addBulkRowsMutation.isPending,
-    isLoading: isTableLoading,
-    tableError: currentTableQuery?.error ?? null,
-    tableData: currentTableQuery?.data?.table,
     renameTable: wrappedRenameTable,
     isRenaming: renameMutation.isPending,
-    deleteTable: () => {
-      console.log("Starting delete mutation...");
-      return deleteTableMutation.mutateAsync();
-    },
+    deleteTable: () => deleteTableMutation.mutateAsync(),
     isDeleting: deleteTableMutation.isPending,
+    isDeletingColumn: false,
+    isAddingColumn: false,
+    isRenamingColumn: false,
   };
 };

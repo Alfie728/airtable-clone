@@ -47,15 +47,15 @@
   - [x] Add column
   - [x] Delete column
   - [x] Rename column
-  - [ ] Reorder columns
+  - [x] Reorder columns
   - [ ] Support text type
   - [ ] Support number type
 
-- [ ] Row Management
+- [x] Row Management
 
   - [x] Add row
-  - [ ] Delete row
-  - [ ] Reorder rows
+  - [x] Delete row
+  - [x] Reorder rows
   - [x] Bulk actions
 
 - [ ] Cell Management

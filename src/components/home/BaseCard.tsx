@@ -26,6 +26,8 @@ import { DeleteBaseDialog } from "~/components/base/DeleteBaseDialog";
 import { EditableBaseName } from "~/components/home/EditableBaseName";
 import { useBase } from "~/hooks/useBase";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { prefetchBaseTables } from "~/lib/query/prefetch";
 
 interface BaseCardProps {
   base: SerializedBase;
@@ -36,6 +38,7 @@ export function BaseCard({ base, onHover }: BaseCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const { renameBase, isRenaming } = useBase(base.id);
+  const queryClient = useQueryClient();
 
   const handleRename = async (newName: string) => {
     try {
@@ -54,9 +57,15 @@ export function BaseCard({ base, onHover }: BaseCardProps) {
     }
   };
 
+  const handleHover = async () => {
+    onHover?.(base.id);
+    // Prefetch all table data and views when hovering
+    void prefetchBaseTables(queryClient, base.id);
+  };
+
   return (
     <div
-      onMouseEnter={() => onHover?.(base.id)}
+      onMouseEnter={handleHover}
       className="group relative flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md"
     >
       <div className="flex flex-1 flex-col p-6">

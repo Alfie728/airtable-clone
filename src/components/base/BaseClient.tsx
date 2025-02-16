@@ -13,6 +13,12 @@ import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { getDefaultView } from "~/lib/actions/views.action";
+import { useViews } from "~/hooks/useViews";
+import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
+import { queryKeys } from "~/lib/query/keys";
+import { type SortingState } from "@tanstack/react-table";
+import { useTableSort } from "~/hooks/useTableSort";
 
 interface BaseClientProps {
   baseId: string;
@@ -22,11 +28,20 @@ interface BaseClientProps {
 
 export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   const router = useRouter();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useLocalStorageBoolean(
+    "sidebarOpen",
+    true,
+  );
   const [pendingActiveTableId, setPendingActiveTableId] = useState<
     string | null
   >(null);
+  const [sorting, setSorting] = useState<SortingState>([]);
   const queryClient = useQueryClient();
+  const {
+    initialSortState,
+    updateSort,
+    isUpdating: isUpdatingSort,
+  } = useTableSort(viewId);
 
   const {
     baseName,
@@ -49,23 +64,94 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     isRenaming,
   } = useTable(baseId, tableId);
 
+  const {
+    views: tableViews,
+    isLoading: isViewsLoading,
+    error: viewsError,
+  } = useViews(tableId);
+
+  // Initialize sorting state from view
+  useEffect(() => {
+    if (
+      initialSortState &&
+      JSON.stringify(sorting) !== JSON.stringify(initialSortState)
+    ) {
+      setSorting(initialSortState);
+    }
+  }, [initialSortState]);
+
+  // Handle sorting changes
+  const handleSortingChange = async (newSorting: SortingState) => {
+    if (JSON.stringify(newSorting) === JSON.stringify(sorting)) return;
+    setSorting(newSorting);
+    try {
+      await updateSort(newSorting);
+    } catch (error) {
+      toast.error("Failed to update sorting");
+      // Revert to previous state on error
+      setSorting(sorting);
+    }
+  };
+
+  // Add error handling for views
+  useEffect(() => {
+    if (viewsError) {
+      toast.error(viewsError.message ?? "Failed to load views");
+    }
+  }, [viewsError]);
+
   // Handle navigation for empty base and invalid table ID
   useEffect(() => {
-    if (!isBaseLoading && !isTableLoading) {
-      // Only handle navigation after both base and table data are loaded
-      if (!baseTables || baseTables.length === 0) {
-        router.replace("/");
-      } else if (
-        !isAddingTable &&
-        baseTables.length > 0 &&
-        (tableId === "tables" || !baseTables.some((t) => t.id === tableId))
-      ) {
-        const firstTable = baseTables[0];
-        if (firstTable) {
-          router.replace(`/${baseId}/${firstTable.id}/grid`, { scroll: false });
+    function handleNavigation() {
+      if (!isBaseLoading && !isTableLoading) {
+        // Only handle navigation after both base and table data are loaded
+        if (!baseTables || baseTables.length === 0) {
+          router.replace("/");
+        } else if (
+          !isAddingTable &&
+          baseTables.length > 0 &&
+          (tableId === "tables" || !baseTables.some((t) => t.id === tableId))
+        ) {
+          const firstTable = baseTables[0];
+          if (firstTable) {
+            // Try to get the cached view first
+            const cachedView = queryClient.getQueryData<string>(
+              queryKeys.tables.views.list(firstTable.id),
+            );
+
+            if (cachedView) {
+              router.replace(`/${baseId}/${firstTable.id}/${cachedView}`, {
+                scroll: false,
+              });
+              return;
+            }
+
+            // If no cached view, show loading state and fetch it
+            router.replace(`/${baseId}/${firstTable.id}/loading`, {
+              scroll: false,
+            });
+            void getDefaultView(firstTable.id).then(({ viewId, error }) => {
+              if (!viewId) {
+                console.error("Failed to get or create default view:", error);
+                toast.error(
+                  "Failed to load table view. Please contact support if this persists.",
+                );
+                return;
+              }
+              // Cache the view ID for future use
+              queryClient.setQueryData(
+                queryKeys.tables.views.list(firstTable.id),
+                viewId,
+              );
+              router.replace(`/${baseId}/${firstTable.id}/${viewId}`, {
+                scroll: false,
+              });
+            });
+          }
         }
       }
     }
+    handleNavigation();
   }, [
     isBaseLoading,
     isTableLoading,
@@ -74,6 +160,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     tableId,
     baseId,
     router,
+    queryClient,
   ]);
 
   const handleTableCreated = async (newTable: typeof tables.$inferSelect) => {
@@ -98,8 +185,45 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   };
 
   const handleTableSelect = (tableId: string) => {
-    setPendingActiveTableId(null);
-    router.replace(`/${baseId}/${tableId}/grid`, { scroll: false });
+    try {
+      setPendingActiveTableId(null);
+
+      // Start navigation immediately with a loading state
+      router.prefetch(`/${baseId}/${tableId}/grid`);
+
+      // Try to get the cached view first
+      const cachedView = queryClient.getQueryData<string>(
+        queryKeys.tables.views.list(tableId),
+      );
+      if (cachedView) {
+        router.replace(`/${baseId}/${tableId}/${cachedView}`, {
+          scroll: false,
+        });
+        return;
+      }
+
+      // If no cached view, show loading state and fetch it
+      router.replace(`/${baseId}/${tableId}/loading`, { scroll: false });
+      void getDefaultView(tableId).then(({ viewId, error }) => {
+        if (!viewId) {
+          console.error("Failed to get or create default view:", error);
+          toast.error(
+            "Failed to load table view. Please contact support if this persists.",
+          );
+          return;
+        }
+        // Cache the view ID for future use
+        queryClient.setQueryData(queryKeys.tables.views.list(tableId), viewId);
+        router.replace(`/${baseId}/${tableId}/${viewId}`, { scroll: false });
+      });
+    } catch (err) {
+      const error =
+        err instanceof Error ? err.message : "Unknown error occurred";
+      console.error("Error handling table selection:", error);
+      toast.error(
+        "Error selecting table. Please contact support if this persists.",
+      );
+    }
   };
 
   if (baseError) {
@@ -154,6 +278,9 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         <GridControls
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          columns={tableData?.columns ?? []}
+          sorting={sorting}
+          onSortingChange={handleSortingChange}
         />
 
         {!isAddingTable && (
@@ -164,11 +291,14 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
             )}
           >
             <Sidebar
-              isAddingTable={isAddingTable}
-              tables={baseTables ?? []}
-              currentTableId={tableId}
-              onTableSelect={handleTableSelect}
-              pendingActiveTableId={pendingActiveTableId}
+              views={tableViews ?? []}
+              currentViewId={viewId}
+              onViewSelect={(selectedViewId) => {
+                router.push(`/${baseId}/${tableId}/${selectedViewId}`, {
+                  scroll: false,
+                });
+              }}
+              isAddingView={false}
             />
           </div>
         )}
@@ -206,6 +336,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                 <EnhancedDataGrid
                   baseId={baseId}
                   tableId={tableId}
+                  viewId={viewId}
                   initialData={tableData.data}
                   initialColumns={tableData.columns}
                   addRowAction={addRow}
@@ -213,6 +344,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   updateCellAction={updateCell}
                   isAddingRow={isAddingRow}
                   isBatchAdding={isBatchAdding}
+                  sorting={sorting}
+                  onSortingChange={handleSortingChange}
                 />
               )
             )}

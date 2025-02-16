@@ -1,38 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Grid,
-  Calendar,
-  ImageIcon,
-  Layout,
-  List,
-  TimerIcon as Timeline,
-  Eye,
-  Table,
-  ChevronDown,
-  ChevronRight,
-  Search,
-} from "lucide-react";
+import { Grid, ChevronDown, ChevronRight, Search, Plus } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import type { tables } from "~/server/db/schema";
+import type { views } from "~/server/db/schema";
 import { cn } from "~/lib/utils";
 
 interface SidebarProps {
-  tables: (typeof tables.$inferSelect)[];
-  currentTableId: string | null;
-  onTableSelect: (tableId: string) => void;
-  isAddingTable: boolean;
-  pendingActiveTableId: string | null;
+  views: (typeof views.$inferSelect)[];
+  currentViewId: string | null;
+  onViewSelect: (viewId: string) => void;
+  isAddingView?: boolean;
+  pendingActiveViewId?: string | null;
 }
 
 export function Sidebar({
-  tables,
-  currentTableId,
-  isAddingTable,
-  onTableSelect,
-  pendingActiveTableId,
+  views,
+  currentViewId,
+  isAddingView,
+  onViewSelect,
+  pendingActiveViewId,
 }: SidebarProps) {
   const [isViewsOpen, setIsViewsOpen] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -69,23 +57,23 @@ export function Sidebar({
 
           <div className="flex-1 overflow-y-auto p-1">
             <div className="space-y-0.5">
-              {tables.map((table) => (
+              {views.map((view) => (
                 <Button
-                  key={table.id}
-                  variant={currentTableId === table.id ? "secondary" : "ghost"}
+                  key={view.id}
+                  variant={currentViewId === view.id ? "secondary" : "ghost"}
                   className={cn(
                     "h-7 w-full justify-start gap-2 rounded px-2 text-xs font-normal",
-                    isAddingTable && tables.indexOf(table) === tables.length - 1
+                    isAddingView && views.indexOf(view) === views.length - 1
                       ? "bg-blue-50 text-blue-700"
-                      : table.id === pendingActiveTableId ||
-                          (!pendingActiveTableId && currentTableId === table.id)
+                      : view.id === pendingActiveViewId ||
+                          (!pendingActiveViewId && currentViewId === view.id)
                         ? "bg-blue-50 text-blue-700"
                         : "bg-gray-50 text-gray-500",
                   )}
-                  onClick={() => onTableSelect(table.id)}
+                  onClick={() => onViewSelect(view.id)}
                 >
                   <Grid className="h-3.5 w-3.5" />
-                  {table.name}
+                  {view.name}
                 </Button>
               ))}
             </div>
@@ -106,7 +94,7 @@ export function Sidebar({
                 )}
               </Button>
               <span className="text-xs font-medium text-gray-600">
-                Create...
+                Create view...
               </span>
             </div>
 
@@ -118,9 +106,8 @@ export function Sidebar({
                   className="h-7 w-full justify-start gap-2 rounded px-2 text-xs font-normal"
                 >
                   <Grid className="h-3.5 w-3.5" />
-                  Grid
+                  Grid view
                 </Button>
-                {/* Add other view types here */}
               </div>
             )}
           </div>
@@ -129,12 +116,3 @@ export function Sidebar({
     </div>
   );
 }
-
-const viewOptions = [
-  { icon: Grid, label: "Grid" },
-  { icon: Calendar, label: "Calendar" },
-  { icon: ImageIcon, label: "Gallery" },
-  { icon: Layout, label: "Kanban" },
-  { icon: Timeline, label: "Timeline" },
-  { icon: List, label: "List" },
-];

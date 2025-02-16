@@ -4,6 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
 import type { BaseResponse } from "~/types/base";
+import { getDefaultView } from "~/lib/actions/views.action";
+import { getTables } from "~/lib/actions/tables.action";
+import { toast } from "sonner";
 
 interface EditableBaseNameProps {
   name: string;
@@ -23,6 +26,7 @@ export function EditableBaseName({
   baseId,
 }: EditableBaseNameProps) {
   const [editedName, setEditedName] = useState(name);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -37,19 +41,52 @@ export function EditableBaseName({
     setEditedName(name);
   }, [name]);
 
-  const handleSubmit = async () => {
-    if (editedName.trim() && editedName !== name) {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!baseId || editedName.trim() === "") return;
+
+    try {
+      setIsSubmitting(true);
       const result = await onRename(editedName);
       if (!result.success) {
-        setEditedName(name);
+        throw new Error(result.error);
       }
+
+      toast.success("Base renamed successfully");
+
+      // Get the first table's default view
+      const tablesResult = await getTables(baseId);
+      if (!tablesResult.success || !tablesResult.tables?.length) {
+        router.push("/");
+        return;
+      }
+
+      const firstTable = tablesResult.tables[0];
+      if (!firstTable?.id) {
+        throw new Error("Invalid table data");
+      }
+
+      const { viewId, error } = await getDefaultView(firstTable.id);
+      if (!viewId) {
+        throw new Error(error ?? "Failed to get default view");
+      }
+
+      router.push(`/${baseId}/${firstTable.id}/${viewId}`);
+    } catch (err) {
+      const error =
+        err instanceof Error ? err.message : "Failed to rename base";
+      console.error("Error renaming base:", error);
+      toast.error(error);
+      setEditedName(name);
+    } finally {
+      setIsSubmitting(false);
+      onEditingChange(false);
     }
-    onEditingChange(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      void handleSubmit();
+      void handleSubmit(e);
     } else if (e.key === "Escape") {
       setEditedName(name);
       onEditingChange(false);
@@ -58,7 +95,34 @@ export function EditableBaseName({
 
   const handleClick = (e: React.MouseEvent) => {
     if (!isEditing && baseId) {
-      router.push(`/${baseId}/tables/grid`);
+      e.preventDefault();
+      // We'll navigate to the first table's default view
+      void (async () => {
+        try {
+          const tablesResult = await getTables(baseId);
+          if (!tablesResult.success || !tablesResult.tables?.length) {
+            router.push("/");
+            return;
+          }
+
+          const firstTable = tablesResult.tables[0];
+          if (!firstTable?.id) {
+            throw new Error("Invalid table data");
+          }
+
+          const { viewId, error } = await getDefaultView(firstTable.id);
+          if (!viewId) {
+            throw new Error(error ?? "Failed to get default view");
+          }
+
+          router.push(`/${baseId}/${firstTable.id}/${viewId}`);
+        } catch (err) {
+          const error =
+            err instanceof Error ? err.message : "Failed to navigate";
+          console.error("Error navigating to base:", error);
+          toast.error(error);
+        }
+      })();
     }
   };
 
@@ -85,8 +149,10 @@ export function EditableBaseName({
       onChange={(e) => setEditedName(e.target.value)}
       onBlur={handleSubmit}
       onKeyDown={handleKeyDown}
+      disabled={isSubmitting}
       className={cn(
         "w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none",
+        isSubmitting && "cursor-not-allowed opacity-50",
         className,
       )}
     />

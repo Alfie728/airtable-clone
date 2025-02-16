@@ -6,6 +6,7 @@ import { useState } from "react";
 import { createBase } from "~/lib/actions/bases.action";
 import { useAuth } from "@clerk/nextjs";
 import { Toaster, toast } from "sonner";
+import { getDefaultView } from "~/lib/actions/views.action";
 
 export default function NewBasePage() {
   const router = useRouter();
@@ -21,16 +22,25 @@ export default function NewBasePage() {
       formData.append("userId", userId ?? "");
 
       const result = await createBase(formData);
-      if (!result?.baseId || !result?.defaultTableId) {
+      if (!result) {
         throw new Error("Failed to create base");
       }
 
       toast.success("Base created successfully");
-      router.push(`/${result.baseId}/${result.defaultTableId}/grid`);
+
+      // Get the default view for the new table
+      const { viewId, error } = await getDefaultView(result.defaultTableId);
+      if (!viewId) {
+        throw new Error(error ?? "Failed to get default view");
+      }
+
+      router.push(`/${result.baseId}/${result.defaultTableId}/${viewId}`);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to create base";
-      toast.error(errorMessage);
+      console.error("Error creating base:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create base",
+      );
+    } finally {
       setIsLoading(false);
     }
   }

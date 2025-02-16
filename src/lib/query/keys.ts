@@ -32,6 +32,7 @@ export const queryKeys = {
       [...queryKeys.views.detail(viewId), "filters"] as const,
     sorts: (viewId: string) =>
       [...queryKeys.views.detail(viewId), "sorts"] as const,
+    list: (tableId: string) => ["table", tableId, "views"] as const,
   },
   user: {
     root: ["user"] as const,
