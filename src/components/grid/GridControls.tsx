@@ -147,9 +147,9 @@ export function GridControls({
               variant="ghost"
               size="sm"
               className={cn(
-                "h-8 gap-1.5 rounded px-2 text-sm font-normal hover:bg-gray-100",
+                "h-8 gap-1.5 rounded px-2 text-sm font-normal",
                 sorting.length > 0
-                  ? "bg-rose-50 text-gray-700 hover:bg-rose-100"
+                  ? "bg-[#FFE0CC] text-gray-700 hover:border-rose-200 hover:shadow-[inset_0px_0px_0px_2px_rgba(0,0,0,0.1)]"
                   : "text-gray-700",
               )}
             >
