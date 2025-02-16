@@ -72,22 +72,24 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
   // Initialize sorting state from view
   useEffect(() => {
-    if (initialSortState) {
+    if (
+      initialSortState &&
+      JSON.stringify(sorting) !== JSON.stringify(initialSortState)
+    ) {
       setSorting(initialSortState);
     }
   }, [initialSortState]);
 
   // Handle sorting changes
   const handleSortingChange = async (newSorting: SortingState) => {
+    if (JSON.stringify(newSorting) === JSON.stringify(sorting)) return;
     setSorting(newSorting);
     try {
       await updateSort(newSorting);
     } catch (error) {
       toast.error("Failed to update sorting");
       // Revert to previous state on error
-      if (initialSortState) {
-        setSorting(initialSortState);
-      }
+      setSorting(sorting);
     }
   };
 
