@@ -215,51 +215,102 @@ export const useRows = (tableId: string): RowOperations => {
   });
 
   const reorderRowsMutation = useMutation<
-    RowsResponse,
+    { success: boolean; rows?: Row[] },
     Error,
     { rowOrders: { id: string; order: number }[] },
     ReorderRowsContext
   >({
     mutationFn: async ({ rowOrders }) => {
+      console.log("mutationFn - rowOrders:", rowOrders);
       const result = await updateRowsOrder(tableId, rowOrders);
+      console.log("mutationFn - server result:", result);
       if (!result.success) {
         throw new Error(result.error ?? "Failed to reorder rows");
       }
-      return result;
+      return {
+        success: true,
+        rows: result.rows,
+      };
     },
     onMutate: async ({ rowOrders }) => {
+      console.log("onMutate - rowOrders:", rowOrders);
+
+      // Cancel any outgoing refetches
       await queryClient.cancelQueries({
         queryKey: queryKeys.tables.detail(tableId),
       });
 
+      // Snapshot the previous value
       const previousData = queryClient.getQueryData<TableResponse>(
         queryKeys.tables.detail(tableId),
       );
 
-      if (previousData?.table) {
-        const orderMap = new Map(rowOrders.map((row) => [row.id, row.order]));
+      console.log("onMutate - previousData:", {
+        hasTable: !!previousData?.table,
+        rowsExists: !!previousData?.table?.rows,
+        rowsLength: previousData?.table?.rows?.length,
+      });
 
-        const updatedRows = [...previousData.table.rows].map((row) => ({
-          ...row,
-          order: orderMap.get(row.id) ?? (Number(row.order) || 0),
-        }));
-
-        // Update the cache with sorted rows
-        queryClient.setQueryData<TableResponse>(
-          queryKeys.tables.detail(tableId),
-          {
-            ...previousData,
-            table: {
-              ...previousData.table,
-              rows: updatedRows,
-            },
-          },
-        );
+      // If no data exists, just return
+      if (!previousData?.table?.rows) {
+        console.log("onMutate - no rows data found");
+        return { previousData };
       }
 
-      return { previousData };
+      try {
+        // Create a map of new orders
+        const orderMap = new Map(rowOrders.map((row) => [row.id, row.order]));
+        console.log("onMutate - orderMap:", Object.fromEntries(orderMap));
+
+        // Create updated rows array with new orders
+        const updatedRows = [...previousData.table.rows].map((row) => {
+          const newOrder = orderMap.get(row.id) ?? row.order;
+          console.log("onMutate - updating row:", {
+            id: row.id,
+            oldOrder: row.order,
+            newOrder,
+          });
+          return {
+            ...row,
+            order: newOrder,
+          };
+        });
+
+        console.log("onMutate - updatedRows:", updatedRows);
+
+        // Update the cache with new orders
+        const newData = {
+          ...previousData,
+          table: {
+            ...previousData.table,
+            rows: updatedRows,
+          },
+        };
+
+        console.log("onMutate - setting new data:", {
+          hasRows: !!newData.table.rows,
+          rowsLength: newData.table.rows.length,
+        });
+
+        queryClient.setQueryData<TableResponse>(
+          queryKeys.tables.detail(tableId),
+          newData,
+        );
+
+        return { previousData };
+      } catch (error) {
+        console.error("onMutate - error:", error);
+        return { previousData };
+      }
     },
     onError: (err, variables, context) => {
+      console.log("onError:", {
+        error: err.message,
+        variables,
+        hasPreviousData: !!context?.previousData,
+      });
+
+      // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousData) {
         queryClient.setQueryData(
           queryKeys.tables.detail(tableId),
@@ -269,6 +320,13 @@ export const useRows = (tableId: string): RowOperations => {
           err instanceof Error ? err.message : "Failed to reorder rows",
         );
       }
+    },
+    onSettled: (data, error) => {
+      console.log("onSettled:", { success: data?.success, error });
+      // Always refetch after error or success to ensure we have the latest data
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.tables.detail(tableId),
+      });
     },
   });
 

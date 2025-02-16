@@ -7,6 +7,7 @@ import {
   renameColumn,
   updateColumnsOrder,
 } from "~/lib/actions/columns.action";
+import { updateRowsOrder } from "~/lib/actions/rows.action";
 import type { Column, Row } from "~/types/table";
 import { queryKeys } from "~/lib/query/keys";
 import { toast } from "sonner";
@@ -327,6 +328,116 @@ export const useColumns = (tableId: string) => {
     },
   });
 
+  const reorderRowsMutation = useMutation<
+    { success: boolean; rows?: Row[] },
+    Error,
+    { rowOrders: { id: string; order: number }[] },
+    ReorderColumnsContext
+  >({
+    mutationFn: async ({ rowOrders }) => {
+      console.log("mutationFn - rowOrders:", rowOrders);
+      const result = await updateRowsOrder(tableId, rowOrders);
+      console.log("mutationFn - server result:", result);
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to reorder rows");
+      }
+      return {
+        success: true,
+        rows: result.rows,
+      };
+    },
+    onMutate: async ({ rowOrders }) => {
+      console.log("onMutate - rowOrders:", rowOrders);
+
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.tables.detail(tableId),
+      });
+
+      const previousData = queryClient.getQueryData<TableResponse>(
+        queryKeys.tables.detail(tableId),
+      );
+
+      console.log("onMutate - previousData:", {
+        hasTable: !!previousData?.table,
+        tableId: previousData?.table?.id,
+        rowsType: typeof previousData?.table?.rows,
+        isArray: Array.isArray(previousData?.table?.rows),
+        rowsLength: previousData?.table?.rows?.length,
+        rows: previousData?.table?.rows,
+      });
+
+      if (!previousData?.table?.rows) {
+        console.log("onMutate - no rows found, returning empty state");
+        return { previousData };
+      }
+
+      if (!Array.isArray(previousData.table.rows)) {
+        console.log("onMutate - rows is not an array, returning empty state");
+        return { previousData };
+      }
+
+      try {
+        const orderMap = new Map(rowOrders.map((row) => [row.id, row.order]));
+        console.log(
+          "onMutate - orderMap created:",
+          Object.fromEntries(orderMap),
+        );
+
+        const updatedRows = [...previousData.table.rows].map((row) => {
+          const newOrder = orderMap.get(row.id) ?? row.order;
+          console.log("onMutate - updating row:", {
+            id: row.id,
+            oldOrder: row.order,
+            newOrder,
+          });
+          return {
+            ...row,
+            order: newOrder,
+          };
+        });
+
+        console.log("onMutate - updatedRows:", updatedRows);
+
+        // Update the cache with sorted rows
+        queryClient.setQueryData<TableResponse>(
+          queryKeys.tables.detail(tableId),
+          {
+            ...previousData,
+            table: {
+              ...previousData.table,
+              rows: updatedRows,
+            },
+          },
+        );
+
+        return { previousData };
+      } catch (error) {
+        console.error("onMutate - error during row update:", error);
+        return { previousData };
+      }
+    },
+    onError: (err, variables, context) => {
+      console.log("onError:", {
+        error: err.message,
+        variables,
+        hasPreviousData: !!context?.previousData,
+      });
+
+      if (context?.previousData) {
+        queryClient.setQueryData(
+          queryKeys.tables.detail(tableId),
+          context.previousData,
+        );
+        toast.error(
+          err instanceof Error ? err.message : "Failed to reorder rows",
+        );
+      }
+    },
+    onSuccess: (data) => {
+      console.log("onSuccess - result:", data);
+    },
+  });
+
   return {
     addColumn: (params: { name: string; type: "text" | "number" }) =>
       addColumnMutation.mutateAsync(params),
@@ -337,6 +448,8 @@ export const useColumns = (tableId: string) => {
     reorderColumns: (params: {
       columnOrders: { id: string; order: number }[];
     }) => reorderColumnsMutation.mutateAsync(params),
+    reorderRows: (params: { rowOrders: { id: string; order: number }[] }) =>
+      reorderRowsMutation.mutateAsync(params),
     isAddingColumn: addColumnMutation.isPending,
     isDeletingColumn: deleteColumnMutation.isPending,
     isRenamingColumn: renameColumnMutation.isPending,

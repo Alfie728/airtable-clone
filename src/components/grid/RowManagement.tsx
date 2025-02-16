@@ -29,6 +29,8 @@ import { toast } from "sonner";
 import { useRows } from "~/hooks/useRows";
 import type { Row } from "~/types/table";
 import { cn } from "~/lib/utils";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface RowManagementProps {
   tableId: string;
@@ -59,12 +61,31 @@ export function RowManagement({
   onSelectionChange,
   onRowDeleted,
   dragHandleProps,
-  isDragging,
 }: RowManagementProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const { deleteRow, isDeletingRow } = useRows(tableId);
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: row.id,
+    animateLayoutChanges: () => false,
+  });
+
+  const style = {
+    opacity: isDragging ? 0.8 : 1,
+    position: "relative" as const,
+    transform: CSS.Translate.toString(transform),
+    transition,
+    zIndex: isDragging ? 1 : 0,
+  };
 
   // Get the row number from the data-index attribute
   const rowNumber =
@@ -102,21 +123,23 @@ export function RowManagement({
   };
 
   return (
-    <>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(isDragging && "shadow-xl ring-1 ring-gray-200")}
+    >
       <div className="group/row flex h-[34px] items-center gap-1 px-2">
         <div className="flex items-center">
-          {dragHandleProps && (
-            <button
-              {...dragHandleProps.attributes}
-              {...dragHandleProps.listeners}
-              className={cn(
-                "invisible flex h-6 w-6 items-center justify-center group-hover/row:visible",
-                isDragging ? "visible cursor-grabbing" : "cursor-grab",
-              )}
-            >
-              <GripVertical className="h-3.5 w-3.5 text-gray-400" />
-            </button>
-          )}
+          <button
+            {...attributes}
+            {...listeners}
+            className={cn(
+              "invisible flex h-6 w-6 items-center justify-center group-hover/row:visible",
+              isDragging ? "visible cursor-grabbing" : "cursor-grab",
+            )}
+          >
+            <GripVertical className="h-3.5 w-3.5 text-gray-400" />
+          </button>
           <div className="relative flex w-full items-center justify-center">
             <span
               className={cn(
@@ -223,6 +246,6 @@ export function RowManagement({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

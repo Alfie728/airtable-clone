@@ -38,6 +38,7 @@ import {
   SortableContext,
   horizontalListSortingStrategy,
   useSortable,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
@@ -48,6 +49,7 @@ import { height } from "tailwindcss/defaultTheme";
 import { useRows, type RowOperations } from "~/hooks/useRows";
 import { RowManagement } from "./RowManagement";
 import { Checkbox } from "~/components/ui/checkbox";
+import type { Active } from "@dnd-kit/core";
 
 interface TableMeta {
   updateData: (rowIndex: number, columnId: string, value: unknown) => void;
@@ -194,7 +196,7 @@ interface SortableHeaderProps {
 
 interface DraggableColumnProps {
   header: HeaderType;
-  cells: CellType[];
+  cells: (CellType & { isDragging: boolean })[];
   virtualizer: ReturnType<
     typeof useVirtualizer<HTMLDivElement, HTMLTableRowElement>
   >;
@@ -285,9 +287,11 @@ function DraggableColumn({ header, cells, virtualizer }: DraggableColumnProps) {
                 transform: `translateY(${virtualRow.start}px)`,
                 height: `${virtualRow.size}px`,
                 width: "100%",
+                opacity: cell.isDragging ? 0.8 : 1,
               }}
               className={cn(
                 "flex items-center border-b border-gray-100 px-2 py-1 text-sm",
+                cell.isDragging && "bg-white",
                 !isDragging && "hover:bg-gray-50/50",
               )}
             >
@@ -329,7 +333,8 @@ export function EnhancedDataGrid({
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
-  const { bulkDeleteRows, isBulkDeletingRows } = useRows(tableId);
+  const { bulkDeleteRows, isBulkDeletingRows, reorderRows } = useRows(tableId);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   // Update row order when initialData changes
   useEffect(() => {
@@ -670,85 +675,162 @@ export function EnhancedDataGrid({
           collisionDetection={closestCenter}
           modifiers={[restrictToHorizontalAxis]}
           onDragEnd={handleDragEnd}
+          onDragStart={(event) => {
+            setActiveId(event.active.id as string);
+          }}
+          onDragCancel={() => {
+            setActiveId(null);
+          }}
         >
           <div className="inline-flex min-w-full">
             <SortableContext
               items={table.getState().columnOrder}
               strategy={horizontalListSortingStrategy}
             >
-              <div
-                className="flex flex-col border-r border-gray-200 bg-white"
-                style={{
-                  width: "69px",
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={(event) => {
+                  setActiveId(event.active.id as string);
+                }}
+                onDragCancel={() => {
+                  setActiveId(null);
+                }}
+                onDragEnd={async ({ active, over }) => {
+                  setActiveId(null);
+                  if (active && over && active.id !== over.id) {
+                    const oldIndex = data.findIndex(
+                      (row) => row.id === active.id,
+                    );
+                    const newIndex = data.findIndex(
+                      (row) => row.id === over.id,
+                    );
+
+                    if (oldIndex !== -1 && newIndex !== -1) {
+                      const newData = arrayMove(data, oldIndex, newIndex);
+
+                      // Update local state immediately with new order
+                      setRowOrder(
+                        newData.map((row, index) => ({
+                          ...row,
+                          order: index,
+                        })),
+                      );
+
+                      try {
+                        // Sync with server
+                        await reorderRows({
+                          rowOrders: newData.map((row, index) => ({
+                            id: row.id,
+                            order: index,
+                          })),
+                        });
+                      } catch (error) {
+                        // Revert on error
+                        setRowOrder(data);
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Failed to reorder rows",
+                        );
+                      }
+                    }
+                  }
                 }}
               >
-                <div className="sticky top-0 z-20 border-b border-gray-200 bg-gray-50 shadow-sm">
-                  <div className="flex h-8 items-center px-2">
-                    <Checkbox
-                      checked={
-                        table.getRowModel().rows.length > 0 &&
-                        selectedRows.length === table.getRowModel().rows.length
-                      }
-                      onCheckedChange={handleSelectAllRows}
-                      className="ml-[14px] h-3.5 w-3.5 rounded-[4px] border-gray-300"
-                      aria-label="Select all rows"
-                    />
-                  </div>
-                </div>
-                <div
-                  style={{
-                    height: `${rowVirtualizer.getTotalSize()}px`,
-                    position: "relative",
-                  }}
+                <SortableContext
+                  items={data.map((row) => row.id)}
+                  strategy={verticalListSortingStrategy}
                 >
-                  {rowVirtualizer
-                    .getVirtualItems()
-                    .map((virtualRow: VirtualItem) => {
-                      const row = rows[virtualRow.index];
-                      if (!row) return null;
+                  <div
+                    className="flex flex-col border-r border-gray-200 bg-white"
+                    style={{
+                      width: "69px",
+                    }}
+                  >
+                    <div className="sticky top-0 z-20 border-b border-gray-200 bg-gray-50 shadow-sm">
+                      <div className="flex h-8 items-center px-2">
+                        <Checkbox
+                          checked={
+                            table.getRowModel().rows.length > 0 &&
+                            selectedRows.length ===
+                              table.getRowModel().rows.length
+                          }
+                          onCheckedChange={handleSelectAllRows}
+                          className="ml-[14px] h-3.5 w-3.5 rounded-[4px] border-gray-300"
+                          aria-label="Select all rows"
+                        />
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        height: `${rowVirtualizer.getTotalSize()}px`,
+                        position: "relative",
+                      }}
+                    >
+                      {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                        const row = rows[virtualRow.index];
+                        if (!row) return null;
 
-                      const rowData = row.original;
+                        const rowData = row.original;
+                        const isDragging = rowData.id === activeId;
 
-                      return (
-                        <div
-                          key={rowData.id}
-                          data-index={virtualRow.index}
-                          style={{
-                            position: "absolute",
-                            top: 0,
-                            transform: `translateY(${virtualRow.start}px)`,
-                            height: `${virtualRow.size}px`,
-                            width: "100%",
-                          }}
-                          className="group flex items-center border-b border-gray-100"
-                        >
-                          <RowManagement
-                            tableId={tableId}
-                            row={rowData}
-                            isSelected={selectedRows.includes(rowData.id)}
-                            onSelectionChange={(selected: boolean) =>
-                              handleRowSelectionChange(rowData.id, selected)
-                            }
-                            onRowDeleted={handleRowDeleted}
-                            dragHandleProps={{
-                              attributes: {
-                                "data-index": virtualRow.index,
-                              },
+                        return (
+                          <div
+                            key={rowData.id}
+                            data-index={virtualRow.index}
+                            style={{
+                              position: "absolute",
+                              top: 0,
+                              transform: `translateY(${virtualRow.start}px)`,
+                              height: `${virtualRow.size}px`,
+                              width: "100%",
+                              opacity: isDragging ? 0.8 : 1,
+                              zIndex: isDragging ? 1 : 0,
                             }}
-                          />
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
+                            className={cn(
+                              "group flex items-center border-b border-gray-100",
+                              isDragging &&
+                                "bg-white shadow-xl ring-1 ring-gray-200",
+                            )}
+                          >
+                            <RowManagement
+                              tableId={tableId}
+                              row={rowData}
+                              isSelected={selectedRows.includes(rowData.id)}
+                              onSelectionChange={(selected: boolean) =>
+                                handleRowSelectionChange(rowData.id, selected)
+                              }
+                              onRowDeleted={handleRowDeleted}
+                              dragHandleProps={{
+                                attributes: {
+                                  "data-index": virtualRow.index,
+                                },
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </SortableContext>
+              </DndContext>
               {table.getHeaderGroups()[0]?.headers.map((header) => {
                 const columnCells = rows
-                  .map((row) =>
-                    row
+                  .map((row) => {
+                    const cell = row
                       .getVisibleCells()
-                      .find((cell) => cell.column.id === header.id),
-                  )
-                  .filter((cell): cell is CellType => cell !== undefined);
+                      .find((cell) => cell.column.id === header.id);
+                    if (!cell) return undefined;
+                    return {
+                      ...cell,
+                      isDragging: row.original.id === activeId,
+                    };
+                  })
+                  .filter(
+                    (cell): cell is CellType & { isDragging: boolean } =>
+                      cell !== undefined,
+                  );
 
                 return (
                   <DraggableColumn
