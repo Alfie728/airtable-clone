@@ -56,25 +56,41 @@ export async function prefetchTable(
     staleTime: 5 * 1000,
   });
 
-  // Get cached default view ID
-  const defaultViewId = queryClient.getQueryData<string>(
-    queryKeys.tables.views.detail(tableId, "default"),
-  );
+  // Prefetch views list and default view
+  await queryClient.prefetchQuery({
+    queryKey: queryKeys.tables.views.list(tableId),
+    queryFn: async () => {
+      const viewsResult = await getTableViews(tableId);
+      const { viewId } = await getDefaultView(tableId);
 
-  if (defaultViewId) {
-    // Prefetch view sorts if we have the default view ID
-    void queryClient.prefetchQuery({
-      queryKey: queryKeys.views.sorts(defaultViewId),
-      queryFn: async () => {
-        const result = await getViewSorts(defaultViewId);
-        if (!result.success) {
-          throw new Error(result.error ?? "Failed to get view sorts");
-        }
-        return result.sorts;
-      },
-      staleTime: 5 * 1000,
-    });
-  }
+      if (viewId) {
+        // Cache the default view ID
+        queryClient.setQueryData(
+          queryKeys.tables.views.detail(tableId, "default"),
+          viewId,
+        );
+
+        // Prefetch sorts for the default view
+        void queryClient.prefetchQuery({
+          queryKey: queryKeys.views.sorts(viewId),
+          queryFn: async () => {
+            const result = await getViewSorts(viewId);
+            if (!result.success) {
+              throw new Error(result.error ?? "Failed to get view sorts");
+            }
+            return result.sorts;
+          },
+          staleTime: 5 * 1000,
+        });
+      }
+
+      if (viewsResult.success && viewsResult.views) {
+        return viewsResult.views;
+      }
+      throw new Error(viewsResult.error ?? "Failed to get views");
+    },
+    staleTime: 5 * 1000,
+  });
 }
 
 /**
