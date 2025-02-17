@@ -715,10 +715,7 @@ export function EnhancedDataGrid({
 
   return (
     <div className="flex h-full flex-col">
-      <div
-        ref={tableContainerRef}
-        className="relative flex-1 overflow-scroll scrollbar-hide"
-      >
+      <div ref={tableContainerRef} className="relative flex-1 overflow-scroll">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -797,7 +794,7 @@ export function EnhancedDataGrid({
                       width: "69px",
                     }}
                   >
-                    <div className="sticky top-0 z-20 border-b border-gray-300 bg-gray-50 shadow-sm">
+                    <div className="sticky top-0 z-10 border-b border-gray-300 bg-gray-50 shadow-sm">
                       <div className="flex h-8 items-center px-2">
                         <Checkbox
                           checked={
