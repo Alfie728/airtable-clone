@@ -42,7 +42,7 @@ type GetTableDataResponse = {
 /**
  * Prefetches a single table's data
  */
-export async function prefetchTable(
+export async function prefetchTable (
   queryClient: QueryClient,
   tableId: string,
   tableName: string,

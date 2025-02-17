@@ -26,6 +26,13 @@ export function Sidebar({
 }: SidebarProps) {
   const [isViewsOpen, setIsViewsOpen] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  console.log("pendingActiveViewId", pendingActiveViewId);
+  console.log("currentViewId", currentViewId);
+  // Determine if we're in a loading state
+  const isLoadingViews =
+    isLoading ||
+    (pendingActiveViewId !== null && pendingActiveViewId !== currentViewId) ||
+    currentViewId === "loading";
 
   return (
     <div className="flex w-60 flex-col border-r border-gray-200 bg-gray-50/50">
@@ -59,7 +66,7 @@ export function Sidebar({
 
           <div className="flex-1 overflow-y-auto p-1">
             <div className="space-y-0.5">
-              {isLoading ? (
+              {isLoadingViews ? (
                 <div className="px-2 py-1 text-sm text-gray-500">
                   Loading views...
                 </div>
@@ -80,6 +87,7 @@ export function Sidebar({
                           : "bg-gray-50 text-gray-500",
                     )}
                     onClick={() => onViewSelect(view.id)}
+                    disabled={isLoadingViews}
                   >
                     <Grid className="h-3.5 w-3.5" />
                     {view.name}

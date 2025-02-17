@@ -37,6 +37,9 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   const [pendingActiveTableId, setPendingActiveTableId] = useState<
     string | null
   >(null);
+  const [pendingActiveViewId, setPendingActiveViewId] = useState<string | null>(
+    null,
+  );
   const [sorting, setSorting] = useState<SortingState>([]);
   const queryClient = useQueryClient();
   const {
@@ -109,6 +112,12 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     // Skip if we're already handling navigation through handleTableSelect
     if (isHandlingNavigation) return;
 
+    // Clear pendingActiveViewId when navigation is complete
+    if (pendingActiveViewId && pendingActiveViewId === viewId) {
+      setPendingActiveViewId(null);
+      return;
+    }
+
     // Only handle invalid table scenarios
     if (!isBaseLoading && !isTableLoading && baseTables?.length > 0) {
       const isInvalidTable =
@@ -126,6 +135,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         );
 
         if (cachedView) {
+          // Set pending view before navigation
+          setPendingActiveViewId(cachedView);
           router.replace(`/${baseId}/${firstTable.id}/${cachedView}`, {
             scroll: false,
           });
@@ -145,9 +156,12 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
               "Failed to load table view. Please contact support if this persists.",
             );
             setIsHandlingNavigation(false);
+            setPendingActiveViewId(null);
             return;
           }
 
+          // Set pending view before navigation
+          setPendingActiveViewId(viewId);
           queryClient.setQueryData(
             queryKeys.tables.views.detail(firstTable.id, "default"),
             viewId,
@@ -173,6 +187,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     router,
     queryClient,
     isHandlingNavigation,
+    pendingActiveViewId,
+    viewId,
   ]);
 
   const handleTableCreated = async (
@@ -187,13 +203,20 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         queryClient.invalidateQueries({ queryKey: queryKeys.bases.list() }),
         queryClient.invalidateQueries({ queryKey: ["table", newTable.id] }),
       ]);
-
+      console.log("newTable.defaultViewId", newTable.defaultViewId);
       // Now redirect to the new table with its default view
       if (newTable.defaultViewId) {
+        // Set pending view ID before navigation
+        setPendingActiveViewId(newTable.defaultViewId);
         router.replace(`/${baseId}/${newTable.id}/${newTable.defaultViewId}`, {
           scroll: false,
         });
       } else {
+        // Show loading state while getting default view
+        router.replace(`/${baseId}/${newTable.id}/loading`, {
+          scroll: false,
+        });
+
         // Fallback to getting the default view if not provided
         const { viewId, error } = await getDefaultView(newTable.id);
         if (!viewId) {
@@ -203,6 +226,9 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           );
           return;
         }
+
+        // Set pending view ID before navigation
+        setPendingActiveViewId(viewId);
         router.replace(`/${baseId}/${newTable.id}/${viewId}`, {
           scroll: false,
         });
@@ -212,6 +238,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         err instanceof Error ? err.message : "Unknown error occurred";
       console.error("Error handling table creation:", error);
       toast.error("Error creating table. Please try again.");
+      setPendingActiveTableId(null);
+      setPendingActiveViewId(null);
     }
   };
 
@@ -225,6 +253,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     );
 
     if (cachedView) {
+      // Set pending view before navigation
+      setPendingActiveViewId(cachedView);
       // Navigate immediately
       router.push(`/${baseId}/${tableId}/${cachedView}`, {
         scroll: false,
@@ -261,20 +291,25 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         toast.error(
           "Failed to load table view. Please contact support if this persists.",
         );
+        setIsHandlingNavigation(false);
+        setPendingActiveViewId(null);
         return;
       }
 
+      // Set pending view before navigation
+      setPendingActiveViewId(viewId);
       // Cache the view ID and navigate
       queryClient.setQueryData(
         queryKeys.tables.views.detail(tableId, "default"),
         viewId,
       );
       router.replace(`/${baseId}/${tableId}/${viewId}`, { scroll: false });
+      setIsHandlingNavigation(false);
     } catch (error) {
       console.error("Error during table selection:", error);
       toast.error("Failed to load table. Please try again.");
-    } finally {
       setIsHandlingNavigation(false);
+      setPendingActiveViewId(null);
     }
   };
 
@@ -314,6 +349,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           addTableAction={addTable}
           isAddingTable={isAddingTable}
           pendingActiveTableId={pendingActiveTableId}
+          pendingActiveViewId={pendingActiveViewId}
+          setPendingActiveViewId={setPendingActiveViewId}
           renameTable={async (newName) => {
             const result = await renameTable(newName);
             if (!result.success) {
@@ -345,7 +382,9 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
             <Sidebar
               views={tableViews ?? []}
               currentViewId={viewId}
+              pendingActiveViewId={pendingActiveViewId}
               onViewSelect={(selectedViewId) => {
+                setPendingActiveViewId(selectedViewId);
                 router.push(`/${baseId}/${tableId}/${selectedViewId}`, {
                   scroll: false,
                 });

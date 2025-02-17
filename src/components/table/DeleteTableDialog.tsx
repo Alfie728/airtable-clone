@@ -104,9 +104,21 @@ export function DeleteTableDialog({
       const firstTable = remainingTables[0];
       if (firstTable) {
         console.log("[UI] Navigating to first remaining table:", firstTable);
-        router.push(`/${baseId}/${firstTable.id}/grid`, {
-          scroll: false,
-        });
+        // Check for cached view first
+        const cachedView = queryClient.getQueryData<string>(
+          queryKeys.tables.views.detail(firstTable.id, "default"),
+        );
+
+        if (cachedView) {
+          router.push(`/${baseId}/${firstTable.id}/${cachedView}`, {
+            scroll: false,
+          });
+        } else {
+          // If no cached view, use loading state
+          router.push(`/${baseId}/${firstTable.id}/loading`, {
+            scroll: false,
+          });
+        }
       } else {
         console.log("[UI] No tables remaining, navigating to home");
         router.push("/", {

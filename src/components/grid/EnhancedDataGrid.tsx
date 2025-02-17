@@ -355,8 +355,8 @@ export function EnhancedDataGrid({
   const { bulkDeleteRows, isBulkDeletingRows, reorderRows } = useRows(tableId);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [rowManagementWidth, setRowManagementWidth] = useState<number>(0);
-  console.log(rowManagementWidth);
-  // Update row order when initialData changes
+  
+   // Update row order when initialData changes
   useEffect(() => {
     if (initialData) {
       setRowOrder(initialData.sort((a, b) => a.order - b.order));

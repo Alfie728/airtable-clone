@@ -24,10 +24,14 @@ interface SecondaryNavigationProps {
   currentTableId?: string | null;
   currentTableName?: string;
   onTableSelect?: (tableId: string) => void;
-  onTableCreated?: (table: typeof tables.$inferSelect) => void;
+  onTableCreated?: (
+    table: typeof tables.$inferSelect & { defaultViewId?: string },
+  ) => void;
   addTableAction: (tableName: string) => Promise<TableCreateResponse>;
   isAddingTable: boolean;
   pendingActiveTableId: string | null;
+  pendingActiveViewId?: string | null;
+  setPendingActiveViewId?: (viewId: string | null) => void;
   renameTable?: (newName: string) => Promise<TableRenameResponse>;
   isRenaming?: boolean;
 }
@@ -41,6 +45,8 @@ export function SecondaryNavigation({
   addTableAction,
   isAddingTable,
   pendingActiveTableId,
+  pendingActiveViewId,
+  setPendingActiveViewId,
   renameTable,
   isRenaming,
 }: SecondaryNavigationProps) {
@@ -145,7 +151,13 @@ export function SecondaryNavigation({
         toast.success("Table created successfully", {
           id: loadingToast,
         });
-        onTableCreated?.(result.table);
+        if (result.defaultViewId && setPendingActiveViewId) {
+          setPendingActiveViewId(result.defaultViewId);
+        }
+        onTableCreated?.({
+          ...result.table,
+          defaultViewId: result.defaultViewId,
+        });
       } else {
         const errorMessage = result?.error ?? "Failed to create table";
         toast.error(errorMessage, {
