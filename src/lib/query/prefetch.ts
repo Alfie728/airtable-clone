@@ -5,7 +5,9 @@ import type { BaseResponse } from "~/types/base";
 import { type tables } from "~/server/db/schema";
 import { queryKeys } from "./keys";
 import { getUserBases } from "~/lib/actions/bases.action";
-import { getDefaultView } from "~/lib/actions/views.action";
+import { getDefaultView, getTableViews } from "~/lib/actions/views.action";
+import { getViewSorts } from "~/lib/actions/sort.action";
+import type { TableResponse } from "~/types/table";
 
 type TableType = typeof tables.$inferSelect;
 
@@ -40,16 +42,53 @@ type GetTableDataResponse = {
 /**
  * Prefetches a single table's data
  */
-export async function prefetchTable(
+export async function prefetchTable (
   queryClient: QueryClient,
   tableId: string,
   tableName: string,
 ): Promise<void> {
   if (!tableId || !tableName) return;
 
+  // Prefetch table data
   await queryClient.prefetchQuery({
     queryKey: queryKeys.tables.detail(tableId),
     queryFn: () => getTableData(tableId, tableName),
+    staleTime: 5 * 1000,
+  });
+
+  // Prefetch views list and default view
+  await queryClient.prefetchQuery({
+    queryKey: queryKeys.tables.views.list(tableId),
+    queryFn: async () => {
+      const viewsResult = await getTableViews(tableId);
+      const { viewId } = await getDefaultView(tableId);
+
+      if (viewId) {
+        // Cache the default view ID
+        queryClient.setQueryData(
+          queryKeys.tables.views.detail(tableId, "default"),
+          viewId,
+        );
+
+        // Prefetch sorts for the default view
+        void queryClient.prefetchQuery({
+          queryKey: queryKeys.views.sorts(viewId),
+          queryFn: async () => {
+            const result = await getViewSorts(viewId);
+            if (!result.success) {
+              throw new Error(result.error ?? "Failed to get view sorts");
+            }
+            return result.sorts;
+          },
+          staleTime: 5 * 1000,
+        });
+      }
+
+      if (viewsResult.success && viewsResult.views) {
+        return viewsResult.views;
+      }
+      throw new Error(viewsResult.error ?? "Failed to get views");
+    },
     staleTime: 5 * 1000,
   });
 }
@@ -64,43 +103,81 @@ export async function prefetchBaseTables(
 ): Promise<void> {
   if (!baseId) return;
 
-  // Prefetch base info first
-  await queryClient.prefetchQuery({
+  // Prefetch base info
+  void queryClient.prefetchQuery({
     queryKey: queryKeys.bases.info(baseId),
     queryFn: () => getBaseById(baseId),
     staleTime: 30 * 1000,
   });
 
-  // Prefetch base tables list
-  const tablesResult = await queryClient.fetchQuery({
+  // Prefetch tables list
+  void queryClient.prefetchQuery({
     queryKey: queryKeys.bases.tables.list(baseId),
-    queryFn: () => getTables(baseId),
+    queryFn: async () => {
+      const tablesResult = await getTables(baseId);
+
+      if (tablesResult.success && tablesResult.tables) {
+        // Start prefetching table data
+        void Promise.all(
+          tablesResult.tables.map((table) =>
+            queryClient.prefetchQuery({
+              queryKey: queryKeys.tables.detail(table.id),
+              queryFn: () => getTableData(table.id, table.name),
+              staleTime: 5 * 1000,
+            }),
+          ),
+        );
+
+        // Start prefetching views and sorts
+        void Promise.all(
+          tablesResult.tables.map(async (table) => {
+            // Prefetch views list
+            const viewsPromise = queryClient.prefetchQuery({
+              queryKey: queryKeys.tables.views.list(table.id),
+              queryFn: async () => {
+                const viewsResult = await getTableViews(table.id);
+                const { viewId } = await getDefaultView(table.id);
+
+                if (viewId) {
+                  // Cache the default view ID
+                  queryClient.setQueryData(
+                    queryKeys.tables.views.detail(table.id, "default"),
+                    viewId,
+                  );
+
+                  // Prefetch sorts for the default view
+                  void queryClient.prefetchQuery({
+                    queryKey: queryKeys.views.sorts(viewId),
+                    queryFn: async () => {
+                      const result = await getViewSorts(viewId);
+                      if (!result.success) {
+                        throw new Error(
+                          result.error ?? "Failed to get view sorts",
+                        );
+                      }
+                      return result.sorts;
+                    },
+                    staleTime: 5 * 1000,
+                  });
+                }
+
+                if (viewsResult.success && viewsResult.views) {
+                  return viewsResult.views;
+                }
+                throw new Error(viewsResult.error ?? "Failed to get views");
+              },
+              staleTime: 5 * 1000,
+            });
+
+            return viewsPromise;
+          }),
+        );
+      }
+
+      return tablesResult;
+    },
     staleTime: 10 * 1000,
   });
-
-  // If we have tables, prefetch each table's data and their default views
-  if (tablesResult.success && tablesResult.tables) {
-    await Promise.all(
-      tablesResult.tables.map(async (table) => {
-        // Prefetch table data
-        await queryClient.prefetchQuery({
-          queryKey: queryKeys.tables.detail(table.id),
-          queryFn: () => getTableData(table.id, table.name),
-          staleTime: 5 * 1000,
-        });
-
-        // Prefetch table views
-        await queryClient.prefetchQuery({
-          queryKey: queryKeys.tables.views.list(table.id),
-          queryFn: async () => {
-            const { viewId } = await getDefaultView(table.id);
-            return viewId;
-          },
-          staleTime: 5 * 1000,
-        });
-      }),
-    );
-  }
 }
 
 /**

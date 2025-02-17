@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { useParams } from "next/navigation";
@@ -16,16 +16,22 @@ import type {
 import { TableListDropdown } from "../table/TableListDropdown";
 import { TableOptionsDropdown } from "../table/TableOptionsDropdown";
 import { CreateTableDropdown } from "../table/CreateTableDropdown";
+import { useQueryClient } from "@tanstack/react-query";
+import { prefetchTable } from "~/lib/query/prefetch";
 
 interface SecondaryNavigationProps {
   tables?: Array<typeof tables.$inferSelect>;
   currentTableId?: string | null;
   currentTableName?: string;
   onTableSelect?: (tableId: string) => void;
-  onTableCreated?: (table: typeof tables.$inferSelect) => void;
+  onTableCreated?: (
+    table: typeof tables.$inferSelect & { defaultViewId?: string },
+  ) => void;
   addTableAction: (tableName: string) => Promise<TableCreateResponse>;
   isAddingTable: boolean;
   pendingActiveTableId: string | null;
+  pendingActiveViewId?: string | null;
+  setPendingActiveViewId?: (viewId: string | null) => void;
   renameTable?: (newName: string) => Promise<TableRenameResponse>;
   isRenaming?: boolean;
 }
@@ -39,6 +45,8 @@ export function SecondaryNavigation({
   addTableAction,
   isAddingTable,
   pendingActiveTableId,
+  pendingActiveViewId,
+  setPendingActiveViewId,
   renameTable,
   isRenaming,
 }: SecondaryNavigationProps) {
@@ -51,6 +59,29 @@ export function SecondaryNavigation({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lastUsedNumber, setLastUsedNumber] = useState(tables.length);
   const activeTabRef = useRef<HTMLButtonElement>(null);
+  const queryClient = useQueryClient();
+
+  const handleHover = useCallback(
+    (tableId: string, tableName: string) => {
+      if (tableId === currentTableId) return;
+
+      void prefetchTable(queryClient, tableId, tableName);
+
+      const currentIndex = tables.findIndex((t) => t.id === tableId);
+      if (currentIndex !== -1) {
+        const prevTable = tables[currentIndex - 1];
+        const nextTable = tables[currentIndex + 1];
+
+        if (prevTable && prevTable.id !== currentTableId) {
+          void prefetchTable(queryClient, prevTable.id, prevTable.name);
+        }
+        if (nextTable && nextTable.id !== currentTableId) {
+          void prefetchTable(queryClient, nextTable.id, nextTable.name);
+        }
+      }
+    },
+    [queryClient, tables, currentTableId],
+  );
 
   const handleRenameTable = async (tableId: string) => {
     setEditingTableId(tableId);
@@ -63,7 +94,6 @@ export function SecondaryNavigation({
   const handleRenameSubmit = async () => {
     if (!editingTableId || !renameTable) return;
 
-    // Close dropdown immediately for better UX
     setEditingTableId(null);
     setIsDropdownOpen(false);
 
@@ -103,7 +133,6 @@ export function SecondaryNavigation({
     let nextNumber = lastUsedNumber + 1;
     let nameToCreate = `Table ${nextNumber}`;
 
-    // Keep incrementing the number until we find an unused name
     while (tables.some((t) => t.name === nameToCreate)) {
       nextNumber++;
       nameToCreate = `Table ${nextNumber}`;
@@ -122,7 +151,13 @@ export function SecondaryNavigation({
         toast.success("Table created successfully", {
           id: loadingToast,
         });
-        onTableCreated?.(result.table);
+        if (result.defaultViewId && setPendingActiveViewId) {
+          setPendingActiveViewId(result.defaultViewId);
+        }
+        onTableCreated?.({
+          ...result.table,
+          defaultViewId: result.defaultViewId,
+        });
       } else {
         const errorMessage = result?.error ?? "Failed to create table";
         toast.error(errorMessage, {
@@ -171,6 +206,7 @@ export function SecondaryNavigation({
                     onClick={() => {
                       onTableSelect?.(table.id);
                     }}
+                    onMouseEnter={() => handleHover(table.id, table.name)}
                   >
                     <div className="flex items-center gap-1">
                       <span

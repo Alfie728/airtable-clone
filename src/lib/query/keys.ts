@@ -22,17 +22,21 @@ export const queryKeys = {
       list: (tableId: string) =>
         [...queryKeys.tables.detail(tableId), "views", "list"] as const,
       detail: (tableId: string, viewId: string) =>
-        [...queryKeys.tables.detail(tableId), "views", viewId] as const,
+        [
+          ...queryKeys.tables.detail(tableId),
+          "views",
+          "detail",
+          viewId,
+        ] as const,
     },
   },
   views: {
     root: ["views"] as const,
-    detail: (viewId: string) => [...queryKeys.views.root, viewId] as const,
+    detail: (viewId: string) => ["views", viewId] as const,
     filters: (viewId: string) =>
       [...queryKeys.views.detail(viewId), "filters"] as const,
     sorts: (viewId: string) =>
       [...queryKeys.views.detail(viewId), "sorts"] as const,
-    list: (tableId: string) => ["table", tableId, "views"] as const,
   },
   user: {
     root: ["user"] as const,
