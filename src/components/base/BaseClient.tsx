@@ -88,16 +88,23 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   }, [initialSortState]);
 
   // Handle sorting changes
-  const handleSortingChange = async (newSorting: SortingState) => {
+  const handleSortingChange = (newSorting: SortingState) => {
     if (JSON.stringify(newSorting) === JSON.stringify(sorting)) return;
+
+    // Update local state immediately for responsive UI
     setSorting(newSorting);
-    try {
-      await updateSort(newSorting);
-    } catch (error) {
-      toast.error("Failed to update sorting");
-      // Revert to previous state on error
-      setSorting(sorting);
-    }
+
+    // Debounce the server update
+    const timeoutId = setTimeout(() => {
+      try {
+        void updateSort(newSorting);
+      } catch (error) {
+        toast.error("Failed to update sorting");
+        setSorting(sorting);
+      }
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
   };
 
   // Add error handling for views
