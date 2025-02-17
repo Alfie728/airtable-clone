@@ -286,7 +286,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         {!isAddingTable && (
           <div
             className={cn(
-              "absolute bottom-0 left-0 top-[136px] z-10 w-60 border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
+              "absolute bottom-0 left-0 top-[136px] z-20 w-60 border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
               !isSidebarOpen && "-translate-x-full",
             )}
           >
@@ -303,7 +303,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           </div>
         )}
 
-        <div className="relative flex flex-1 overflow-scroll scrollbar-hide">
+        <div className="relative flex flex-1 overflow-scroll">
           <div
             className={cn(
               "flex-1 transition-[margin] duration-200 ease-in-out",

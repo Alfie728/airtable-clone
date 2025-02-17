@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useLayoutEffect } from "react";
 import { Button } from "~/components/ui/button";
 import {
   DropdownMenu,
@@ -36,8 +36,9 @@ interface RowManagementProps {
   tableId: string;
   row: Row;
   isSelected: boolean;
-  onSelectionChange: (selected: boolean) => void;
+  onSelectionChangeAction: (selected: boolean) => void;
   onRowDeleted: (rowId: string) => void;
+  onWidthChange?: (width: number) => void;
   dragHandleProps?: {
     listeners?: {
       onKeyDown?: (event: React.KeyboardEvent) => void;
@@ -58,12 +59,30 @@ export function RowManagement({
   tableId,
   row,
   isSelected,
-  onSelectionChange,
+  onSelectionChangeAction,
   onRowDeleted,
+  onWidthChange,
   dragHandleProps,
 }: RowManagementProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (contentRef.current && onWidthChange) {
+      const observer = new ResizeObserver((entries) => {
+        const element = entries[0]?.target;
+        if (element) {
+          const rect = element.getBoundingClientRect();
+          console.log("Row management with padding: ", rect.width);
+          onWidthChange(rect.width);
+        }
+      });
+
+      observer.observe(contentRef.current);
+      return () => observer.disconnect();
+    }
+  }, [onWidthChange]);
 
   const { deleteRow, isDeletingRow } = useRows(tableId);
 
@@ -128,7 +147,10 @@ export function RowManagement({
       style={style}
       className={cn(isDragging && "shadow-xl ring-1 ring-gray-200")}
     >
-      <div className="group/row flex h-[34px] items-center gap-1 px-2">
+      <div
+        ref={contentRef}
+        className="group/row flex h-[34px] items-center gap-1 px-2"
+      >
         <div className="flex items-center">
           <button
             {...attributes}
@@ -140,10 +162,10 @@ export function RowManagement({
           >
             <GripVertical className="h-3.5 w-3.5 text-gray-400" />
           </button>
-          <div className="relative flex w-full items-center justify-center">
+          <div className="relative flex h-4 w-4 items-center justify-center">
             <span
               className={cn(
-                "pointer-events-none text-xs text-gray-400 transition-opacity",
+                "pointer-events-none text-center text-xs text-gray-400 transition-opacity",
                 isSelected ? "opacity-0" : "group-hover/row:opacity-0",
               )}
             >
@@ -151,7 +173,7 @@ export function RowManagement({
             </span>
             <Checkbox
               checked={isSelected}
-              onCheckedChange={onSelectionChange}
+              onCheckedChange={onSelectionChangeAction}
               className={cn(
                 "absolute h-3.5 w-3.5 rounded-[4px] border-gray-300 transition-opacity",
                 isSelected
