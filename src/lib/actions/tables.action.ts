@@ -2,7 +2,7 @@
 
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "~/server/db";
-import { tables, columns, rows, cells } from "~/server/db/schema";
+import { tables, columns, rows, cells, views } from "~/server/db/schema";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getBaseById } from "./bases.action";
@@ -63,21 +63,41 @@ export async function createTable(
     ];
 
     // Insert the columns without any data
-    await db.insert(columns).values(
-      defaultColumns.map((col) => ({
+    const createdColumns = await db
+      .insert(columns)
+      .values(
+        defaultColumns.map((col) => ({
+          tableId: newTable.id,
+          name: col.name,
+          type: col.type,
+          order: col.order,
+          width: 200,
+          isSearchable: true,
+          isSortable: true,
+          isVisible: true,
+        })),
+      )
+      .returning();
+
+    // Create a default view
+    const [defaultView] = await db
+      .insert(views)
+      .values({
+        name: "Grid View",
         tableId: newTable.id,
-        name: col.name,
-        type: col.type,
-        order: col.order,
-        width: 200,
-        isSearchable: true,
-        isSortable: true,
-        isVisible: true,
-      })),
-    );
+        isDefault: true,
+        columnsOrder: createdColumns.map((col) => col.id),
+        hiddenColumns: [],
+        rowsPerPage: 100,
+      })
+      .returning();
+
+    if (!defaultView) {
+      return { success: false, error: "Failed to create default view" };
+    }
 
     revalidatePath(`/base/${baseId}`, "page");
-    return { success: true, table: newTable };
+    return { success: true, table: newTable, defaultViewId: defaultView.id };
   } catch (error) {
     if (error instanceof Error) {
       return { success: false, error: error.message };
@@ -228,7 +248,7 @@ export async function getTableData(tableId: string, tableName: string) {
         if (currentRow) {
           gridData.push(currentRow);
         }
-        currentRow = { id: record.row.id };
+        currentRow = { id: record.row.id, order: record.row.order };
       }
 
       if (record.cell?.columnId) {
@@ -515,6 +535,16 @@ export async function deleteTableAction(
     console.log(`[${Date.now() - startTime}ms] Deleting view filters`);
     await db.execute(sql`
       DELETE FROM "airtable-clone_view_filters"
+      WHERE view_id IN (
+        SELECT id FROM "airtable-clone_views"
+        WHERE table_id = ${tableId}
+      );
+    `);
+
+    // Delete view sorts
+    console.log(`[${Date.now() - startTime}ms] Deleting view sorts`);
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_view_sorts"
       WHERE view_id IN (
         SELECT id FROM "airtable-clone_views"
         WHERE table_id = ${tableId}

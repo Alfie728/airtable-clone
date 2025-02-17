@@ -51,6 +51,7 @@ export interface TableCreateResponse {
   success: boolean;
   error?: string;
   table?: typeof tables.$inferSelect;
+  defaultViewId?: string;
 }
 
 export interface TableRenameResponse {

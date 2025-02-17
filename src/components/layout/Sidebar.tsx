@@ -8,11 +8,12 @@ import type { views } from "~/server/db/schema";
 import { cn } from "~/lib/utils";
 
 interface SidebarProps {
-  views: (typeof views.$inferSelect)[];
+  views: (typeof views.$inferSelect)[] | undefined;
   currentViewId: string | null;
   onViewSelect: (viewId: string) => void;
   isAddingView?: boolean;
   pendingActiveViewId?: string | null;
+  isLoading?: boolean;
 }
 
 export function Sidebar({
@@ -21,6 +22,7 @@ export function Sidebar({
   isAddingView,
   onViewSelect,
   pendingActiveViewId,
+  isLoading = false,
 }: SidebarProps) {
   const [isViewsOpen, setIsViewsOpen] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -57,25 +59,33 @@ export function Sidebar({
 
           <div className="flex-1 overflow-y-auto p-1">
             <div className="space-y-0.5">
-              {views.map((view) => (
-                <Button
-                  key={view.id}
-                  variant={currentViewId === view.id ? "secondary" : "ghost"}
-                  className={cn(
-                    "h-7 w-full justify-start gap-2 rounded px-2 text-xs font-normal",
-                    isAddingView && views.indexOf(view) === views.length - 1
-                      ? "bg-blue-50 text-blue-700"
-                      : view.id === pendingActiveViewId ||
-                          (!pendingActiveViewId && currentViewId === view.id)
+              {isLoading ? (
+                <div className="px-2 py-1 text-sm text-gray-500">
+                  Loading views...
+                </div>
+              ) : !Array.isArray(views) || views.length === 0 ? (
+                <div className="px-2 py-1 text-sm text-gray-500">No views</div>
+              ) : (
+                views.map((view) => (
+                  <Button
+                    key={view.id}
+                    variant={currentViewId === view.id ? "secondary" : "ghost"}
+                    className={cn(
+                      "h-7 w-full justify-start gap-2 rounded px-2 text-xs font-normal",
+                      isAddingView && views.indexOf(view) === views.length - 1
                         ? "bg-blue-50 text-blue-700"
-                        : "bg-gray-50 text-gray-500",
-                  )}
-                  onClick={() => onViewSelect(view.id)}
-                >
-                  <Grid className="h-3.5 w-3.5" />
-                  {view.name}
-                </Button>
-              ))}
+                        : view.id === pendingActiveViewId ||
+                            (!pendingActiveViewId && currentViewId === view.id)
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-gray-50 text-gray-500",
+                    )}
+                    onClick={() => onViewSelect(view.id)}
+                  >
+                    <Grid className="h-3.5 w-3.5" />
+                    {view.name}
+                  </Button>
+                ))
+              )}
             </div>
           </div>
 

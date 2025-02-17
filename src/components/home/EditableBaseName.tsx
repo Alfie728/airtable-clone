@@ -7,6 +7,9 @@ import type { BaseResponse } from "~/types/base";
 import { getDefaultView } from "~/lib/actions/views.action";
 import { getTables } from "~/lib/actions/tables.action";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "~/lib/query/keys";
+import type { SerializedTable } from "~/types/table";
 
 interface EditableBaseNameProps {
   name: string;
@@ -29,6 +32,7 @@ export function EditableBaseName({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -96,11 +100,15 @@ export function EditableBaseName({
   const handleClick = (e: React.MouseEvent) => {
     if (!isEditing && baseId) {
       e.preventDefault();
-      // We'll navigate to the first table's default view
       void (async () => {
         try {
-          const tablesResult = await getTables(baseId);
-          if (!tablesResult.success || !tablesResult.tables?.length) {
+          // Get cached tables data
+          const tablesResult = queryClient.getQueryData<{
+            success: boolean;
+            tables: SerializedTable[];
+          }>(queryKeys.bases.tables.list(baseId));
+
+          if (!tablesResult?.success || !tablesResult.tables?.length) {
             router.push("/");
             return;
           }
@@ -110,10 +118,29 @@ export function EditableBaseName({
             throw new Error("Invalid table data");
           }
 
-          const { viewId, error } = await getDefaultView(firstTable.id);
-          if (!viewId) {
-            throw new Error(error ?? "Failed to get default view");
+          // Check for cached view first
+          const cachedView = queryClient.getQueryData<string>(
+            queryKeys.tables.views.list(firstTable.id),
+          );
+
+          if (cachedView) {
+            router.push(`/${baseId}/${firstTable.id}/${cachedView}`);
+            return;
           }
+
+          // If no cached view, fetch from server
+          const { viewId, error: viewError } = await getDefaultView(
+            firstTable.id,
+          );
+          if (!viewId) {
+            throw new Error(viewError ?? "Failed to get default view");
+          }
+
+          // Cache the view ID for future use
+          queryClient.setQueryData(
+            queryKeys.tables.views.list(firstTable.id),
+            viewId,
+          );
 
           router.push(`/${baseId}/${firstTable.id}/${viewId}`);
         } catch (err) {
