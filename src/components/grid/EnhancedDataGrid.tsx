@@ -86,7 +86,7 @@ type HeaderType = Header<Row, string | number>;
 type CellType = Cell<Row, string | number>;
 type RowType = TableRow<Row>;
 
-const BULK_ADD_ROWS_COUNT = 15000;
+const BULK_ADD_ROWS_COUNT = 5000;
 
 interface EnhancedDataGridProps {
   baseId: string;
