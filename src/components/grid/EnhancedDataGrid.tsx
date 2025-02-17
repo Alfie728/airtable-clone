@@ -59,6 +59,7 @@ import { RowManagement } from "./RowManagement";
 import { Checkbox } from "~/components/ui/checkbox";
 import type { Active } from "@dnd-kit/core";
 import { SortControls } from "./SortControls";
+import { table } from "console";
 
 interface TableMeta {
   updateData: (rowIndex: number, columnId: string, value: unknown) => void;
@@ -85,7 +86,7 @@ type HeaderType = Header<Row, string | number>;
 type CellType = Cell<Row, string | number>;
 type RowType = TableRow<Row>;
 
-const BULK_ADD_ROWS_COUNT = 100;
+const BULK_ADD_ROWS_COUNT = 15000;
 
 interface EnhancedDataGridProps {
   baseId: string;
@@ -353,7 +354,8 @@ export function EnhancedDataGrid({
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const { bulkDeleteRows, isBulkDeletingRows, reorderRows } = useRows(tableId);
   const [activeId, setActiveId] = useState<string | null>(null);
-
+  const [rowManagementWidth, setRowManagementWidth] = useState<number>(0);
+  console.log(rowManagementWidth);
   // Update row order when initialData changes
   useEffect(() => {
     if (initialData) {
@@ -728,7 +730,7 @@ export function EnhancedDataGrid({
             setActiveId(null);
           }}
         >
-          <div className="inline-flex min-w-full">
+          <div className="flex min-w-full">
             <SortableContext
               items={table.getState().columnOrder}
               strategy={horizontalListSortingStrategy}
@@ -791,7 +793,7 @@ export function EnhancedDataGrid({
                   <div
                     className="flex flex-col border-r border-gray-300 bg-white"
                     style={{
-                      width: "69px",
+                      width: rowManagementWidth || "auto",
                     }}
                   >
                     <div className="sticky top-0 z-10 border-b border-gray-300 bg-gray-50 shadow-sm">
@@ -803,7 +805,7 @@ export function EnhancedDataGrid({
                               table.getRowModel().rows.length
                           }
                           onCheckedChange={handleSelectAllRows}
-                          className="ml-[14px] h-3.5 w-3.5 rounded-[4px] border-gray-300"
+                          className="ml-[25px] h-3.5 w-3.5 rounded-[4px] border-gray-300"
                           aria-label="Select all rows"
                         />
                       </div>
@@ -844,10 +846,11 @@ export function EnhancedDataGrid({
                               tableId={tableId}
                               row={rowData}
                               isSelected={selectedRows.includes(rowData.id)}
-                              onSelectionChange={(selected: boolean) =>
+                              onSelectionChangeAction={(selected: boolean) =>
                                 handleRowSelectionChange(rowData.id, selected)
                               }
                               onRowDeleted={handleRowDeleted}
+                              onWidthChange={setRowManagementWidth}
                               dragHandleProps={{
                                 attributes: {
                                   "data-index": virtualRow.index,
