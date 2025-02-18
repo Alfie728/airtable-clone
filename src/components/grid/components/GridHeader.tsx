@@ -32,20 +32,20 @@ export function GridHeader({
         {headerContext.column.getCanSort() && (
           <div
             className={cn(
-              "h-4 w-4 text-gray-400",
+              "text-gray-400",
               headerContext.column.getIsSorted() && "text-blue-600",
             )}
           >
             {headerContext.column.getIsSorted() === "asc" ? (
               <div className="flex items-center">
-                <ArrowUp className="h-4" />
+                <ArrowUp className="h-4 w-4" />
                 {sortIndex > -1 && (
                   <span className="ml-1 text-xs">{sortIndex + 1}</span>
                 )}
               </div>
             ) : headerContext.column.getIsSorted() === "desc" ? (
               <div className="flex items-center">
-                <ArrowDown className="h-4" />
+                <ArrowDown className="h-4 w-4" />
                 {sortIndex > -1 && (
                   <span className="ml-1 text-xs">{sortIndex + 1}</span>
                 )}
