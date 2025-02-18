@@ -297,7 +297,7 @@ export function EnhancedDataGrid({
 
   return (
     <div className="flex h-full flex-col">
-      <div ref={tableContainerRef} className="relative flex-1 overflow-scroll">
+      <div ref={tableContainerRef} className="relative flex-1 overflow-auto">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}

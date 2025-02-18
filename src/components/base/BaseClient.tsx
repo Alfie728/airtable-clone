@@ -404,7 +404,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           </div>
         )}
 
-        <div className="relative flex flex-1 overflow-scroll">
+        <div className="relative flex flex-1 overflow-auto">
           <div
             className={cn(
               "flex-1 transition-[margin] duration-200 ease-in-out",
