@@ -21,6 +21,10 @@ export function GridHeader({
   tableId,
   queryClient,
 }: GridHeaderProps) {
+  const sortIndex = headerContext.table
+    .getState()
+    .sorting.findIndex((sort) => sort.id === column.id);
+
   return (
     <div className="flex w-full items-center justify-between">
       <div className="flex items-center gap-2">
@@ -33,9 +37,19 @@ export function GridHeader({
             )}
           >
             {headerContext.column.getIsSorted() === "asc" ? (
-              <ArrowUp className="h-4 w-4" />
+              <div className="flex items-center">
+                <ArrowUp className="h-4" />
+                {sortIndex > -1 && (
+                  <span className="ml-1 text-xs">{sortIndex + 1}</span>
+                )}
+              </div>
             ) : headerContext.column.getIsSorted() === "desc" ? (
-              <ArrowDown className="h-4 w-4" />
+              <div className="flex items-center">
+                <ArrowDown className="h-4" />
+                {sortIndex > -1 && (
+                  <span className="ml-1 text-xs">{sortIndex + 1}</span>
+                )}
+              </div>
             ) : (
               <ArrowUpDown className="h-4 w-4" />
             )}
@@ -60,6 +74,7 @@ export function GridHeader({
         sortDirection={
           headerContext.column.getIsSorted() as "asc" | "desc" | null
         }
+        sortIndex={sortIndex > -1 ? sortIndex : undefined}
       />
     </div>
   );

@@ -195,7 +195,7 @@ export function GridControls({
             </div>
 
             <div className="space-y-2">
-              {sorting.map((sort) => {
+              {sorting.map((sort, index) => {
                 const column = columns.find((col) => col.id === sort.id);
                 if (!column) return null;
 
@@ -204,6 +204,9 @@ export function GridControls({
                     key={sort.id}
                     className="flex items-center gap-2 rounded-md border border-gray-200 p-2"
                   >
+                    <div className="flex h-6 w-6 items-center justify-center text-xs text-blue-600">
+                      {index + 1}
+                    </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
