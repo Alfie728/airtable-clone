@@ -22,7 +22,6 @@ import {
 import {
   Pencil,
   Trash2,
-  Plus,
   Copy,
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -46,7 +45,7 @@ import type { Column } from "~/types/table";
 
 interface ColumnManagementProps {
   tableId: string;
-  column?: Column;
+  column: Column;
   onColumnUpdated?: () => void;
   onSort?: (direction: "asc" | "desc" | false, isMulti: boolean) => void;
   sortDirection?: "asc" | "desc" | null;
@@ -61,19 +60,13 @@ export function ColumnManagement({
 }: ColumnManagementProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
-  const [newColumnName, setNewColumnName] = useState(column?.name ?? "");
+  const [newColumnName, setNewColumnName] = useState(column.name);
   const [alignOffset, setAlignOffset] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const {
-    addColumn,
-    deleteColumn,
-    renameColumn,
-    isAddingColumn,
-    isDeletingColumn,
-    isRenamingColumn,
-  } = useColumns(tableId);
+  const { deleteColumn, renameColumn, isDeletingColumn, isRenamingColumn } =
+    useColumns(tableId);
 
   useLayoutEffect(() => {
     if (isOpen && triggerRef.current) {
@@ -87,20 +80,7 @@ export function ColumnManagement({
     }
   }, [isOpen]);
 
-  const handleAddColumn = async () => {
-    try {
-      await addColumn({ name: "Field", type: "text" });
-      toast.success("Column added successfully");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to add column",
-      );
-    }
-  };
-
   const handleDeleteColumn = async () => {
-    if (!column) return;
-
     try {
       setShowDeleteDialog(false);
       setIsOpen(false);
@@ -115,7 +95,6 @@ export function ColumnManagement({
   };
 
   const handleRenameSubmit = async () => {
-    if (!column) return;
     try {
       await renameColumn({ columnId: column.id, newName: newColumnName });
       toast.success("Column renamed successfully");
@@ -131,7 +110,7 @@ export function ColumnManagement({
 
   const handleRenameCancel = () => {
     setIsRenaming(false);
-    setNewColumnName(column?.name ?? "");
+    setNewColumnName(column.name);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -149,30 +128,9 @@ export function ColumnManagement({
     setIsOpen(open);
     if (!open) {
       setIsRenaming(false);
-      setNewColumnName(column?.name ?? "");
+      setNewColumnName(column.name);
     }
   };
-
-  if (!column) {
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={handleAddColumn}
-        disabled={isAddingColumn}
-        className="h-8 gap-2 text-xs hover:bg-gray-50"
-      >
-        {isAddingColumn ? (
-          "Adding..."
-        ) : (
-          <>
-            <Plus className="h-3 w-3" />
-            Add field
-          </>
-        )}
-      </Button>
-    );
-  }
 
   return (
     <>
@@ -251,16 +209,17 @@ export function ColumnManagement({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 text-sm"
                     onClick={handleRenameCancel}
+                    className="h-8 text-xs"
                   >
                     Cancel
                   </Button>
                   <Button
+                    variant="default"
                     size="sm"
-                    className="h-8 text-sm"
                     onClick={() => void handleRenameSubmit()}
                     disabled={isRenamingColumn}
+                    className="h-8 text-xs"
                   >
                     {isRenamingColumn ? "Saving..." : "Save"}
                   </Button>
@@ -269,71 +228,40 @@ export function ColumnManagement({
             </>
           ) : (
             <>
+              {/* Sorting options */}
+              {onSort && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => onSort("asc", false)}
+                    className="gap-2 text-xs"
+                  >
+                    <ArrowDownAZ className="h-3.5 w-3.5" />
+                    Sort A to Z
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onSort("desc", false)}
+                    className="gap-2 text-xs"
+                  >
+                    <ArrowDownZA className="h-3.5 w-3.5" />
+                    Sort Z to A
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+
+              {/* Field options */}
               <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault();
-                  setIsRenaming(true);
-                }}
+                onClick={() => setIsRenaming(true)}
+                className="gap-2 text-xs"
               >
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit field
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Copy className="mr-2 h-4 w-4" />
-                Duplicate field
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <ArrowLeftToLine className="mr-2 h-4 w-4" />
-                Insert left
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <ArrowRightToLine className="mr-2 h-4 w-4" />
-                Insert right
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Link2 className="mr-2 h-4 w-4" />
-                Copy field URL
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Info className="mr-2 h-4 w-4" />
-                Edit field description
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Lock className="mr-2 h-4 w-4" />
-                Edit field permissions
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => onSort?.("asc", true)}>
-                <ArrowDownAZ className="mr-2 h-4 w-4" />
-                Sort A → Z
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onSort?.("desc", true)}>
-                <ArrowDownZA className="mr-2 h-4 w-4" />
-                Sort Z → A
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Filter className="mr-2 h-4 w-4" />
-                Filter by this field
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Group className="mr-2 h-4 w-4" />
-                Group by this field
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <EyeOff className="mr-2 h-4 w-4" />
-                Hide field
+                <Pencil className="h-3.5 w-3.5" />
+                Rename field
               </DropdownMenuItem>
               <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault();
-                  setShowDeleteDialog(true);
-                }}
-                className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                onClick={() => setShowDeleteDialog(true)}
+                className="gap-2 text-xs text-red-600 focus:bg-red-50 focus:text-red-600"
               >
-                <Trash2 className="mr-2 h-4 w-4" />
+                <Trash2 className="h-3.5 w-3.5" />
                 Delete field
               </DropdownMenuItem>
             </>
@@ -347,23 +275,26 @@ export function ColumnManagement({
             <DialogTitle>Delete field</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete this field? This action cannot be
-              undone and all data in this field will be permanently lost.
+              undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               variant="ghost"
+              size="sm"
               onClick={() => setShowDeleteDialog(false)}
-              disabled={isDeletingColumn}
+              className="h-8 text-xs"
             >
               Cancel
             </Button>
             <Button
               variant="destructive"
+              size="sm"
               onClick={() => void handleDeleteColumn()}
               disabled={isDeletingColumn}
+              className="h-8 text-xs"
             >
-              {isDeletingColumn ? "Deleting..." : "Delete field"}
+              {isDeletingColumn ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>
