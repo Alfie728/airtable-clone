@@ -49,6 +49,7 @@ interface ColumnManagementProps {
   onColumnUpdated?: () => void;
   onSort?: (direction: "asc" | "desc" | false, isMulti: boolean) => void;
   sortDirection?: "asc" | "desc" | null;
+  sortIndex?: number;
 }
 
 export function ColumnManagement({
@@ -57,6 +58,7 @@ export function ColumnManagement({
   onColumnUpdated,
   onSort,
   sortDirection,
+  sortIndex,
 }: ColumnManagementProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -236,7 +238,7 @@ export function ColumnManagement({
                     className="gap-2 text-xs"
                   >
                     <ArrowDownAZ className="h-3.5 w-3.5" />
-                    Sort A to Z
+                    Sort A to Z                    
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => onSort("desc", false)}
