@@ -3,7 +3,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "~/server/db";
 import { tables, columns, rows, cells, views } from "~/server/db/schema";
-import { eq, and, sql, desc, or } from "drizzle-orm";
+import { eq, and, sql, desc, or, asc, type SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getBaseById } from "./bases.action";
 import type {
@@ -14,7 +14,8 @@ import type {
   TableCreateResponse,
   TableDeleteResponse,
 } from "~/types/table";
-import { type SortingState } from "@tanstack/react-table";
+import { RowData, type SortingState } from "@tanstack/react-table";
+import type { PgSelect } from "drizzle-orm/pg-core";
 
 export async function createTable(
   baseId: string,
@@ -222,11 +223,7 @@ export async function getTableData(
   tableName: string,
   sorts?: SortingState,
 ) {
-  console.log("getTableData called with:", {
-    tableId,
-    tableName,
-    sorts,
-  });
+  console.log("getTableData called with:", { tableId, tableName, sorts });
 
   const user = await currentUser();
   if (!user) throw new Error("Unauthorized");
@@ -239,108 +236,79 @@ export async function getTableData(
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
 
-    console.log("Retrieved columns:", tableColumns);
+    // If sorting is requested
+    if (sorts?.length) {
+      // First, get the sorted row IDs
+      const sortQuery = db
+        .select({
+          row_id: rows.id,
+          row_order: rows.order,
+        })
+        .from(rows)
+        .where(eq(rows.tableId, tableId))
+        .groupBy(rows.id, rows.order);
 
-    // First get all rows and their cells
-    const rowsWithCells = await db
-      .select({
-        row_id: rows.id,
-        order: rows.order,
-        cell_id: cells.id,
-        column_id: cells.columnId,
-        value: cells.value,
-      })
-      .from(rows)
-      .leftJoin(cells, eq(cells.rowId, rows.id))
-      .where(eq(rows.tableId, tableId));
+      // Create ORDER BY conditions for each sort
+      const orderByConditions = sorts
+        .map((sort) => {
+          const column = tableColumns.find((col) => col.id === sort.id);
+          if (!column) return undefined;
 
-    // If there are sorts, fetch the sort values and sort in memory
-    if (sorts && sorts.length > 0) {
-      // Get all cell values for sort columns in one query
-      const sortValues = await Promise.all(
-        sorts.map(async (sort) => {
-          const values = await db
-            .select({
-              row_id: rows.id,
-              value: cells.value,
-            })
-            .from(rows)
-            .leftJoin(cells, eq(cells.rowId, rows.id))
-            .where(and(eq(rows.tableId, tableId), eq(cells.columnId, sort.id)));
+          // Create CASE statement for this sort column
+          return sort.desc
+            ? sql`MAX(CASE WHEN ${cells.columnId} = ${column.id} THEN ${cells.value} END) DESC NULLS LAST`
+            : sql`MAX(CASE WHEN ${cells.columnId} = ${column.id} THEN ${cells.value} END) ASC NULLS LAST`;
+        })
+        .filter((x): x is SQL<unknown> => x !== undefined);
 
-          return {
-            sortId: sort.id,
-            desc: sort.desc,
-            values: new Map(values.map((v) => [v.row_id, v.value ?? ""])),
-          };
-        }),
-      );
+      // Add row_order as tiebreaker
+      orderByConditions.push(asc(rows.order));
 
-      // Sort the rows in memory
-      rowsWithCells.sort((a, b) => {
-        for (const { sortId, desc, values } of sortValues) {
-          const aValue = values.get(a.row_id) ?? "";
-          const bValue = values.get(b.row_id) ?? "";
+      // Apply the sorting
+      const sortedRowIds = await sortQuery
+        .leftJoin(cells, eq(cells.rowId, rows.id))
+        .orderBy(...orderByConditions);
 
-          if (aValue !== bValue) {
-            return desc
-              ? bValue.localeCompare(aValue)
-              : aValue.localeCompare(bValue);
-          }
-        }
-        return a.order - b.order; // Fallback to row order
-      });
+      // Before the query, prepare the row IDs array
+      const rowIdsArray = sql`ARRAY[${sql.join(
+        sortedRowIds.map((r) => sql`${r.row_id}::uuid`),
+        sql`, `,
+      )}]`;
+
+      // Then use it in the query
+      const query = db
+        .select({
+          row_id: rows.id,
+          row_order: rows.order,
+          cell_id: cells.id,
+          column_id: cells.columnId,
+          value: cells.value,
+        })
+        .from(rows)
+        .leftJoin(cells, eq(cells.rowId, rows.id))
+        .where(eq(rows.tableId, tableId))
+        .orderBy(sql`array_position(${rowIdsArray}, ${rows.id})`);
+
+      const sortedRows = await query;
+      return transformResults(sortedRows, tableColumns, tableId, tableName);
     } else {
-      // If no sorting, sort by row order
-      rowsWithCells.sort((a, b) => a.order - b.order);
+      // If no sorting, just get the rows in their original order
+      const query = db
+        .select({
+          row_id: rows.id,
+          row_order: rows.order,
+          cell_id: cells.id,
+          column_id: cells.columnId,
+          value: cells.value,
+        })
+        .from(rows)
+        .leftJoin(cells, eq(cells.rowId, rows.id))
+        .where(eq(rows.tableId, tableId))
+        .orderBy(asc(rows.order));
+
+      const sortedRows = await query;
+      return transformResults(sortedRows, tableColumns, tableId, tableName);
     }
-
-    // Transform the data
-    const gridData: Row[] = [];
-    const rowDataMap = new Map<string, Row>();
-
-    for (const record of rowsWithCells) {
-      if (!rowDataMap.has(record.row_id)) {
-        const newRow: Row = {
-          id: record.row_id,
-          order: record.order,
-        };
-        rowDataMap.set(record.row_id, newRow);
-        gridData.push(newRow);
-      }
-
-      if (record.column_id) {
-        const column = tableColumns.find((col) => col.id === record.column_id);
-        if (column) {
-          const row = rowDataMap.get(record.row_id)!;
-          row[column.name] =
-            column.type === "number"
-              ? Number(record.value) || 0
-              : (record.value ?? "");
-        }
-      }
-    }
-
-    const transformedColumns = tableColumns.map((col) => ({
-      id: col.id,
-      name: col.name,
-      type: col.type,
-      order: col.order,
-      width: col.width,
-      isSearchable: col.isSearchable,
-      isSortable: col.isSortable,
-      isVisible: col.isVisible,
-    }));
-
-    return {
-      success: true,
-      table: {
-        id: tableId,
-        name: tableName,
-        columns: transformedColumns,
-        data: gridData,
-      },
-    };
   } catch (error) {
     console.error("Error in getTableData:", error);
     if (error instanceof Error) {
@@ -348,6 +316,65 @@ export async function getTableData(
     }
     return { success: false, error: "Failed to get table data" };
   }
+}
+
+type QueryResult = {
+  row_id: string;
+  row_order: number;
+  cell_id: string | null;
+  column_id: string | null;
+  value: string | null;
+};
+
+function transformResults(
+  rows: QueryResult[],
+  tableColumns: (typeof columns.$inferSelect)[],
+  tableId: string,
+  tableName: string,
+) {
+  const gridData: Row[] = [];
+  const rowDataMap = new Map<string, Row>();
+
+  for (const record of rows) {
+    if (!rowDataMap.has(record.row_id)) {
+      const newRow: Row = {
+        id: record.row_id,
+        order: record.row_order,
+      };
+      rowDataMap.set(record.row_id, newRow);
+      gridData.push(newRow);
+    }
+
+    if (record.column_id) {
+      const column = tableColumns.find((col) => col.id === record.column_id);
+      if (column) {
+        const row = rowDataMap.get(record.row_id)!;
+        row[column.name] =
+          column.type === "number"
+            ? Number(record.value) || 0
+            : (record.value ?? "");
+      }
+    }
+  }
+
+  return {
+    success: true,
+    table: {
+      id: tableId,
+      name: tableName,
+      columns: tableColumns.map((col) => ({
+        id: col.id,
+        name: col.name,
+        type: col.type,
+        order: col.order,
+        width: col.width,
+        isSearchable: col.isSearchable,
+        isSortable: col.isSortable,
+        isVisible: col.isVisible,
+      })),
+      data: gridData,
+    },
+  };
 }
 
 export async function addRow(
@@ -620,10 +647,6 @@ export async function deleteTableAction(
       WHERE row_id IN (
         SELECT id FROM "airtable-clone_rows"
         WHERE table_id = ${tableId}
-      )
-      OR column_id IN (
-        SELECT id FROM "airtable-clone_columns"
-        WHERE table_id = ${tableId}
       );
     `);
 
@@ -634,29 +657,16 @@ export async function deleteTableAction(
       WHERE table_id = ${tableId};
     `);
 
-    // Delete columns
-    console.log(`[${Date.now() - startTime}ms] Deleting columns`);
+    // Delete table
+    console.log(`[${Date.now() - startTime}ms] Deleting table`);
     await db.execute(sql`
-      DELETE FROM "airtable-clone_columns"
-      WHERE table_id = ${tableId};
+      DELETE FROM "airtable-clone_tables"
+      WHERE id = ${tableId};
     `);
 
-    // Finally delete the table
-    console.log(`[${Date.now() - startTime}ms] Deleting table`);
-    const [deletedTable] = await db
-      .delete(tables)
-      .where(eq(tables.id, tableId))
-      .returning();
-
-    if (!deletedTable) {
-      throw new Error("Table not found during deletion");
-    }
-
-    console.log(`[${Date.now() - startTime}ms] All deletions completed`);
-
     console.log(`[${Date.now() - startTime}ms] Operation complete`);
-
-    return { success: true };
+    revalidatePath(`/base/${baseId}`, "page");
+    return { success: true, error: undefined };
   } catch (error) {
     console.error(`[${Date.now() - startTime}ms] Operation failed:`, error);
     return {
@@ -664,9 +674,4 @@ export async function deleteTableAction(
       error: error instanceof Error ? error.message : "Failed to delete table",
     };
   }
-}
-
-export async function testLog() {
-  console.log("Test server action log");
-  return { success: true };
 }

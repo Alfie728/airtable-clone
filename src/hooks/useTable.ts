@@ -633,7 +633,12 @@ export const useTable = (baseId: string, tableId: string, viewId?: string) => {
     data: tableData,
     isLoading,
     error: tableError,
-  } = useQuery({
+  } = useQuery<{
+    id: string;
+    name: string;
+    columns: Column[];
+    data: Row[];
+  }>({
     queryKey: [
       ...queryKeys.tables.detail(tableId),
       viewId ?? "default",
@@ -642,28 +647,56 @@ export const useTable = (baseId: string, tableId: string, viewId?: string) => {
     ],
     queryFn: async () => {
       // Get table name from the tables list
-      const tableName = tables.find((t) => t.id === tableId)?.name ?? "";
-
-      const result = await getTableData(tableId, tableName, sortState);
-      if (!result.success) {
-        throw new Error(result.error ?? "Failed to get table data");
+      const tableName = tables.find((t) => t.id === tableId)?.name;
+      if (!tableName) {
+        throw new Error("Table not found");
       }
+
+      type TableSuccessResponse = {
+        success: true;
+        table: {
+          id: string;
+          name: string;
+          columns: Column[];
+          data: Row[];
+        };
+      };
+
+      type TableErrorResponse = {
+        success: false;
+        error: string;
+      };
+
+      type TableResponse = TableSuccessResponse | TableErrorResponse;
+
+      const result = (await getTableData(
+        tableId,
+        tableName,
+        sortState,
+      )) as TableResponse;
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
       return result.table;
     },
     staleTime: 0,
   });
 
+  const safeColumns = tableData?.columns ?? [];
+
   return {
-    tableData: tableData,
+    tableData,
     isLoading: isTableLoading,
-    tableError: tableError,
+    tableError,
     addRow: () => {
-      const optimisticRow = generateMockRow(tableData?.columns ?? []);
+      const optimisticRow = generateMockRow(safeColumns);
       return addRowMutation.mutateAsync(optimisticRow);
     },
     addBulkRows: (count: number) => {
       const optimisticRows = Array.from({ length: count }, () =>
-        generateMockRow(tableData?.columns ?? []),
+        generateMockRow(safeColumns),
       );
       return addBulkRowsMutation.mutateAsync({ optimisticRows });
     },
