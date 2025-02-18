@@ -3,10 +3,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { type SortingState } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Plus, X, Trash2 } from "lucide-react";
-import { Button } from "~/components/ui/button";
 import type { Row, Column } from "~/types/table";
-import { ColumnManagement } from "./ColumnManagement";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "~/lib/query/keys";
 import {
@@ -36,6 +33,7 @@ import { DraggableColumn } from "./DraggableColumn";
 import { useTableConfig } from "./hooks/useTableConfig";
 import { type CellType } from "~/types/grid";
 import { AddField } from "./components/AddField";
+import { GridFooter } from "./components/GridFooter";
 
 const BULK_ADD_ROWS_COUNT = 5000;
 
@@ -86,16 +84,11 @@ export function EnhancedDataGrid({
   onColumnsChange,
   addRowAction,
   addBulkRowsAction,
-  updateCellAction,
   isAddingRow,
   isBatchAdding,
   sorting,
   onSortingChangeAction,
 }: EnhancedDataGridProps) {
-  const [editingCell, setEditingCell] = useState<{
-    rowId: string | null;
-    columnId: string | null;
-  }>({ rowId: null, columnId: null });
   const [columnOrder, setColumnOrder] = useState<string[]>(() =>
     (initialColumns ?? [])
       .sort((a, b) => a.order - b.order)
@@ -106,7 +99,7 @@ export function EnhancedDataGrid({
   );
   const queryClient = useQueryClient();
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
-  const { bulkDeleteRows, isBulkDeletingRows, reorderRows } = useRows(tableId);
+  const { reorderRows } = useRows(tableId);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [rowManagementWidth, setRowManagementWidth] = useState<number>(0);
   const { reorderColumns } = useColumns(tableId);
@@ -259,23 +252,6 @@ export function EnhancedDataGrid({
       if (oldIndex !== -1 && newIndex !== -1) {
         table.setColumnOrder((old) => arrayMove(old, oldIndex, newIndex));
       }
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    try {
-      // Update local state immediately
-      handleBulkRowsDeleted(selectedRows);
-
-      // Call server action
-      await bulkDeleteRows(selectedRows);
-      toast.success("Rows deleted successfully");
-    } catch (error) {
-      // Revert to initial data on error
-      setRowOrder(initialData ?? []);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete rows",
-      );
     }
   };
 
@@ -485,70 +461,16 @@ export function EnhancedDataGrid({
           </div>
         </DndContext>
       </div>
-      <div className="border-t border-gray-300 bg-white p-2">
-        <div className="flex gap-2">
-          {selectedRows.length > 0 ? (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void handleBulkDelete()}
-                className="h-7 gap-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-600"
-                disabled={isBulkDeletingRows}
-              >
-                {isBulkDeletingRows ? (
-                  "Deleting..."
-                ) : (
-                  <>
-                    <Trash2 className="h-3 w-3" />
-                    Delete {selectedRows.length} row
-                    {selectedRows.length === 1 ? "" : "s"}
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSelectedRows([])}
-                className="h-7 gap-2 text-xs hover:bg-gray-50"
-              >
-                <X className="h-3 w-3" />
-                Clear selection
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void addRowAction()}
-                className="h-7 gap-2 text-xs hover:bg-gray-50"
-                disabled={isAddingRow}
-              >
-                {isAddingRow ? (
-                  "Adding..."
-                ) : (
-                  <>
-                    <Plus className="h-3 w-3" />
-                    Add record
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleAddBulkRows}
-                className="h-7 gap-2 text-xs hover:bg-gray-50"
-                disabled={isBatchAdding}
-              >
-                {isBatchAdding
-                  ? `Adding ${BULK_ADD_ROWS_COUNT} rows...`
-                  : `Add ${BULK_ADD_ROWS_COUNT} rows`}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+      <GridFooter
+        tableId={tableId}
+        selectedRows={selectedRows}
+        onSelectionChange={setSelectedRows}
+        addRowAction={addRowAction}
+        addBulkRowsAction={handleAddBulkRows}
+        isAddingRow={isAddingRow}
+        isBatchAdding={isBatchAdding}
+        onRowsDeleted={handleBulkRowsDeleted}
+      />
     </div>
   );
 }
