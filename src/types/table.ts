@@ -71,3 +71,9 @@ export interface TableListResponse {
   error?: string;
   tables?: SerializedTable[];
 }
+
+export interface AddColumnParams {
+  name: string;
+  type: "text" | "number";
+  defaultValue?: string | number;
+}
