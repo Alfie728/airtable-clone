@@ -239,76 +239,61 @@ export async function getTableData(
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
 
-    // Build the base query
-    let query = sql`
-      WITH row_data AS (
-        SELECT 
-          r.id as row_id,
-          r.order,
-          jsonb_object_agg(
-            c.column_id,
-            COALESCE(c.value, '')
-          ) as values
-        FROM "airtable-clone_rows" r
-        LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
-        WHERE r.table_id = ${tableId}
-        GROUP BY r.id, r.order
-      ),
-      sorted_rows AS (
-        SELECT rd.row_id, rd.order
-        FROM row_data rd
-        ORDER BY
-    `;
+    console.log("Retrieved columns:", tableColumns);
 
-    // Add sorting clauses
+    // First get all rows and their cells
+    const rowsWithCells = await db
+      .select({
+        row_id: rows.id,
+        order: rows.order,
+        cell_id: cells.id,
+        column_id: cells.columnId,
+        value: cells.value,
+      })
+      .from(rows)
+      .leftJoin(cells, eq(cells.rowId, rows.id))
+      .where(eq(rows.tableId, tableId));
+
+    // If there are sorts, fetch the sort values and sort in memory
     if (sorts && sorts.length > 0) {
-      console.log("Building sort clauses for sorts:", sorts);
+      // Get all cell values for sort columns in one query
+      const sortValues = await Promise.all(
+        sorts.map(async (sort) => {
+          const values = await db
+            .select({
+              row_id: rows.id,
+              value: cells.value,
+            })
+            .from(rows)
+            .leftJoin(cells, eq(cells.rowId, rows.id))
+            .where(and(eq(rows.tableId, tableId), eq(cells.columnId, sort.id)));
 
-      const sortClauses = sorts.map((sort) => {
-        const direction = sort.desc ? sql`DESC` : sql`ASC`;
-        // Cast to text, handle nulls with COALESCE, and use case-sensitive collation
-        return sql`COALESCE((rd.values ->> ${sort.id}), '')::text COLLATE "C" ${direction}`;
+          return {
+            sortId: sort.id,
+            desc: sort.desc,
+            values: new Map(values.map((v) => [v.row_id, v.value ?? ""])),
+          };
+        }),
+      );
+
+      // Sort the rows in memory
+      rowsWithCells.sort((a, b) => {
+        for (const { sortId, desc, values } of sortValues) {
+          const aValue = values.get(a.row_id) ?? "";
+          const bValue = values.get(b.row_id) ?? "";
+
+          if (aValue !== bValue) {
+            return desc
+              ? bValue.localeCompare(aValue)
+              : aValue.localeCompare(bValue);
+          }
+        }
+        return a.order - b.order; // Fallback to row order
       });
-
-      // Combine sort clauses
-      query = sql`${query} ${sortClauses[0]}`;
-
-      // Add additional sort clauses if they exist
-      for (let i = 1; i < sortClauses.length; i++) {
-        query = sql`${query}, ${sortClauses[i]}`;
-      }
-
-      // Add final order by row order for stability
-      query = sql`${query}, rd.order ASC`;
     } else {
-      query = sql`${query} rd.order ASC`;
+      // If no sorting, sort by row order
+      rowsWithCells.sort((a, b) => a.order - b.order);
     }
-
-    // Complete the query by joining back to get cell data
-    query = sql`${query}
-      )
-      SELECT 
-        sr.row_id,
-        sr.order,
-        c.id as cell_id,
-        c.column_id,
-        c.value
-      FROM sorted_rows sr
-      LEFT JOIN "airtable-clone_cells" c ON c.row_id = sr.row_id
-      ORDER BY sr.order ASC
-    `;
-
-    // Execute the query
-    console.log("Executing query...");
-    const result = await db.execute(query);
-    console.log("Query executed, row count:", result.rows.length);
-    const rowsWithCells = result.rows as {
-      row_id: string;
-      order: number;
-      cell_id: string | null;
-      column_id: string | null;
-      value: string | null;
-    }[];
 
     // Transform the data
     const gridData: Row[] = [];
@@ -346,9 +331,7 @@ export async function getTableData(
       isSortable: col.isSortable,
       isVisible: col.isVisible,
     }));
-    for (const row of gridData) {
-      console.log("ROW", row);
-    }
+
     return {
       success: true,
       table: {
