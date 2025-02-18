@@ -27,7 +27,7 @@ import {
 import { Switch } from "~/components/ui/switch";
 import type { Column } from "~/types/table";
 import type { SortingState } from "@tanstack/react-table";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { cn } from "~/lib/utils";
 
 interface GridControlsProps {
@@ -43,46 +43,57 @@ export function GridControls({
   onToggleSidebar,
   columns = [],
   sorting = [],
-  onSortingChange = (newSorting: SortingState) => {
-    // noop
-  },
+  onSortingChange = (newSorting: SortingState) => void 0,
 }: GridControlsProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [addSortOpen, setAddSortOpen] = useState(false);
   const [autoSort, setAutoSort] = useState(true);
 
-  const handleAddSort = (columnId: string) => {
-    const newSorting = [...sorting];
-    if (!newSorting.find((sort) => sort.id === columnId)) {
-      newSorting.push({ id: columnId, desc: false });
+  const handleAddSort = useCallback(
+    (columnId: string) => {
+      const newSorting = [...sorting];
+      if (!newSorting.find((sort) => sort.id === columnId)) {
+        newSorting.push({ id: columnId, desc: false });
+        onSortingChange(newSorting);
+      }
+      setAddSortOpen(false);
+    },
+    [sorting, onSortingChange],
+  );
+
+  const handleRemoveSort = useCallback(
+    (columnId: string) => {
+      const newSorting = sorting.filter((sort) => sort.id !== columnId);
       onSortingChange(newSorting);
-    }
-    setIsOpen(false);
-  };
+    },
+    [sorting, onSortingChange],
+  );
 
-  const handleRemoveSort = (columnId: string) => {
-    const newSorting = sorting.filter((sort) => sort.id !== columnId);
-    onSortingChange(newSorting);
-  };
+  const handleToggleSortDirection = useCallback(
+    (columnId: string) => {
+      const newSorting = sorting.map((sort) => {
+        if (sort.id === columnId) {
+          return { ...sort, desc: !sort.desc };
+        }
+        return sort;
+      });
+      onSortingChange(newSorting);
+    },
+    [sorting, onSortingChange],
+  );
 
-  const handleToggleSortDirection = (columnId: string) => {
-    const newSorting = sorting.map((sort) => {
-      if (sort.id === columnId) {
-        return { ...sort, desc: !sort.desc };
-      }
-      return sort;
-    });
-    onSortingChange(newSorting);
-  };
-
-  const handleChangeSort = (oldColumnId: string, newColumnId: string) => {
-    const newSorting = sorting.map((sort) => {
-      if (sort.id === oldColumnId) {
-        return { ...sort, id: newColumnId };
-      }
-      return sort;
-    });
-    onSortingChange(newSorting);
-  };
+  const handleChangeSort = useCallback(
+    (oldColumnId: string, newColumnId: string) => {
+      const newSorting = sorting.map((sort) => {
+        if (sort.id === oldColumnId) {
+          return { ...sort, id: newColumnId };
+        }
+        return sort;
+      });
+      onSortingChange(newSorting);
+    },
+    [sorting, onSortingChange],
+  );
 
   const sortableColumns = columns.filter((col) => col.isSortable);
 
@@ -214,7 +225,11 @@ export function GridControls({
                           .map((col) => (
                             <DropdownMenuItem
                               key={col.id}
-                              onSelect={() => handleChangeSort(sort.id, col.id)}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleChangeSort(sort.id, col.id);
+                              }}
                             >
                               {col.name}
                             </DropdownMenuItem>
@@ -226,7 +241,11 @@ export function GridControls({
                       variant="ghost"
                       size="sm"
                       className="h-7 gap-2 text-xs"
-                      onClick={() => handleToggleSortDirection(sort.id)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleToggleSortDirection(sort.id);
+                      }}
                     >
                       {sort.desc ? "Z → A" : "A → Z"}
                     </Button>
@@ -235,7 +254,11 @@ export function GridControls({
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0"
-                      onClick={() => handleRemoveSort(sort.id)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleRemoveSort(sort.id);
+                      }}
                     >
                       <X className="h-3 w-3" />
                     </Button>
@@ -249,7 +272,11 @@ export function GridControls({
                 {sortableColumns.map((column) => (
                   <DropdownMenuItem
                     key={column.id}
-                    onSelect={() => handleAddSort(column.id)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleAddSort(column.id);
+                    }}
                     className="h-7 text-xs"
                   >
                     {column.name}
@@ -257,7 +284,7 @@ export function GridControls({
                 ))}
               </div>
             ) : (
-              <DropdownMenu>
+              <DropdownMenu open={addSortOpen} onOpenChange={setAddSortOpen}>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
@@ -276,7 +303,11 @@ export function GridControls({
                     .map((column) => (
                       <DropdownMenuItem
                         key={column.id}
-                        onSelect={() => handleAddSort(column.id)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleAddSort(column.id);
+                        }}
                         className="h-7 text-xs"
                       >
                         {column.name}

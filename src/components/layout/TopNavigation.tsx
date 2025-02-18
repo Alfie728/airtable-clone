@@ -241,7 +241,7 @@ export function HomeTopNavigation({
         <div className="flex h-8 w-full items-center gap-2 rounded-full border px-3 shadow-[rgba(0,0,0,0.32)_0px_0px_0.2px_0px,rgba(0,0,0,0.08)_0px_0px_0.5px_0px,rgba(0,0,0,0.08)_0px_0.5px_0.5px_0px] max-lg:max-w-[300px] xl:max-w-[354px]">
           <Search className="h-4 w-4 text-gray-500" />
           <input
-            type="text"
+            type="button"
             placeholder="Search..."
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-500"
           />

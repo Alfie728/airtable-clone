@@ -256,7 +256,7 @@ export async function getTableData(tableId: string, tableName: string) {
           (col) => col.id === record.cell!.columnId,
         );
         if (column) {
-          currentRow[column.name] =
+          currentRow[column.id] =
             column.type === "number"
               ? Number(record.cell.value) || 0
               : record.cell.value;
@@ -326,8 +326,8 @@ export async function addRow(
 
     // Use the exact values from the optimistic row
     const cellValues = tableColumns.map((column) => {
-      // Get the exact value from the optimistic row
-      const value = optimisticRow[column.name]?.toString() ?? "";
+      // Get the exact value from the optimistic row using column ID
+      const value = optimisticRow[column.id]?.toString() ?? "";
 
       return {
         rowId: newRow.id,

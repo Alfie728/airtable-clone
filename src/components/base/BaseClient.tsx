@@ -88,16 +88,25 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   }, [initialSortState]);
 
   // Handle sorting changes
-  const handleSortingChange = async (newSorting: SortingState) => {
+  const handleSortingChange = (newSorting: SortingState) => {
     if (JSON.stringify(newSorting) === JSON.stringify(sorting)) return;
+
+    // Update local state immediately for responsive UI
     setSorting(newSorting);
-    try {
-      await updateSort(newSorting);
-    } catch (error) {
-      toast.error("Failed to update sorting");
-      // Revert to previous state on error
-      setSorting(sorting);
-    }
+
+    // Debounce the server update
+    const timeoutId = setTimeout(() => {
+      try {
+        void updateSort(newSorting);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Failed to update sorting",
+        );
+        setSorting(sorting);
+      }
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
   };
 
   // Add error handling for views
@@ -395,7 +404,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           </div>
         )}
 
-        <div className="relative flex flex-1 overflow-scroll">
+        <div className="relative flex flex-1 overflow-auto">
           <div
             className={cn(
               "flex-1 transition-[margin] duration-200 ease-in-out",
@@ -437,7 +446,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   isAddingRow={isAddingRow}
                   isBatchAdding={isBatchAdding}
                   sorting={sorting}
-                  onSortingChange={handleSortingChange}
+                  onSortingChangeAction={handleSortingChange}
                 />
               )
             )}

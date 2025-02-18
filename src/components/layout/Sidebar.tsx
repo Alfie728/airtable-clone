@@ -26,8 +26,7 @@ export function Sidebar({
 }: SidebarProps) {
   const [isViewsOpen, setIsViewsOpen] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  console.log("pendingActiveViewId", pendingActiveViewId);
-  console.log("currentViewId", currentViewId);
+  
   // Determine if we're in a loading state
   const isLoadingViews =
     isLoading ||
