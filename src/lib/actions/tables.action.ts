@@ -614,23 +614,16 @@ export async function deleteTableAction(
     console.log(`[${Date.now() - startTime}ms] Starting cascading delete`);
 
     // Delete view filters first
-    console.log(`[${Date.now() - startTime}ms] Deleting view filters`);
+    console.log(`[${Date.now() - startTime}ms] Deleting view filters...`);
     await db.execute(sql`
       DELETE FROM "airtable-clone_view_filters"
-      WHERE view_id IN (
-        SELECT id FROM "airtable-clone_views"
-        WHERE table_id = ${tableId}
-      );
+      WHERE view_id IN (SELECT id FROM "airtable-clone_views" WHERE table_id = ${tableId})
     `);
 
-    // Delete view sorts
-    console.log(`[${Date.now() - startTime}ms] Deleting view sorts`);
+    console.log(`[${Date.now() - startTime}ms] Deleting view sorts...`);
     await db.execute(sql`
       DELETE FROM "airtable-clone_view_sorts"
-      WHERE view_id IN (
-        SELECT id FROM "airtable-clone_views"
-        WHERE table_id = ${tableId}
-      );
+      WHERE view_id IN (SELECT id FROM "airtable-clone_views" WHERE table_id = ${tableId})
     `);
 
     // Delete views
@@ -657,6 +650,13 @@ export async function deleteTableAction(
       WHERE table_id = ${tableId};
     `);
 
+    // Delete columns (add this before deleting table)
+    console.log(`[${Date.now() - startTime}ms] Deleting columns`);
+    await db.execute(sql`
+      DELETE FROM "airtable-clone_columns"
+      WHERE table_id = ${tableId};
+    `);
+
     // Delete table
     console.log(`[${Date.now() - startTime}ms] Deleting table`);
     await db.execute(sql`
@@ -664,9 +664,25 @@ export async function deleteTableAction(
       WHERE id = ${tableId};
     `);
 
+    // Get the next available table before deletion
+    const nextTable = await db
+      .select()
+      .from(tables)
+      .where(and(
+        eq(tables.baseId, baseId),
+        sql`${tables.id} != ${tableId}`
+      ))
+      .orderBy(tables.createdAt)
+      .limit(1);
+
     console.log(`[${Date.now() - startTime}ms] Operation complete`);
     revalidatePath(`/base/${baseId}`, "page");
-    return { success: true, error: undefined };
+    
+    return { 
+      success: true, 
+      error: undefined,
+      nextTableId: nextTable[0]?.id // Return the next table ID if available
+    };
   } catch (error) {
     console.error(`[${Date.now() - startTime}ms] Operation failed:`, error);
     return {

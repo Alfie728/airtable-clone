@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "~/lib/query/keys";
 import { deleteTableAction } from "~/lib/actions/tables.action";
+import type { TableListResponse } from "~/types/table";
 
 interface DeleteTableDialogProps {
   baseId: string;
@@ -44,21 +45,16 @@ export function DeleteTableDialog({
       setIsOpen(false);
 
       // Store previous state for rollback
-      const previousTablesData = queryClient.getQueryData<{
-        success: boolean;
-        tables: Array<{
-          id: string;
-          name: string;
-          baseId: string;
-        }>;
-      }>(queryKeys.bases.tables.list(baseId));
+      const previousTablesData = queryClient.getQueryData<TableListResponse>(
+        queryKeys.bases.tables.list(baseId),
+      );
 
       const previousTableData = queryClient.getQueryData(
         queryKeys.tables.detail(tableId),
       );
 
       // Optimistically update the cache
-      if (previousTablesData?.success) {
+      if (previousTablesData?.success && previousTablesData?.tables) {
         queryClient.setQueryData(queryKeys.bases.tables.list(baseId), {
           ...previousTablesData,
           tables: previousTablesData.tables.filter((t) => t.id !== tableId),
@@ -97,9 +93,10 @@ export function DeleteTableDialog({
       // and the server action was successful
 
       // Navigate AFTER server action completes successfully
-      const remainingTables = previousTablesData?.success
-        ? previousTablesData.tables.filter((t) => t.id !== tableId)
-        : [];
+      const remainingTables =
+        previousTablesData?.success && previousTablesData?.tables
+          ? previousTablesData.tables.filter((t) => t.id !== tableId)
+          : [];
 
       const firstTable = remainingTables[0];
       if (firstTable) {

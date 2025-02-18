@@ -64,6 +64,7 @@ export interface TableDeleteResponse {
   success: boolean;
   error?: string;
   table?: SerializedTable;
+  nextTableId?: string;
 }
 
 export interface TableListResponse {
