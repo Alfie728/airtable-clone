@@ -26,7 +26,7 @@ export function useTableSort(viewId: string) {
         })) ?? []
       );
     },
-    staleTime: 30000, // Add staleTime to prevent frequent refetches
+    staleTime: 0,
   });
 
   // Mutation for updating sort state
@@ -67,6 +67,24 @@ export function useTableSort(viewId: string) {
       );
 
       return { previousSorting };
+    },
+    onSuccess: async (_, sorting) => {
+      // Get tableId from the viewId
+      const viewData = queryClient.getQueryData<{ tableId: string }>(
+        queryKeys.views.detail(viewId),
+      );
+
+      if (viewData?.tableId) {
+        // Invalidate both queries to trigger refetches
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.views.sorts(viewId),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.tables.detail(viewData.tableId),
+          }),
+        ]);
+      }
     },
     onError: (err, newSorting, context) => {
       if (context?.previousSorting) {

@@ -7,11 +7,7 @@ import type {
   SortingState,
   ColumnDef,
 } from "@tanstack/react-table";
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-} from "@tanstack/react-table";
+import { useReactTable, getCoreRowModel } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Row, Column } from "~/types/table";
 import type { TableConfigProps, TableConfig } from "~/types/table-config";
@@ -68,7 +64,6 @@ const useTableConfig = ({
     columns: tableColumns,
     getCoreRowModel: getCoreRowModel(),
     manualSorting: true,
-    isMultiSortEvent: () => true,
     enableMultiSort: true,
     sortDescFirst: false,
     state: {
@@ -81,6 +76,7 @@ const useTableConfig = ({
       onSortingChangeAction(newSorting);
     },
     onColumnOrderChange: onColumnOrderChange,
+    getSortedRowModel: undefined,
     meta: {
       updateData: async (
         rowIndex: number,

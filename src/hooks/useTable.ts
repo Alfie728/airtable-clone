@@ -27,6 +27,8 @@ import type {
 import { useBase } from "./useBase";
 import { queryKeys } from "~/lib/query/keys";
 import type { tables } from "~/server/db/schema";
+import { type SortingState } from "@tanstack/react-table";
+import { queryClient } from "~/lib/query";
 
 // Add proper type for the server action response
 type DeleteTableResponse = { success: boolean; error?: string };
@@ -129,7 +131,7 @@ function isTableRenameResponse(value: unknown): value is TableRenameResponse {
   return false;
 }
 
-export const useTable = (baseId: string, tableId: string) => {
+export const useTable = (baseId: string, tableId: string, viewId?: string) => {
   const queryClient = useQueryClient();
   const latestMutationRef = useRef<string | null>(null);
   const pendingRowCreationsRef = useRef<Map<string, Promise<unknown>>>(
@@ -620,19 +622,48 @@ export const useTable = (baseId: string, tableId: string) => {
     return result;
   };
 
+  // Get current sorting state using useQuery instead of getQueryData
+  const { data: sortState } = useQuery<SortingState>({
+    queryKey: queryKeys.views.sorts(viewId ?? ""),
+    enabled: !!viewId,
+    staleTime: 0,
+  });
+
+  const {
+    data: tableData,
+    isLoading,
+    error: tableError,
+  } = useQuery({
+    queryKey: [
+      ...queryKeys.tables.detail(tableId),
+      viewId ?? "default",
+      "sorting",
+      sortState,
+    ],
+    queryFn: async () => {
+      // Get table name from the tables list
+      const tableName = tables.find((t) => t.id === tableId)?.name ?? "";
+
+      const result = await getTableData(tableId, tableName, sortState);
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to get table data");
+      }
+      return result.table;
+    },
+    staleTime: 0,
+  });
+
   return {
-    tableData: currentTableQuery?.data?.table,
+    tableData: tableData,
     isLoading: isTableLoading,
-    tableError: currentTableQuery?.error ?? null,
+    tableError: tableError,
     addRow: () => {
-      const optimisticRow = generateMockRow(
-        currentTableQuery?.data?.table?.columns ?? [],
-      );
+      const optimisticRow = generateMockRow(tableData?.columns ?? []);
       return addRowMutation.mutateAsync(optimisticRow);
     },
     addBulkRows: (count: number) => {
       const optimisticRows = Array.from({ length: count }, () =>
-        generateMockRow(currentTableQuery?.data?.table?.columns ?? []),
+        generateMockRow(tableData?.columns ?? []),
       );
       return addBulkRowsMutation.mutateAsync({ optimisticRows });
     },

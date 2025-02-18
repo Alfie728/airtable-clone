@@ -35,7 +35,6 @@ import { type CellType } from "~/types/grid";
 import { AddField } from "./components/AddField";
 import { GridFooter } from "./components/GridFooter";
 
-
 interface EnhancedDataGridProps {
   baseId: string;
   tableId: string;
@@ -94,9 +93,6 @@ export function EnhancedDataGrid({
       .sort((a, b) => a.order - b.order)
       .map((col) => col.id),
   );
-  const [rowOrder, setRowOrder] = useState<Row[]>(() =>
-    (initialData ?? []).sort((a, b) => a.order - b.order),
-  );
   const queryClient = useQueryClient();
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const { reorderRows } = useRows(tableId);
@@ -104,85 +100,23 @@ export function EnhancedDataGrid({
   const [rowManagementWidth, setRowManagementWidth] = useState<number>(0);
   const { reorderColumns } = useColumns(tableId);
 
-  // Update row order when initialData changes
-  useEffect(() => {
-    if (initialData) {
-      setRowOrder(initialData.sort((a, b) => a.order - b.order));
-    }
-  }, [initialData]);
-
-  // Update column order when columns change (new columns added/removed)
-  useEffect(() => {
-    const sortedColumnIds = (initialColumns ?? [])
-      .sort((a, b) => a.order - b.order)
-      .map((col) => col.id);
-
-    const hasNewColumns = sortedColumnIds.some(
-      (id) => !columnOrder.includes(id),
-    );
-
-    if (hasNewColumns) {
-      setColumnOrder(sortedColumnIds);
-    }
-  }, [initialColumns, columnOrder]);
-
   const columns = useMemo<Column[]>(() => {
     return initialColumns ?? [];
   }, [initialColumns]);
 
   const data = useMemo<Row[]>(() => {
-    // Ensure all rows have all column fields with proper defaults
-    return rowOrder.map((row) => {
-      const mappedRow = { ...row };
-      columns.forEach((col) => {
-        if (!(col.name in mappedRow)) {
-          mappedRow[col.name] = col.type === "number" ? 0 : "";
-        }
-      });
-      return mappedRow;
-    });
-  }, [rowOrder, columns]);
+    // Use initialData directly without local sorting
+    return initialData ?? [];
+  }, [initialData]);
 
   // Function to handle row deletion
   const handleRowDeleted = (deletedRowId: string) => {
-    setRowOrder((prevRows) => {
-      const deletedRow = prevRows.find((row) => row.id === deletedRowId);
-      if (!deletedRow) return prevRows;
-
-      return prevRows
-        .filter((row) => row.id !== deletedRowId)
-        .map((row) => {
-          if (row.order > deletedRow.order) {
-            return { ...row, order: row.order - 1 };
-          }
-          return row;
-        });
-    });
-
-    // Also update selection state if needed
+    // Update selection state if needed
     setSelectedRows((prev) => prev.filter((id) => id !== deletedRowId));
   };
 
   // Function to handle bulk row deletion
   const handleBulkRowsDeleted = (deletedRowIds: string[]) => {
-    setRowOrder((prevRows) => {
-      const rowsToDelete = prevRows.filter((row) =>
-        deletedRowIds.includes(row.id),
-      );
-      if (rowsToDelete.length === 0) return prevRows;
-
-      const minOrder = Math.min(...rowsToDelete.map((row) => row.order));
-
-      return prevRows
-        .filter((row) => !deletedRowIds.includes(row.id))
-        .map((row) => {
-          if (row.order > minOrder) {
-            return { ...row, order: row.order - rowsToDelete.length };
-          }
-          return row;
-        });
-    });
-
     // Clear selection after bulk delete
     setSelectedRows([]);
   };
@@ -310,14 +244,6 @@ export function EnhancedDataGrid({
                     if (oldIndex !== -1 && newIndex !== -1) {
                       const newData = arrayMove(data, oldIndex, newIndex);
 
-                      // Update local state immediately with new order
-                      setRowOrder(
-                        newData.map((row, index) => ({
-                          ...row,
-                          order: index,
-                        })),
-                      );
-
                       try {
                         // Sync with server
                         await reorderRows({
@@ -328,7 +254,6 @@ export function EnhancedDataGrid({
                         });
                       } catch (error) {
                         // Revert on error
-                        setRowOrder(data);
                         toast.error(
                           error instanceof Error
                             ? error.message

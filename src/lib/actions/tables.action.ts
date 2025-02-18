@@ -14,6 +14,7 @@ import type {
   TableCreateResponse,
   TableDeleteResponse,
 } from "~/types/table";
+import { type SortingState } from "@tanstack/react-table";
 
 export async function createTable(
   baseId: string,
@@ -216,7 +217,17 @@ export async function renameTable(
   }
 }
 
-export async function getTableData(tableId: string, tableName: string) {
+export async function getTableData(
+  tableId: string,
+  tableName: string,
+  sorts?: SortingState,
+) {
+  console.log("getTableData called with:", {
+    tableId,
+    tableName,
+    sorts,
+  });
+
   const user = await currentUser();
   if (!user) throw new Error("Unauthorized");
 
@@ -228,43 +239,101 @@ export async function getTableData(tableId: string, tableName: string) {
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
 
-    // Get all rows and their cells in a single query
-    const rowsWithCells = await db
-      .select({
-        row: rows,
-        cell: cells,
-      })
-      .from(rows)
-      .where(eq(rows.tableId, tableId))
-      .leftJoin(cells, eq(cells.rowId, rows.id))
-      .orderBy(rows.order);
+    // Build the base query
+    let query = sql`
+      WITH row_data AS (
+        SELECT 
+          r.id as row_id,
+          r.order,
+          jsonb_object_agg(
+            c.column_id,
+            COALESCE(c.value, '')
+          ) as values
+        FROM "airtable-clone_rows" r
+        LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
+        WHERE r.table_id = ${tableId}
+        GROUP BY r.id, r.order
+      ),
+      sorted_rows AS (
+        SELECT rd.row_id, rd.order
+        FROM row_data rd
+        ORDER BY
+    `;
 
-    // Transform the data efficiently
+    // Add sorting clauses
+    if (sorts && sorts.length > 0) {
+      console.log("Building sort clauses for sorts:", sorts);
+
+      const sortClauses = sorts.map((sort) => {
+        const direction = sort.desc ? sql`DESC` : sql`ASC`;
+        // Cast to text, handle nulls with COALESCE, and use case-sensitive collation
+        return sql`COALESCE((rd.values ->> ${sort.id}), '')::text COLLATE "C" ${direction}`;
+      });
+
+      // Combine sort clauses
+      query = sql`${query} ${sortClauses[0]}`;
+
+      // Add additional sort clauses if they exist
+      for (let i = 1; i < sortClauses.length; i++) {
+        query = sql`${query}, ${sortClauses[i]}`;
+      }
+
+      // Add final order by row order for stability
+      query = sql`${query}, rd.order ASC`;
+    } else {
+      query = sql`${query} rd.order ASC`;
+    }
+
+    // Complete the query by joining back to get cell data
+    query = sql`${query}
+      )
+      SELECT 
+        sr.row_id,
+        sr.order,
+        c.id as cell_id,
+        c.column_id,
+        c.value
+      FROM sorted_rows sr
+      LEFT JOIN "airtable-clone_cells" c ON c.row_id = sr.row_id
+      ORDER BY sr.order ASC
+    `;
+
+    // Execute the query
+    console.log("Executing query...");
+    const result = await db.execute(query);
+    console.log("Query executed, row count:", result.rows.length);
+    const rowsWithCells = result.rows as {
+      row_id: string;
+      order: number;
+      cell_id: string | null;
+      column_id: string | null;
+      value: string | null;
+    }[];
+
+    // Transform the data
     const gridData: Row[] = [];
-    let currentRow: Row | null = null;
+    const rowDataMap = new Map<string, Row>();
 
     for (const record of rowsWithCells) {
-      if (!currentRow || currentRow.id !== record.row.id) {
-        if (currentRow) {
-          gridData.push(currentRow);
-        }
-        currentRow = { id: record.row.id, order: record.row.order };
+      if (!rowDataMap.has(record.row_id)) {
+        const newRow: Row = {
+          id: record.row_id,
+          order: record.order,
+        };
+        rowDataMap.set(record.row_id, newRow);
+        gridData.push(newRow);
       }
 
-      if (record.cell?.columnId) {
-        const column = tableColumns.find(
-          (col) => col.id === record.cell!.columnId,
-        );
+      if (record.column_id) {
+        const column = tableColumns.find((col) => col.id === record.column_id);
         if (column) {
-          currentRow[column.name] =
+          const row = rowDataMap.get(record.row_id)!;
+          row[column.name] =
             column.type === "number"
-              ? Number(record.cell.value) || 0
-              : record.cell.value;
+              ? Number(record.value) || 0
+              : (record.value ?? "");
         }
       }
-    }
-    if (currentRow) {
-      gridData.push(currentRow);
     }
 
     const transformedColumns = tableColumns.map((col) => ({
@@ -277,7 +346,9 @@ export async function getTableData(tableId: string, tableName: string) {
       isSortable: col.isSortable,
       isVisible: col.isVisible,
     }));
-
+    for (const row of gridData) {
+      console.log("ROW", row);
+    }
     return {
       success: true,
       table: {
@@ -288,6 +359,7 @@ export async function getTableData(tableId: string, tableName: string) {
       },
     };
   } catch (error) {
+    console.error("Error in getTableData:", error);
     if (error instanceof Error) {
       return { success: false, error: error.message };
     }

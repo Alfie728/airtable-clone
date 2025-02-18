@@ -67,7 +67,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     isBatchAdding,
     renameTable,
     isRenaming,
-  } = useTable(baseId, tableId);
+  } = useTable(baseId, tableId, viewId);
 
   const {
     views: tableViews,
@@ -88,25 +88,30 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   }, [initialSortState]);
 
   // Handle sorting changes
-  const handleSortingChange = (newSorting: SortingState) => {
+  const handleSortingChange = async (newSorting: SortingState) => {
     if (JSON.stringify(newSorting) === JSON.stringify(sorting)) return;
 
     // Update local state immediately for responsive UI
     setSorting(newSorting);
 
-    // Debounce the server update
-    const timeoutId = setTimeout(() => {
-      try {
-        void updateSort(newSorting);
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to update sorting",
-        );
-        setSorting(sorting);
-      }
-    }, 300); // 300ms debounce
-
-    return () => clearTimeout(timeoutId);
+    // Update server state
+    try {
+      await updateSort(newSorting);
+      // Invalidate both sorting and table data queries
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.views.sorts(viewId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.tables.detail(tableId),
+        }),
+      ]);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update sorting",
+      );
+      setSorting(sorting);
+    }
   };
 
   // Add error handling for views
@@ -321,7 +326,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       setPendingActiveViewId(null);
     }
   };
-
+  console.log("sorting", sorting);
   if (baseError) {
     return (
       <div className="flex h-screen items-center justify-center">
