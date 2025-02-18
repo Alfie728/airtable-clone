@@ -122,7 +122,7 @@ export function ColumnManagement({
   };
 
   const handleOpenChange = (open: boolean) => {
-    if (!open && showDeleteDialog) {
+    if (!open && (showDeleteDialog || isRenaming)) {
       return;
     }
     setIsOpen(open);
@@ -131,7 +131,7 @@ export function ColumnManagement({
       setNewColumnName(column.name);
     }
   };
-
+  console.log(isRenaming);
   return (
     <>
       <DropdownMenu modal={false} open={isOpen} onOpenChange={handleOpenChange}>
@@ -152,17 +152,17 @@ export function ColumnManagement({
           className={isRenaming ? "w-[400px] p-4" : "w-[220px]"}
           sideOffset={10}
           onCloseAutoFocus={(event) => {
-            if (showDeleteDialog) {
+            if (showDeleteDialog || isRenaming) {
               event.preventDefault();
             }
           }}
           onEscapeKeyDown={(event) => {
-            if (showDeleteDialog) {
+            if (showDeleteDialog || isRenaming) {
               event.preventDefault();
             }
           }}
           onInteractOutside={(event) => {
-            if (showDeleteDialog) {
+            if (showDeleteDialog || isRenaming) {
               event.preventDefault();
             }
           }}

@@ -38,7 +38,7 @@ const useTableConfig = ({
     () =>
       columns.map((col) => ({
         id: col.id,
-        accessorKey: col.name,
+        accessorKey: col.id,
         sortingFn: "alphanumeric" as const,
         cell: (props: CellContext<Row, string | number>) => (
           <GridCell context={props} initialData={initialData} />
