@@ -15,6 +15,11 @@ export interface TableConfigProps {
   onColumnOrderChange: (
     updater: string[] | ((old: string[]) => string[]),
   ) => void;
+  updateCellAction: (params: {
+    rowId: string;
+    columnId: string;
+    value: string;
+  }) => Promise<{ success: boolean; error?: string }>;
 }
 
 export interface TableConfig {

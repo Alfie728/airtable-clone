@@ -383,13 +383,25 @@ export const useTable = (baseId: string, tableId: string) => {
       );
 
       if (previousData?.table) {
+        // Get the highest order using reduce - more efficient for large datasets
+        const maxOrder = previousData.table.data.reduce(
+          (max, row) => (row.order > max ? row.order : max),
+          -1,
+        );
+
+        // Set the optimistic rows' orders to be sequential after all existing rows
+        const rowsWithOrder = params.optimisticRows.map((row, index) => ({
+          ...row,
+          order: maxOrder + 1 + index,
+        }));
+
         queryClient.setQueryData<TableResponse>(
           queryKeys.tables.detail(tableId),
           {
             ...previousData,
             table: {
               ...previousData.table,
-              data: [...previousData.table.data, ...params.optimisticRows],
+              data: [...previousData.table.data, ...rowsWithOrder],
             },
           },
         );

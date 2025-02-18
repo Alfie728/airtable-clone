@@ -45,10 +45,6 @@ export function GridFooter({
     }
   };
 
-  const handleAddBulkRows = () => {
-    void addBulkRowsAction(BULK_ADD_ROWS_COUNT);
-  };
-
   return (
     <div className="border-t border-gray-300 bg-white p-2">
       <div className="flex gap-2">
@@ -102,7 +98,7 @@ export function GridFooter({
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleAddBulkRows}
+              onClick={() => addBulkRowsAction(BULK_ADD_ROWS_COUNT)}
               className="h-7 gap-2 text-xs hover:bg-gray-50"
               disabled={isBatchAdding}
             >

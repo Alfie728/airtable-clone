@@ -13,7 +13,7 @@ interface AddFieldProps {
 }
 
 export function AddField({ tableId, onColumnUpdated }: AddFieldProps) {
-  const queryClient = useQueryClient();
+ 
   const { addColumn, isAddingColumn } = useColumns(tableId);
 
   const handleAddColumn = async () => {

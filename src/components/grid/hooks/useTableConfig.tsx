@@ -29,6 +29,7 @@ const useTableConfig = ({
   columnOrder,
   onSortingChangeAction,
   onColumnOrderChange,
+  updateCellAction,
 }: TableConfigProps): TableConfig => {
   const queryClient = useQueryClient();
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -80,6 +81,25 @@ const useTableConfig = ({
       onSortingChangeAction(newSorting);
     },
     onColumnOrderChange: onColumnOrderChange,
+    meta: {
+      updateData: async (
+        rowIndex: number,
+        columnId: string,
+        value: string | number,
+      ) => {
+        const row = data[rowIndex];
+        if (!row) return;
+
+        const column = columns.find((col) => col.id === columnId);
+        if (!column) return;
+
+        await updateCellAction({
+          rowId: row.id,
+          columnId,
+          value: String(value),
+        });
+      },
+    },
   }) as TableType;
 
   const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({

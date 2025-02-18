@@ -35,7 +35,6 @@ import { type CellType } from "~/types/grid";
 import { AddField } from "./components/AddField";
 import { GridFooter } from "./components/GridFooter";
 
-const BULK_ADD_ROWS_COUNT = 5000;
 
 interface EnhancedDataGridProps {
   baseId: string;
@@ -88,6 +87,7 @@ export function EnhancedDataGrid({
   isBatchAdding,
   sorting,
   onSortingChangeAction,
+  updateCellAction,
 }: EnhancedDataGridProps) {
   const [columnOrder, setColumnOrder] = useState<string[]>(() =>
     (initialColumns ?? [])
@@ -226,6 +226,7 @@ export function EnhancedDataGrid({
       columnOrder,
       onSortingChangeAction,
       onColumnOrderChange: handleColumnOrderChange,
+      updateCellAction,
     });
 
   const sensors = useSensors(
@@ -266,10 +267,6 @@ export function EnhancedDataGrid({
       selected ? table.getRowModel().rows.map((row) => row.original.id) : [],
     );
   };
-
-  async function handleAddBulkRows() {
-    void addBulkRowsAction(BULK_ADD_ROWS_COUNT);
-  }
 
   return (
     <div className="flex h-full flex-col">
@@ -466,7 +463,7 @@ export function EnhancedDataGrid({
         selectedRows={selectedRows}
         onSelectionChange={setSelectedRows}
         addRowAction={addRowAction}
-        addBulkRowsAction={handleAddBulkRows}
+        addBulkRowsAction={addBulkRowsAction}
         isAddingRow={isAddingRow}
         isBatchAdding={isBatchAdding}
         onRowsDeleted={handleBulkRowsDeleted}
