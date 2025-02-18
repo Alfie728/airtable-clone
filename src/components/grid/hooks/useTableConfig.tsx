@@ -67,7 +67,7 @@ const useTableConfig = ({
     data,
     columns: tableColumns,
     getCoreRowModel: getCoreRowModel(),
-    manualSorting: true,
+    getSortedRowModel: getSortedRowModel(),
     isMultiSortEvent: () => true,
     enableMultiSort: true,
     sortDescFirst: false,
