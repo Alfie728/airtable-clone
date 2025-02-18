@@ -35,7 +35,6 @@ import { type CellType } from "~/types/grid";
 import { AddField } from "./components/AddField";
 import { GridFooter } from "./components/GridFooter";
 
-
 interface EnhancedDataGridProps {
   baseId: string;
   tableId: string;
@@ -267,7 +266,7 @@ export function EnhancedDataGrid({
       selected ? table.getRowModel().rows.map((row) => row.original.id) : [],
     );
   };
-
+  console.log("sorting", sorting);
   return (
     <div className="flex h-full flex-col">
       <div ref={tableContainerRef} className="relative flex-1 overflow-auto">

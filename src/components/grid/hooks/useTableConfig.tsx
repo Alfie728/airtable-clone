@@ -78,6 +78,36 @@ const useTableConfig = ({
     onSortingChange: (updater) => {
       const newSorting =
         typeof updater === "function" ? updater(sorting) : updater;
+
+      // For direct array updates (from GridControls)
+      if (Array.isArray(updater)) {
+        onSortingChangeAction(updater);
+        return;
+      }
+
+      // For function updates (from ColumnManagement)
+      if (typeof updater === "function") {
+        const updatedSorting = updater(sorting);
+        // For adding/updating sort
+        if (updatedSorting.length === 1 && updatedSorting[0]) {
+          const newSortItem = updatedSorting[0];
+          const existingSort = sorting.find((s) => s.id === newSortItem.id);
+
+          if (existingSort) {
+            // Update existing sort
+            const newSorting = sorting
+              .map((s) => (s.id === newSortItem.id ? newSortItem : s))
+              .filter((s): s is typeof newSortItem => s !== undefined);
+            onSortingChangeAction(newSorting);
+          } else {
+            // Add new sort
+            onSortingChangeAction([...sorting, newSortItem]);
+          }
+          return;
+        }
+      }
+
+      // Default: use the new sorting as is
       onSortingChangeAction(newSorting);
     },
     onColumnOrderChange: onColumnOrderChange,
