@@ -106,7 +106,7 @@ interface EnhancedDataGridProps {
   isAddingRow: boolean;
   isBatchAdding: boolean;
   sorting: SortingState;
-  onSortingChange: (sorting: SortingState) => void;
+  onSortingChangeAction: (sorting: SortingState) => void;
 }
 
 // Add useSkipper hook for better pagination handling
@@ -335,7 +335,7 @@ export function EnhancedDataGrid({
   isAddingRow,
   isBatchAdding,
   sorting,
-  onSortingChange,
+  onSortingChangeAction,
 }: EnhancedDataGridProps) {
   const [editingCell, setEditingCell] = useState<{
     rowId: string | null;
@@ -383,8 +383,17 @@ export function EnhancedDataGrid({
   }, [initialColumns]);
 
   const data = useMemo<Row[]>(() => {
-    return rowOrder;
-  }, [rowOrder]);
+    // Ensure all rows have all column fields with proper defaults
+    return rowOrder.map((row) => {
+      const mappedRow = { ...row };
+      columns.forEach((col) => {
+        if (!(col.name in mappedRow)) {
+          mappedRow[col.name] = col.type === "number" ? 0 : "";
+        }
+      });
+      return mappedRow;
+    });
+  }, [rowOrder, columns]);
 
   // Function to handle row deletion
   const handleRowDeleted = (deletedRowId: string) => {
@@ -443,10 +452,8 @@ export function EnhancedDataGrid({
   const tableColumns = useMemo<ColumnDefWithMeta[]>(() => {
     return columns.map((col) => ({
       id: col.id,
-      accessorFn: (row: Row) => {
-        const value = row[col.name];
-        return typeof value === "undefined" ? "" : value;
-      },
+      accessorKey: col.name,
+      sortingFn: "alphanumeric",
       cell: (props) => {
         const cellProps: EditableCellProps = {
           getValue: props.getValue,
@@ -498,11 +505,11 @@ export function EnhancedDataGrid({
                 queryKey: queryKeys.tables.detail(tableId),
               });
             }}
-            onSort={(direction) => {
+            onSort={(direction, isMulti) => {
               if (!direction) {
                 column.clearSorting();
               } else {
-                column.toggleSorting(direction === "desc");
+                column.toggleSorting(direction === "desc", isMulti);
               }
             }}
             sortDirection={column.getIsSorted() as "asc" | "desc" | null}
@@ -510,7 +517,7 @@ export function EnhancedDataGrid({
         </div>
       ),
     }));
-  }, [columns, initialData, tableId]);
+  }, [columns, initialData, queryClient, tableId]);
 
   function handleTabNavigation(
     currentRowId: string,
@@ -579,6 +586,9 @@ export function EnhancedDataGrid({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     manualSorting: false,
+    isMultiSortEvent: () => true,
+    enableMultiSort: true,
+    sortDescFirst: false,
     state: {
       sorting,
       columnOrder,
@@ -586,7 +596,7 @@ export function EnhancedDataGrid({
     onSortingChange: (updater) => {
       const newSorting =
         typeof updater === "function" ? updater(sorting) : updater;
-      onSortingChange(newSorting);
+      onSortingChangeAction(newSorting);
     },
     onColumnOrderChange: (updater) => {
       const newOrder =
@@ -714,7 +724,7 @@ export function EnhancedDataGrid({
       selected ? table.getRowModel().rows.map((row) => row.original.id) : [],
     );
   };
-
+  console.log(sorting);
   return (
     <div className="flex h-full flex-col">
       <div ref={tableContainerRef} className="relative flex-1 overflow-scroll">

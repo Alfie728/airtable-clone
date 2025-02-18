@@ -99,7 +99,9 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       try {
         void updateSort(newSorting);
       } catch (error) {
-        toast.error("Failed to update sorting");
+        toast.error(
+          error instanceof Error ? error.message : "Failed to update sorting",
+        );
         setSorting(sorting);
       }
     }, 300); // 300ms debounce
@@ -444,7 +446,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   isAddingRow={isAddingRow}
                   isBatchAdding={isBatchAdding}
                   sorting={sorting}
-                  onSortingChange={handleSortingChange}
+                  onSortingChangeAction={handleSortingChange}
                 />
               )
             )}

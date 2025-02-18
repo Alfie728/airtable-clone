@@ -43,9 +43,7 @@ export function GridControls({
   onToggleSidebar,
   columns = [],
   sorting = [],
-  onSortingChange = (newSorting: SortingState) => {
-    // noop
-  },
+  onSortingChange = (newSorting: SortingState) => void 0,
 }: GridControlsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [addSortOpen, setAddSortOpen] = useState(false);

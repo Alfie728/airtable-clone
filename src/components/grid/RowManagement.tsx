@@ -74,7 +74,6 @@ export function RowManagement({
         const element = entries[0]?.target;
         if (element) {
           const rect = element.getBoundingClientRect();
-          console.log("Row management with padding: ", rect.width);
           onWidthChange(rect.width);
         }
       });

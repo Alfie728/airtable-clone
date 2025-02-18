@@ -48,7 +48,7 @@ interface ColumnManagementProps {
   tableId: string;
   column?: Column;
   onColumnUpdated?: () => void;
-  onSort?: (direction: "asc" | "desc" | false) => void;
+  onSort?: (direction: "asc" | "desc" | false, isMulti: boolean) => void;
   sortDirection?: "asc" | "desc" | null;
 }
 
@@ -304,11 +304,11 @@ export function ColumnManagement({
                 Edit field permissions
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => onSort?.("asc")}>
+              <DropdownMenuItem onSelect={() => onSort?.("asc", true)}>
                 <ArrowDownAZ className="mr-2 h-4 w-4" />
                 Sort A → Z
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onSort?.("desc")}>
+              <DropdownMenuItem onSelect={() => onSort?.("desc", true)}>
                 <ArrowDownZA className="mr-2 h-4 w-4" />
                 Sort Z → A
               </DropdownMenuItem>
