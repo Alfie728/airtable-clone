@@ -56,10 +56,14 @@ export async function createTable(
       return { success: false, error: "Failed to create table" };
     }
 
-    // Create default columns (just Name and Notes)
+    // Create default columns
     const defaultColumns = [
       { name: "Name", type: "text" as const, order: 0 },
       { name: "Notes", type: "text" as const, order: 1 },
+      { name: "Email", type: "text" as const, order: 2 },
+      { name: "Phone", type: "text" as const, order: 3 },
+      { name: "Company", type: "text" as const, order: 4 },
+      { name: "City", type: "text" as const, order: 5 },
     ];
 
     // Insert the columns without any data
@@ -429,12 +433,23 @@ export async function addBulkRows(
   optimisticRows: Record<string, string | number>[],
 ) {
   try {
-    const CHUNK_SIZE = 1000;
+    console.log("Starting addBulkRows with:", {
+      tableId,
+      rowCount: optimisticRows.length,
+    });
+
+    const ROW_CHUNK_SIZE = 1000;
+    const CELL_CHUNK_SIZE = 100; // Smaller chunk size for cells to avoid parameter size limits
     const tableColumns = await db
       .select()
       .from(columns)
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
+
+    console.log(
+      "Found columns:",
+      tableColumns.map((c) => ({ id: c.id, name: c.name })),
+    );
 
     const lastRow = await db
       .select({ order: rows.order })
@@ -446,9 +461,17 @@ export async function addBulkRows(
     const startOrder = (lastRow[0]?.order ?? 0) + 1;
     const allNewRows = [];
 
-    // Process in chunks
-    for (let i = 0; i < optimisticRows.length; i += CHUNK_SIZE) {
-      const chunk = optimisticRows.slice(i, i + CHUNK_SIZE);
+    // Process rows in chunks
+    for (let i = 0; i < optimisticRows.length; i += ROW_CHUNK_SIZE) {
+      const chunk = optimisticRows.slice(i, i + ROW_CHUNK_SIZE);
+      console.log("Processing row chunk:", {
+        chunkSize: chunk.length,
+        firstRow: chunk[0],
+        sampleColumnValues: tableColumns.map((col) => ({
+          columnId: col.id,
+          value: chunk[0]?.[col.id],
+        })),
+      });
 
       // Insert chunk of rows
       const rowsToInsert = chunk.map((row, index) => ({
@@ -458,19 +481,23 @@ export async function addBulkRows(
       }));
 
       const newRows = await db.insert(rows).values(rowsToInsert).returning();
+      console.log(
+        "Inserted rows:",
+        newRows.map((r) => ({ id: r.id, order: r.order })),
+      );
 
-      // Merge server and client data, preserving client values
+      // Merge server and client data
       const mergedRows = newRows.map((newRow, idx) => ({
         ...newRow,
         ...chunk[idx],
       }));
       allNewRows.push(...mergedRows);
 
-      // Insert cells for this chunk using client's optimistic data
-      const cellsForChunk = newRows.flatMap((row, rowIndex) =>
+      // Generate all cells for this chunk
+      const allCellsForChunk = newRows.flatMap((row, rowIndex) =>
         tableColumns.map((column) => {
           const optimisticRow = chunk[rowIndex] ?? {};
-          const value = optimisticRow[column.name]?.toString() ?? "";
+          const value = optimisticRow[column.id]?.toString() ?? "";
           return {
             rowId: row.id,
             columnId: column.id,
@@ -481,7 +508,16 @@ export async function addBulkRows(
         }),
       );
 
-      await db.insert(cells).values(cellsForChunk);
+      // Insert cells in smaller sub-chunks
+      for (let j = 0; j < allCellsForChunk.length; j += CELL_CHUNK_SIZE) {
+        const cellSubChunk = allCellsForChunk.slice(j, j + CELL_CHUNK_SIZE);
+        console.log("Inserting cell sub-chunk:", {
+          start: j,
+          end: j + CELL_CHUNK_SIZE,
+          chunkSize: cellSubChunk.length,
+        });
+        await db.insert(cells).values(cellSubChunk);
+      }
     }
 
     // Update row count once at the end
@@ -495,7 +531,8 @@ export async function addBulkRows(
       success: true,
       rows: allNewRows,
     };
-  } catch {
+  } catch (error) {
+    console.error("Error in addBulkRows:", error);
     return { success: false, error: "Failed to add bulk rows" };
   }
 }

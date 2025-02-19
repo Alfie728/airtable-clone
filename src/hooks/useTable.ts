@@ -39,9 +39,9 @@ function generateMockRow(columns: Column[]): Row {
 
   columns.forEach((column) => {
     if (column.type === "text") {
-      row[column.name] = generateTextValue(column.name.toLowerCase());
+      row[column.id] = generateTextValue(column.name.toLowerCase());
     } else if (column.type === "number") {
-      row[column.name] = generateNumberValue(column.name.toLowerCase());
+      row[column.id] = generateNumberValue(column.name.toLowerCase());
     }
   });
 
@@ -57,7 +57,7 @@ function generateTextValue(columnName: string): string {
     case "email":
       return faker.internet.email();
     case "phone":
-      return faker.phone.number();
+      return faker.phone.number({ style: "national" });
     case "company":
       return faker.company.name();
     case "city":
