@@ -3,7 +3,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "~/server/db";
 import { tables, columns, rows, cells, views } from "~/server/db/schema";
-import { eq, and, sql, desc, or, inArray } from "drizzle-orm";
+import { eq, and, sql, desc, or, inArray, asc, type SQL } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getBaseById } from "./bases.action";
 import type {
@@ -14,6 +14,7 @@ import type {
   TableCreateResponse,
   TableDeleteResponse,
 } from "~/types/table";
+import type { SortingState } from "@tanstack/react-table";
 
 export async function createTable(
   baseId: string,
@@ -220,35 +221,76 @@ export async function renameTable(
   }
 }
 
-export async function getTableData(
-  tableId: string,
-  tableName: string,
-  page = 1,
-  pageSize = 250,
-) {
+export async function getTableDataWithSort(params: {
+  tableId: string;
+  tableName: string;
+  sorting?: SortingState;
+  page?: number;
+  pageSize?: number;
+}) {
+  const { tableId, tableName, sorting = [], page = 1, pageSize = 250 } = params;
+
   const user = await currentUser();
   if (!user) throw new Error("Unauthorized");
 
   try {
-    // Get all columns for this table
+    // Get all columns for this table (common for both cases)
     const tableColumns = await db
       .select()
       .from(columns)
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
 
-    // Calculate offset
-    const offset = (page - 1) * pageSize;
-
-    // Get total count of rows
+    // Get total count (common for both cases)
     const countResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(rows)
       .where(eq(rows.tableId, tableId));
 
     const totalCount = countResult[0]?.count ?? 0;
+    const offset = (page - 1) * pageSize;
 
-    // First get the paginated row IDs
+    // If sorting is requested, use the sorting logic
+    if (sorting.length > 0) {
+      const sortCases = sorting
+        .map((sort) => {
+          const column = tableColumns.find((col) => col.id === sort.id);
+          if (!column) return undefined;
+
+          return sort.desc
+            ? sql`MAX(CASE WHEN c.column_id = ${column.id} THEN c.value END) DESC NULLS LAST`
+            : sql`MAX(CASE WHEN c.column_id = ${column.id} THEN c.value END) ASC NULLS LAST`;
+        })
+        .filter((x): x is SQL<unknown> => x !== undefined);
+
+      // Use the CTE approach for sorted data
+      const { rows: sortedRows } = await db.execute<QueryResult>(sql`
+        WITH sorted_rows AS (
+          SELECT r.id, r.order, ROW_NUMBER() OVER (
+            ORDER BY ${sql.join(sortCases, sql`, `)}, r.order ASC
+          ) as row_num
+          FROM "airtable-clone_rows" r
+          LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
+          WHERE r.table_id = ${tableId}
+          GROUP BY r.id, r.order
+        )
+        SELECT r.id as row_id, r.order as row_order, c.id as cell_id, c.column_id, c.value
+        FROM sorted_rows sr
+        JOIN "airtable-clone_rows" r ON r.id = sr.id
+        LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
+        WHERE sr.row_num > ${offset} AND sr.row_num <= ${offset + pageSize}
+        ORDER BY sr.row_num;
+      `);
+
+      return transformResults(sortedRows, tableColumns, tableId, tableName, {
+        total: totalCount,
+        page,
+        pageSize,
+        hasMore: offset + sortedRows.length / tableColumns.length < totalCount,
+      });
+    }
+
+    // For unsorted data, use the chunked approach
     const paginatedRows = await db
       .select()
       .from(rows)
@@ -257,15 +299,13 @@ export async function getTableData(
       .offset(offset)
       .limit(pageSize);
 
-    // Process rows in chunks to avoid PostgreSQL limitations
-    const CHUNK_SIZE = 50; // Process 50 rows at a time
+    const CHUNK_SIZE = 50;
     const allRowsWithCells = [];
 
     for (let i = 0; i < paginatedRows.length; i += CHUNK_SIZE) {
       const chunk = paginatedRows.slice(i, i + CHUNK_SIZE);
       const chunkIds = chunk.map((r) => r.id);
 
-      // Get cells for this chunk of rows
       const rowsWithCells = await db
         .select({
           row: rows,
@@ -279,69 +319,31 @@ export async function getTableData(
       allRowsWithCells.push(...rowsWithCells);
     }
 
-    // Transform the data efficiently
-    const gridData: Row[] = [];
-    let currentRow: Row | null = null;
-
-    for (const record of allRowsWithCells) {
-      if (!currentRow || currentRow.id !== record.row.id) {
-        if (currentRow) {
-          gridData.push(currentRow);
-        }
-        currentRow = { id: record.row.id, order: record.row.order };
-      }
-
-      if (record.cell?.columnId) {
-        const column = tableColumns.find(
-          (col) => col.id === record.cell!.columnId,
-        );
-        if (column) {
-          currentRow[column.id] =
-            column.type === "number"
-              ? Number(record.cell.value) || 0
-              : record.cell.value;
-        }
-      }
-    }
-    if (currentRow) {
-      gridData.push(currentRow);
-    }
-
-    const transformedColumns = tableColumns.map((col) => ({
-      id: col.id,
-      name: col.name,
-      type: col.type,
-      order: col.order,
-      width: col.width,
-      isSearchable: col.isSearchable,
-      isSortable: col.isSortable,
-      isVisible: col.isVisible,
-    }));
-
-    // Calculate hasMore correctly based on total count and current offset
-    const hasMore = offset + gridData.length < totalCount;
-
-    return {
-      success: true,
-      table: {
-        id: tableId,
-        name: tableName,
-        columns: transformedColumns,
-        data: gridData,
-        pagination: {
-          total: Number(totalCount),
-          page,
-          pageSize,
-          hasMore,
-        },
+    return transformResults(
+      allRowsWithCells.map((record) => ({
+        row_id: record.row.id,
+        row_order: record.row.order,
+        cell_id: record.cell?.id ?? null,
+        column_id: record.cell?.columnId ?? null,
+        value: record.cell?.value ?? null,
+      })),
+      tableColumns,
+      tableId,
+      tableName,
+      {
+        total: totalCount,
+        page,
+        pageSize,
+        hasMore: offset + paginatedRows.length < totalCount,
       },
-    };
+    );
   } catch (error) {
-    console.error("[getTableData] Error:", error);
-    if (error instanceof Error) {
-      return { success: false, error: error.message };
-    }
-    return { success: false, error: "Failed to get table data" };
+    console.error("[getTableDataWithSort] Error:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Failed to get table data",
+    };
   }
 }
 
@@ -697,4 +699,70 @@ export async function deleteTableAction(
 export async function testLog() {
   console.log("Test server action log");
   return { success: true };
+}
+
+type QueryResult = {
+  row_id: string;
+  row_order: number;
+  cell_id: string | null;
+  column_id: string | null;
+  value: string | null;
+};
+
+function transformResults(
+  rows: QueryResult[],
+  tableColumns: (typeof columns.$inferSelect)[],
+  tableId: string,
+  tableName: string,
+  pagination: {
+    total: number;
+    page: number;
+    pageSize: number;
+    hasMore: boolean;
+  },
+) {
+  const gridData: Row[] = [];
+  const rowDataMap = new Map<string, Row>();
+
+  for (const record of rows) {
+    if (!rowDataMap.has(record.row_id)) {
+      const newRow: Row = {
+        id: record.row_id,
+        order: record.row_order,
+      };
+      rowDataMap.set(record.row_id, newRow);
+      gridData.push(newRow);
+    }
+
+    if (record.column_id) {
+      const column = tableColumns.find((col) => col.id === record.column_id);
+      if (column) {
+        const row = rowDataMap.get(record.row_id)!;
+        row[column.id] =
+          column.type === "number"
+            ? Number(record.value) || 0
+            : (record.value ?? "");
+      }
+    }
+  }
+
+  return {
+    success: true,
+    table: {
+      id: tableId,
+      name: tableName,
+      columns: tableColumns.map((col) => ({
+        id: col.id,
+        name: col.name,
+        type: col.type,
+        order: col.order,
+        width: col.width,
+        isSearchable: col.isSearchable,
+        isSortable: col.isSortable,
+        isVisible: col.isVisible,
+      })),
+      data: gridData,
+      pagination,
+    },
+  };
 }

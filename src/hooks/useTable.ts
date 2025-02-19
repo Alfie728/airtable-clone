@@ -24,11 +24,9 @@ import type {
   TableResponse,
   SerializedTable,
   TableRenameResponse,
-  TableDeleteResponse,
 } from "~/types/table";
 import { useBase } from "./useBase";
 import { queryKeys } from "~/lib/query/keys";
-import type { tables } from "~/server/db/schema";
 
 // Add proper type for the server action response
 type DeleteTableResponse = { success: boolean; error?: string };
@@ -96,40 +94,40 @@ interface DeleteContext {
   };
 }
 
-function isTableRenameResponse(value: unknown): value is TableRenameResponse {
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "success" in value &&
-    typeof (value as { success: unknown }).success === "boolean"
-  ) {
-    const response = value as {
-      success: boolean;
-      error?: unknown;
-      table?: unknown;
-    };
-    if (!response.success) {
-      return (
-        typeof response.error === "undefined" ||
-        typeof response.error === "string"
-      );
-    }
-    if (response.table) {
-      const table = response.table as Record<string, unknown>;
-      return (
-        typeof table.id === "string" &&
-        typeof table.name === "string" &&
-        typeof table.baseId === "string" &&
-        (table.description === null || typeof table.description === "string") &&
-        typeof table.rowCount === "number" &&
-        table.createdAt instanceof Date &&
-        (table.updatedAt === null || table.updatedAt instanceof Date)
-      );
-    }
-    return true;
-  }
-  return false;
-}
+// function isTableRenameResponse(value: unknown): value is TableRenameResponse {
+//   if (
+//     typeof value === "object" &&
+//     value !== null &&
+//     "success" in value &&
+//     typeof (value as { success: unknown }).success === "boolean"
+//   ) {
+//     const response = value as {
+//       success: boolean;
+//       error?: unknown;
+//       table?: unknown;
+//     };
+//     if (!response.success) {
+//       return (
+//         typeof response.error === "undefined" ||
+//         typeof response.error === "string"
+//       );
+//     }
+//     if (response.table) {
+//       const table = response.table as Record<string, unknown>;
+//       return (
+//         typeof table.id === "string" &&
+//         typeof table.name === "string" &&
+//         typeof table.baseId === "string" &&
+//         (table.description === null || typeof table.description === "string") &&
+//         typeof table.rowCount === "number" &&
+//         table.createdAt instanceof Date &&
+//         (table.updatedAt === null || table.updatedAt instanceof Date)
+//       );
+//     }
+//     return true;
+//   }
+//   return false;
+// }
 
 type TableQueryResponse =
   | {
@@ -749,8 +747,8 @@ export const useTable = (baseId: string, tableId: string) => {
     isDeletingColumn: false,
     isAddingColumn: false,
     isRenamingColumn: false,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
+    fetchNextPageUnsorted: fetchNextPage,
+    hasNextPageUnsorted: hasNextPage,
+    isFetchingNextPageUnsorted: isFetchingNextPage,
   };
 };

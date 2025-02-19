@@ -15,6 +15,8 @@ export const queryKeys = {
     root: ["tables"] as const,
     detail: (tableId: string) => ["tables", tableId],
     data: (tableId: string) => ["tables", tableId, "data"] as const,
+    sortedData: (tableId: string, viewId: string) =>
+      ["tables", tableId, "sortedData", viewId] as const,
     columns: (tableId: string) =>
       [...queryKeys.tables.detail(tableId), "columns"] as const,
     rows: (tableId: string) =>
@@ -59,6 +61,7 @@ export const getBaseRelatedQueryKeys = (baseId: string) => [
 // Helper to get all query keys under a specific table
 export const getTableRelatedQueryKeys = (tableId: string) => [
   queryKeys.tables.detail(tableId),
+  queryKeys.tables.data(tableId),
   queryKeys.tables.columns(tableId),
   queryKeys.tables.rows(tableId),
   queryKeys.tables.views.list(tableId),
@@ -69,4 +72,12 @@ export const getViewRelatedQueryKeys = (viewId: string) => [
   queryKeys.views.detail(viewId),
   queryKeys.views.filters(viewId),
   queryKeys.views.sorts(viewId),
+];
+
+// Add a new helper for view-specific table data
+export const getViewSpecificTableKeys = (tableId: string, viewId: string) => [
+  queryKeys.tables.sortedData(tableId, viewId),
+  queryKeys.views.sorts(viewId),
+  queryKeys.views.filters(viewId),
+  queryKeys.tables.views.detail(tableId, viewId),
 ];

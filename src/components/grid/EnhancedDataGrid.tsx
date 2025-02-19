@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { type SortingState } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -34,6 +32,7 @@ import { useTableConfig } from "./hooks/useTableConfig";
 import { type CellType } from "~/types/grid";
 import { AddField } from "./components/AddField";
 import { GridFooter } from "./components/GridFooter";
+import { useSortedTable } from "~/hooks/useSortedTable";
 
 interface EnhancedDataGridProps {
   baseId: string;
@@ -99,9 +98,7 @@ export function EnhancedDataGrid({
       .sort((a, b) => a.order - b.order)
       .map((col) => col.id),
   );
-  const [rowOrder, setRowOrder] = useState<Row[]>(() =>
-    (initialData ?? []).sort((a, b) => a.order - b.order),
-  );
+
   const queryClient = useQueryClient();
   const [selectedRows, setSelectedRows] = useState<string[]>([]);
   const { reorderRows } = useRows(tableId);
@@ -141,13 +138,6 @@ export function EnhancedDataGrid({
     fetchMoreOnBottomReached(tableContainerRef.current);
   }, [fetchMoreOnBottomReached]);
 
-  // Update row order when initialData changes
-  useEffect(() => {
-    if (initialData) {
-      setRowOrder(initialData.sort((a, b) => a.order - b.order));
-    }
-  }, [initialData]);
-
   // Update column order when columns change (new columns added/removed)
   useEffect(() => {
     const sortedColumnIds = (initialColumns ?? [])
@@ -168,66 +158,15 @@ export function EnhancedDataGrid({
     return initialColumns ?? [];
   }, [initialColumns]);
 
-  const data = useMemo<Row[]>(() => {
-    // Ensure all rows have all column fields with proper defaults
-    return rowOrder.map((row) => {
-      const mappedRow = { ...row };
-      columns.forEach((col) => {
-        if (!(col.name in mappedRow)) {
-          mappedRow[col.name] = col.type === "number" ? 0 : "";
-        }
-      });
-      return mappedRow;
-    });
-  }, [rowOrder, columns]);
-
   // Function to handle row deletion
   const handleRowDeleted = (deletedRowId: string) => {
-    setRowOrder((prevRows) => {
-      const deletedRow = prevRows.find((row) => row.id === deletedRowId);
-      if (!deletedRow) return prevRows;
-
-      return prevRows
-        .filter((row) => row.id !== deletedRowId)
-        .map((row) => {
-          if (row.order > deletedRow.order) {
-            return { ...row, order: row.order - 1 };
-          }
-          return row;
-        });
-    });
-
-    // Also update selection state if needed
     setSelectedRows((prev) => prev.filter((id) => id !== deletedRowId));
   };
 
   // Function to handle bulk row deletion
   const handleBulkRowsDeleted = (deletedRowIds: string[]) => {
-    setRowOrder((prevRows) => {
-      const rowsToDelete = prevRows.filter((row) =>
-        deletedRowIds.includes(row.id),
-      );
-      if (rowsToDelete.length === 0) return prevRows;
-
-      const minOrder = Math.min(...rowsToDelete.map((row) => row.order));
-
-      return prevRows
-        .filter((row) => !deletedRowIds.includes(row.id))
-        .map((row) => {
-          if (row.order > minOrder) {
-            return { ...row, order: row.order - rowsToDelete.length };
-          }
-          return row;
-        });
-    });
-
-    // Clear selection after bulk delete
     setSelectedRows([]);
   };
-
-  useEffect(() => {
-    onDataChange?.(data);
-  }, [data, onDataChange]);
 
   useEffect(() => {
     onColumnsChange?.(columns);
@@ -259,7 +198,7 @@ export function EnhancedDataGrid({
   const { tableColumns, table, rowVirtualizer, tableContainerRef } =
     useTableConfig({
       columns,
-      data,
+      data: initialData ?? [],
       initialData,
       tableId,
       sorting,
@@ -350,23 +289,19 @@ export function EnhancedDataGrid({
                 }}
                 onDragEnd={async ({ active, over }) => {
                   setActiveId(null);
-                  if (active && over && active.id !== over.id) {
-                    const oldIndex = data.findIndex(
+                  if (active && over && active.id !== over.id && initialData) {
+                    const oldIndex = initialData.findIndex(
                       (row) => row.id === active.id,
                     );
-                    const newIndex = data.findIndex(
+                    const newIndex = initialData.findIndex(
                       (row) => row.id === over.id,
                     );
 
                     if (oldIndex !== -1 && newIndex !== -1) {
-                      const newData = arrayMove(data, oldIndex, newIndex);
-
-                      // Update local state immediately with new order
-                      setRowOrder(
-                        newData.map((row, index) => ({
-                          ...row,
-                          order: index,
-                        })),
+                      const newData = arrayMove(
+                        initialData,
+                        oldIndex,
+                        newIndex,
                       );
 
                       try {
@@ -377,9 +312,15 @@ export function EnhancedDataGrid({
                             order: index,
                           })),
                         });
+
+                        // Invalidate the sorted data query to refetch with new order
+                        await queryClient.invalidateQueries({
+                          queryKey: queryKeys.tables.sortedData(
+                            tableId,
+                            viewId,
+                          ),
+                        });
                       } catch (error) {
-                        // Revert on error
-                        setRowOrder(data);
                         toast.error(
                           error instanceof Error
                             ? error.message
@@ -391,7 +332,7 @@ export function EnhancedDataGrid({
                 }}
               >
                 <SortableContext
-                  items={data.map((row) => row.id)}
+                  items={initialData?.map((row) => row.id) ?? []}
                   strategy={verticalListSortingStrategy}
                 >
                   <div

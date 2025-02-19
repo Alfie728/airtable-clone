@@ -7,7 +7,7 @@ import { EnhancedDataGrid } from "~/components/grid/EnhancedDataGrid";
 import { GridControls } from "~/components/grid/GridControls";
 import { Sidebar } from "~/components/layout/Sidebar";
 import { SecondaryNavigation } from "~/components/layout/SecondaryNavigation";
-import { useTable } from "~/hooks/useTable";
+import { useTableData } from "~/hooks/useTableData";
 import { useBase } from "~/hooks/useBase";
 import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
@@ -17,9 +17,7 @@ import { getDefaultView } from "~/lib/actions/views.action";
 import { useViews } from "~/hooks/useViews";
 import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
 import { queryKeys } from "~/lib/query/keys";
-import { type SortingState } from "@tanstack/react-table";
-import { useTableSort } from "~/hooks/useTableSort";
-import { getTableData } from "~/lib/actions/tables.action";
+import { useSortedTable } from "~/hooks/useSortedTable";
 import { prefetchTable } from "~/lib/query/prefetch";
 
 interface BaseClientProps {
@@ -40,13 +38,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   const [pendingActiveViewId, setPendingActiveViewId] = useState<string | null>(
     null,
   );
-  const [sorting, setSorting] = useState<SortingState>([]);
   const queryClient = useQueryClient();
-  const {
-    initialSortState,
-    updateSort,
-    isUpdating: isUpdatingSort,
-  } = useTableSort(viewId);
 
   const {
     baseName,
@@ -56,10 +48,13 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     isAddingTable,
     error: baseError,
   } = useBase(baseId);
+
+  const tableName = baseTables.find((t) => t.id === tableId)?.name ?? "";
+
   const {
     tableData,
     isLoading: isTableLoading,
-    tableError,
+    error: tableError,
     addRow,
     addBulkRows,
     updateCell,
@@ -67,10 +62,13 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     isBatchAdding,
     renameTable,
     isRenaming,
+    sortState,
+    handleSortChange,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useTable(baseId, tableId);
+    isUpdatingSort,
+  } = useTableData({ baseId, tableId, tableName, viewId });
 
   const {
     views: tableViews,
@@ -79,38 +77,6 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   } = useViews(tableId);
 
   const [isHandlingNavigation, setIsHandlingNavigation] = useState(false);
-
-  // Initialize sorting state from view
-  useEffect(() => {
-    if (
-      initialSortState &&
-      JSON.stringify(sorting) !== JSON.stringify(initialSortState)
-    ) {
-      setSorting(initialSortState);
-    }
-  }, [initialSortState]);
-
-  // Handle sorting changes
-  const handleSortingChange = (newSorting: SortingState) => {
-    if (JSON.stringify(newSorting) === JSON.stringify(sorting)) return;
-
-    // Update local state immediately for responsive UI
-    setSorting(newSorting);
-
-    // Debounce the server update
-    const timeoutId = setTimeout(() => {
-      try {
-        void updateSort(newSorting);
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Failed to update sorting",
-        );
-        setSorting(sorting);
-      }
-    }, 300); // 300ms debounce
-
-    return () => clearTimeout(timeoutId);
-  };
 
   // Add error handling for views
   useEffect(() => {
@@ -347,7 +313,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       </div>
     );
   }
-
+  console.log("sortState", sortState);
   return (
     <div className="flex h-screen flex-col bg-white">
       <BaseTopNavigation baseName={baseName} baseId={baseId} />
@@ -380,8 +346,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
           columns={tableData?.columns ?? []}
-          sorting={sorting}
-          onSortingChange={handleSortingChange}
+          sorting={sortState}
+          onSortingChange={handleSortChange}
         />
 
         {!isAddingTable && (
@@ -448,8 +414,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   updateCellAction={updateCell}
                   isAddingRow={isAddingRow}
                   isBatchAdding={isBatchAdding}
-                  sorting={sorting}
-                  onSortingChangeAction={handleSortingChange}
+                  sorting={sortState}
+                  onSortingChangeAction={handleSortChange}
                   fetchNextPage={fetchNextPage}
                   hasNextPage={hasNextPage}
                   isFetchingNextPage={isFetchingNextPage}
