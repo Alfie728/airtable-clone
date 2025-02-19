@@ -130,6 +130,25 @@ function isTableRenameResponse(value: unknown): value is TableRenameResponse {
   return false;
 }
 
+type TableQueryResponse =
+  | {
+      success: true;
+      table: {
+        id: string;
+        name: string;
+        columns: Column[];
+        data: Row[];
+        pagination: {
+          page: number;
+          hasMore: boolean;
+        };
+      };
+    }
+  | {
+      success: false;
+      error: string;
+    };
+
 export const useTable = (baseId: string, tableId: string) => {
   const queryClient = useQueryClient();
   const latestMutationRef = useRef<string | null>(null);
@@ -138,76 +157,116 @@ export const useTable = (baseId: string, tableId: string) => {
   );
   const rowIdMappingRef = useRef<Map<string, string>>(new Map());
 
+  console.log("[useTable] Initializing with:", { baseId, tableId });
+
   const { tables } = useBase(baseId);
+  console.log("[useTable] Tables from useBase:", {
+    tablesExists: !!tables,
+    tablesLength: tables?.length,
+    tableIds: tables?.map((t) => t.id),
+  });
 
   // Use infinite query for table data
   const {
-    data: infiniteData,
+    data: pages,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-    isLoading: isTableLoading,
-    error: tableError,
-  } = useInfiniteQuery({
-    queryKey: queryKeys.tables.detail(tableId),
-    queryFn: async ({ pageParam = 1 }) => {
-      console.log("[useTable] Fetching page:", pageParam);
+    status,
+    error: queryError,
+  } = useInfiniteQuery<TableQueryResponse, Error>({
+    queryKey: ["table", baseId, tableId],
+    queryFn: async ({ pageParam }) => {
+      if (!tables) throw new Error("Tables not loaded yet");
+      console.log("[useTable] Fetching page:", { pageParam });
+
       const table = tables.find((t) => t.id === tableId);
-      if (!table) throw new Error("Table not found");
-      return getTableData(table.id, table.name, pageParam);
-    },
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      console.log("[useTable] getNextPageParam:", {
-        currentPage: lastPage.table?.pagination?.page,
-        hasMore: lastPage.table?.pagination?.hasMore,
-        currentCount: lastPage.table?.pagination?.currentCount,
-        total: lastPage.table?.pagination?.total,
+      if (!table) throw new Error(`Table ${tableId} not found`);
+
+      const response = await getTableData(
+        tableId,
+        table.name,
+        pageParam as number,
+      );
+      console.log("[useTable] Fetch response:", {
+        success: response.success,
+        rowCount: response.table?.data.length,
+        hasMore: response.table?.pagination?.hasMore,
+        page: response.table?.pagination?.page,
+        error: response.success ? undefined : response.error,
       });
 
+      if (!response.success) {
+        throw new Error(response.error ?? "Failed to fetch table data");
+      }
+
+      return response as TableQueryResponse;
+    },
+    getNextPageParam: (lastPage: TableQueryResponse) => {
       if (!lastPage.success || !lastPage.table?.pagination?.hasMore) {
-        console.log("[useTable] No more pages to fetch");
+        console.log("[useTable] No more pages:", {
+          success: lastPage.success,
+          hasMore: lastPage.success ? lastPage.table.pagination.hasMore : false,
+        });
         return undefined;
       }
+
       const nextPage = lastPage.table.pagination.page + 1;
-      console.log("[useTable] Next page to fetch:", nextPage);
+      console.log("[useTable] Next page:", { nextPage });
       return nextPage;
     },
-    enabled: Boolean(tableId && tables.length > 0),
+    initialPageParam: 1,
+    enabled: Boolean(tableId && tables && tables.length > 0),
     staleTime: 5 * 1000,
-    refetchOnMount: false,
+    retry: 1, // Allow one retry in case of temporary issues
+    refetchOnMount: true, // Ensure we have fresh data when mounting
     refetchOnWindowFocus: false,
-    maxPages: Infinity,
-    gcTime: Infinity, // Prevent garbage collection of pages
+    getPreviousPageParam: (firstPage) => {
+      if (!firstPage.success || firstPage.table.pagination.page <= 1)
+        return undefined;
+      return firstPage.table.pagination.page - 1;
+    },
+  });
+
+  // Log query status with more details
+  console.log("[useTable] Query status:", {
+    isLoading: status === "pending",
+    hasError: status === "error",
+    errorMessage: queryError?.message,
+    hasData: !!pages,
+    pagesCount: pages?.pages?.length,
+    enabled: Boolean(tableId && tables && tables.length > 0),
+    tableId,
+    baseId,
+    tablesCount: tables?.length,
   });
 
   // Combine all pages of data
   const tableData = useMemo(() => {
-    if (!infiniteData?.pages || infiniteData.pages.length === 0) {
-      console.log("[useTable] No pages available");
-      return undefined;
-    }
+    if (!pages?.pages || pages.pages.length === 0) return undefined;
 
-    const firstPage = infiniteData.pages[0];
-    if (!firstPage?.success || !firstPage?.table) {
-      console.log("[useTable] First page invalid");
-      return undefined;
-    }
+    const firstPage = pages.pages[0];
+    if (!firstPage?.success) return undefined;
 
-    const combinedData = infiniteData.pages.reduce<Row[]>((acc, page) => {
-      if (page?.success && page?.table) {
+    // Combine data from all pages
+    const allData = pages.pages.reduce<Row[]>((acc, page) => {
+      if (page?.success) {
         return [...acc, ...page.table.data];
       }
       return acc;
     }, []);
 
-    console.log("[useTable] Combined data length:", combinedData.length);
+    console.log("[useTable] Combined data:", {
+      totalPages: pages.pages.length,
+      totalRows: allData.length,
+      hasMore: hasNextPage,
+    });
 
     return {
       ...firstPage.table,
-      data: combinedData,
+      data: allData,
     };
-  }, [infiniteData?.pages]);
+  }, [pages?.pages, hasNextPage]);
 
   const addRowMutation = useMutation({
     mutationFn: async (optimisticRow: Row) => {
@@ -658,17 +717,21 @@ export const useTable = (baseId: string, tableId: string) => {
 
   return {
     tableData,
-    isLoading: isTableLoading,
-    tableError,
+    isLoading: status === "pending",
+    tableError: queryError,
     addRow: () => {
-      const optimisticRow = generateMockRow(
-        infiniteData?.pages?.[0]?.table?.columns ?? [],
-      );
+      const columns = pages?.pages?.[0]?.success
+        ? pages.pages[0].table.columns
+        : [];
+      const optimisticRow = generateMockRow(columns);
       return addRowMutation.mutateAsync(optimisticRow);
     },
     addBulkRows: (count: number) => {
+      const columns = pages?.pages?.[0]?.success
+        ? pages.pages[0].table.columns
+        : [];
       const optimisticRows = Array.from({ length: count }, () =>
-        generateMockRow(infiniteData?.pages?.[0]?.table?.columns ?? []),
+        generateMockRow(columns),
       );
       return addBulkRowsMutation.mutateAsync({ optimisticRows });
     },

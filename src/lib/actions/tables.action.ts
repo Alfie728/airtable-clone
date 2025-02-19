@@ -224,7 +224,7 @@ export async function getTableData(
   tableId: string,
   tableName: string,
   page = 1,
-  pageSize = 500,
+  pageSize = 100,
 ) {
   const user = await currentUser();
   if (!user) throw new Error("Unauthorized");
@@ -261,14 +261,18 @@ export async function getTableData(
       .offset(offset)
       .limit(pageSize);
 
+    console.log(
+      `[getTableData] Fetched ${paginatedRows.length} rows for page ${page}`,
+    );
+
     // Process rows in chunks to avoid PostgreSQL limitations
     const CHUNK_SIZE = 50; // Process 50 rows at a time
     const allRowsWithCells = [];
 
     for (let i = 0; i < paginatedRows.length; i += CHUNK_SIZE) {
       const chunk = paginatedRows.slice(i, i + CHUNK_SIZE);
-      const chunkIds = chunk.map(r => r.id);
-      
+      const chunkIds = chunk.map((r) => r.id);
+
       // Get cells for this chunk of rows
       const rowsWithCells = await db
         .select({
@@ -276,16 +280,14 @@ export async function getTableData(
           cell: cells,
         })
         .from(rows)
-        .where(
-          and(
-            eq(rows.tableId, tableId),
-            inArray(rows.id, chunkIds)
-          ),
-        )
+        .where(and(eq(rows.tableId, tableId), inArray(rows.id, chunkIds)))
         .leftJoin(cells, eq(cells.rowId, rows.id))
         .orderBy(rows.order);
 
       allRowsWithCells.push(...rowsWithCells);
+      console.log(
+        `[getTableData] Processed chunk ${i / CHUNK_SIZE + 1}, got ${rowsWithCells.length} cells`,
+      );
     }
 
     // Transform the data efficiently
@@ -316,7 +318,9 @@ export async function getTableData(
       gridData.push(currentRow);
     }
 
-    console.log(`[getTableData] Fetched rows count: ${gridData.length}`);
+    console.log(
+      `[getTableData] Final transformed rows count: ${gridData.length}`,
+    );
 
     const transformedColumns = tableColumns.map((col) => ({
       id: col.id,
@@ -332,9 +336,15 @@ export async function getTableData(
     // Calculate hasMore correctly based on total count and current offset
     const hasMore = offset + gridData.length < totalCount;
 
-    console.log(
-      `[getTableData] hasMore: ${hasMore}, offset: ${offset}, gridData.length: ${gridData.length}, totalCount: ${totalCount}`,
-    );
+    console.log(`[getTableData] Response summary:`, {
+      page,
+      pageSize,
+      offset,
+      rowsFetched: gridData.length,
+      totalCount,
+      hasMore,
+      columnsCount: transformedColumns.length,
+    });
 
     return {
       success: true,

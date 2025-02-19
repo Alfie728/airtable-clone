@@ -495,16 +495,18 @@ export function EnhancedDataGrid({
               style={{
                 position: "absolute",
                 top: Math.max(
-                  rowVirtualizer.getTotalSize() - 100, // Show trigger 100px before the end
+                  rowVirtualizer.getTotalSize() - 1000, // Show trigger 1000px before the end
                   0,
                 ),
                 width: "100%",
-                height: "50px",
+                height: "100px", // Increased height for better detection
               }}
             >
               {isFetchingNextPage && (
                 <div className="flex h-full items-center justify-center">
-                  <div className="text-sm text-gray-500">Loading more...</div>
+                  <div className="text-sm text-gray-500">
+                    Loading more rows...
+                  </div>
                 </div>
               )}
             </div>
