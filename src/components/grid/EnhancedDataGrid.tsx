@@ -114,7 +114,7 @@ export function EnhancedDataGrid({
     (containerRefElement?: HTMLDivElement | null) => {
       if (containerRefElement) {
         const { scrollHeight, scrollTop, clientHeight } = containerRefElement;
-        // Fetch more data when user has scrolled within 1000px of the bottom
+        // Fetch more data when user has scrolled within 2000px of the bottom
         if (
           scrollHeight - scrollTop - clientHeight < 2000 &&
           !isFetchingNextPage &&
@@ -126,6 +126,14 @@ export function EnhancedDataGrid({
       }
     },
     [fetchNextPage, isFetchingNextPage, hasNextPage],
+  );
+
+  // Memoize the scroll handler to prevent rerenders
+  const handleScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      fetchMoreOnBottomReached(e.currentTarget);
+    },
+    [fetchMoreOnBottomReached],
   );
 
   // Check if we need to fetch more data on mount and after each fetch
@@ -155,6 +163,7 @@ export function EnhancedDataGrid({
     }
   }, [initialColumns, columnOrder]);
 
+  // Memoize data transformations
   const columns = useMemo<Column[]>(() => {
     return initialColumns ?? [];
   }, [initialColumns]);
@@ -224,26 +233,28 @@ export function EnhancedDataGrid({
     onColumnsChange?.(columns);
   }, [columns, onColumnsChange]);
 
-  const handleColumnOrderChange = (
-    updater: string[] | ((old: string[]) => string[]),
-  ) => {
-    const newOrder =
-      typeof updater === "function" ? updater(columnOrder) : updater;
+  // Memoize handlers
+  const handleColumnOrderChange = useCallback(
+    (updater: string[] | ((old: string[]) => string[])) => {
+      const newOrder =
+        typeof updater === "function" ? updater(columnOrder) : updater;
 
-    setColumnOrder(newOrder);
+      setColumnOrder(newOrder);
 
-    void reorderColumns({
-      columnOrders: newOrder.map((id, index) => ({
-        id,
-        order: index,
-      })),
-    }).catch((error) => {
-      setColumnOrder(columnOrder);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to reorder columns",
-      );
-    });
-  };
+      void reorderColumns({
+        columnOrders: newOrder.map((id, index) => ({
+          id,
+          order: index,
+        })),
+      }).catch((error) => {
+        setColumnOrder(columnOrder);
+        toast.error(
+          error instanceof Error ? error.message : "Failed to reorder columns",
+        );
+      });
+    },
+    [columnOrder, reorderColumns],
+  );
 
   const { tableColumns, table, rowVirtualizer, tableContainerRef } =
     useTableConfig({
@@ -285,26 +296,31 @@ export function EnhancedDataGrid({
     }
   };
 
-  const handleRowSelectionChange = (rowId: string, selected: boolean) => {
-    setSelectedRows((prev) =>
-      selected ? [...prev, rowId] : prev.filter((id) => id !== rowId),
-    );
-  };
+  const handleRowSelectionChange = useCallback(
+    (rowId: string, selected: boolean) => {
+      setSelectedRows((prev) =>
+        selected ? [...prev, rowId] : prev.filter((id) => id !== rowId),
+      );
+    },
+    [],
+  );
 
-  const handleSelectAllRows = (selected: boolean) => {
-    setSelectedRows(
-      selected ? table.getRowModel().rows.map((row) => row.original.id) : [],
-    );
-  };
+  const handleSelectAllRows = useCallback(
+    (selected: boolean) => {
+      setSelectedRows(
+        selected ? table.getRowModel().rows.map((row) => row.original.id) : [],
+      );
+    },
+    [table],
+  );
 
   console.log("rerendering");
-
   return (
     <div className="flex h-full flex-col">
       <div
         ref={tableContainerRef}
         className="relative flex-1 overflow-auto"
-        onScroll={(e) => fetchMoreOnBottomReached(e.currentTarget)}
+        onScroll={handleScroll}
       >
         <DndContext
           sensors={sensors}

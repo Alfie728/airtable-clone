@@ -34,19 +34,11 @@ export interface SerializedTable {
   updatedAt: string;
 }
 
-export interface Pagination {
-  total: number;
-  page: number;
-  pageSize: number;
-  hasMore: boolean;
-}
-
 export interface TableData {
   id: string;
   name: string;
   columns: Column[];
   data: Row[];
-  pagination?: Pagination;
 }
 
 export interface TableResponse {

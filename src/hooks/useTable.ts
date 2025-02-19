@@ -6,6 +6,7 @@ import {
   useMutation,
   useQueries,
   useInfiniteQuery,
+  type InfiniteData,
 } from "@tanstack/react-query";
 import { faker } from "@faker-js/faker";
 import { useRef, useEffect, useMemo, useCallback } from "react";
@@ -175,7 +176,7 @@ export const useTable = (baseId: string, tableId: string) => {
     status,
     error: queryError,
   } = useInfiniteQuery<TableQueryResponse, Error>({
-    queryKey: ["table", baseId, tableId],
+    queryKey: queryKeys.tables.data(tableId),
     queryFn: async ({ pageParam }) => {
       if (!tables) throw new Error("Tables not loaded yet");
       console.log("[useTable] Fetching page:", { pageParam });
@@ -188,13 +189,6 @@ export const useTable = (baseId: string, tableId: string) => {
         table.name,
         pageParam as number,
       );
-      // console.log("[useTable] Fetch response:", {
-      //   success: response.success,
-      //   rowCount: response.table?.data.length,
-      //   hasMore: response.table?.pagination?.hasMore,
-      //   page: response.table?.pagination?.page,
-      //   error: response.success ? undefined : response.error,
-      // });
 
       if (!response.success) {
         throw new Error(response.error ?? "Failed to fetch table data");
@@ -217,15 +211,11 @@ export const useTable = (baseId: string, tableId: string) => {
     },
     initialPageParam: 1,
     enabled: Boolean(tableId && tables && tables.length > 0),
-    staleTime: 5 * 1000,
-    retry: 1, // Allow one retry in case of temporary issues
-    refetchOnMount: true, // Ensure we have fresh data when mounting
-    refetchOnWindowFocus: false,
-    getPreviousPageParam: (firstPage) => {
-      if (!firstPage.success || firstPage.table.pagination.page <= 1)
-        return undefined;
-      return firstPage.table.pagination.page - 1;
-    },
+    staleTime: Infinity, // Never consider data stale automatically
+    gcTime: Infinity, // Keep data in cache indefinitely
+    refetchOnMount: false, // Don't refetch when component mounts
+    refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    refetchOnReconnect: false, // Don't refetch when network reconnects
   });
 
   // Log query status with more details
@@ -281,18 +271,18 @@ export const useTable = (baseId: string, tableId: string) => {
     },
     onMutate: async (optimisticRow) => {
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.detail(tableId),
+        queryKey: queryKeys.tables.data(tableId),
       });
-      const previousData = queryClient.getQueryData<TableResponse>(
-        queryKeys.tables.detail(tableId),
-      );
+      const previousData = queryClient.getQueryData<
+        InfiniteData<TableQueryResponse>
+      >(queryKeys.tables.data(tableId));
 
-      if (previousData?.table) {
+      if (previousData?.pages[0]?.success) {
         // Get the highest order using reduce - more efficient for large datasets
-        const maxOrder = previousData.table.data.reduce(
-          (max, row) => (row.order > max ? row.order : max),
-          -1,
-        );
+        const maxOrder = previousData.pages.reduce((max, page) => {
+          if (!page.success) return max;
+          return Math.max(max, ...page.table.data.map((row) => row.order));
+        }, -1);
 
         // Set the optimistic row's order to be after all existing rows
         const rowWithOrder = {
@@ -300,14 +290,27 @@ export const useTable = (baseId: string, tableId: string) => {
           order: maxOrder + 1,
         };
 
-        queryClient.setQueryData<TableResponse>(
-          queryKeys.tables.detail(tableId),
-          {
-            ...previousData,
-            table: {
-              ...previousData.table,
-              data: [...previousData.table.data, rowWithOrder],
-            },
+        // Update all pages that contain the table data
+        queryClient.setQueryData<InfiniteData<TableQueryResponse>>(
+          queryKeys.tables.data(tableId),
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page, index) => {
+                if (!page.success) return page;
+                if (index === 0) {
+                  return {
+                    ...page,
+                    table: {
+                      ...page.table,
+                      data: [...page.table.data, rowWithOrder],
+                    },
+                  };
+                }
+                return page;
+              }),
+            };
           },
         );
       }
@@ -317,7 +320,7 @@ export const useTable = (baseId: string, tableId: string) => {
     onError: (err, _, context) => {
       if (context?.previousData) {
         queryClient.setQueryData(
-          queryKeys.tables.detail(tableId),
+          queryKeys.tables.data(tableId),
           context.previousData,
         );
       }
@@ -328,14 +331,7 @@ export const useTable = (baseId: string, tableId: string) => {
     },
     onSettled: (data, _, variables) => {
       pendingRowCreationsRef.current.delete(variables.id);
-      if (
-        latestMutationRef.current === "addRow" &&
-        pendingRowCreationsRef.current.size === 0
-      ) {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.tables.detail(tableId),
-        });
-      }
+      // Don't invalidate queries here - let the user manually refresh if needed
     },
   });
 
@@ -398,37 +394,42 @@ export const useTable = (baseId: string, tableId: string) => {
     onMutate: async (params) => {
       if (!pendingRowCreationsRef.current.has(params.rowId)) {
         await queryClient.cancelQueries({
-          queryKey: queryKeys.tables.detail(tableId),
+          queryKey: queryKeys.tables.data(tableId),
         });
       }
 
-      const previousData = queryClient.getQueryData<TableResponse>(
-        queryKeys.tables.detail(tableId),
-      );
+      const previousData = queryClient.getQueryData<
+        InfiniteData<TableQueryResponse>
+      >(queryKeys.tables.data(tableId));
 
-      const table = previousData?.table;
-      if (table?.columns && table.data) {
-        const updatedData = {
-          ...previousData,
-          table: {
-            ...table,
-            data: table.data.map((row) => {
-              if (row.id === params.rowId) {
-                const columnName = table.columns.find(
-                  (col) => col.id === params.columnId,
-                )?.name;
-                if (columnName) {
-                  return {
-                    ...row,
-                    [columnName]: params.value,
-                  };
-                }
-              }
-              return row;
-            }),
+      if (previousData?.pages[0]?.success) {
+        queryClient.setQueryData<InfiniteData<TableQueryResponse>>(
+          queryKeys.tables.data(tableId),
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page) => {
+                if (!page.success) return page;
+                return {
+                  ...page,
+                  table: {
+                    ...page.table,
+                    data: page.table.data.map((row) => {
+                      if (row.id === params.rowId) {
+                        return {
+                          ...row,
+                          [params.columnId]: params.value,
+                        };
+                      }
+                      return row;
+                    }),
+                  },
+                };
+              }),
+            };
           },
-        };
-        queryClient.setQueryData(queryKeys.tables.detail(tableId), updatedData);
+        );
       }
 
       return { previousData, params };
@@ -436,20 +437,13 @@ export const useTable = (baseId: string, tableId: string) => {
     onError: (err, variables, context) => {
       if (context?.previousData) {
         queryClient.setQueryData(
-          queryKeys.tables.detail(tableId),
+          queryKeys.tables.data(tableId),
           context.previousData,
         );
       }
     },
     onSettled: () => {
-      if (
-        latestMutationRef.current === "updateCell" &&
-        !addBulkRowsMutation.isPending
-      ) {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.tables.detail(tableId),
-        });
-      }
+      // Don't invalidate queries here - let the user manually refresh if needed
     },
   });
 
@@ -471,18 +465,18 @@ export const useTable = (baseId: string, tableId: string) => {
     },
     onMutate: async (params: { optimisticRows: Row[] }) => {
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.detail(tableId),
+        queryKey: queryKeys.tables.data(tableId),
       });
-      const previousData = queryClient.getQueryData<TableResponse>(
-        queryKeys.tables.detail(tableId),
-      );
+      const previousData = queryClient.getQueryData<
+        InfiniteData<TableQueryResponse>
+      >(queryKeys.tables.data(tableId));
 
-      if (previousData?.table) {
+      if (previousData?.pages[0]?.success) {
         // Get the highest order using reduce - more efficient for large datasets
-        const maxOrder = previousData.table.data.reduce(
-          (max, row) => (row.order > max ? row.order : max),
-          -1,
-        );
+        const maxOrder = previousData.pages.reduce((max, page) => {
+          if (!page.success) return max;
+          return Math.max(max, ...page.table.data.map((row) => row.order));
+        }, -1);
 
         // Set the optimistic rows' orders to be sequential after all existing rows
         const rowsWithOrder = params.optimisticRows.map((row, index) => ({
@@ -490,14 +484,27 @@ export const useTable = (baseId: string, tableId: string) => {
           order: maxOrder + 1 + index,
         }));
 
-        queryClient.setQueryData<TableResponse>(
-          queryKeys.tables.detail(tableId),
-          {
-            ...previousData,
-            table: {
-              ...previousData.table,
-              data: [...previousData.table.data, ...rowsWithOrder],
-            },
+        // Update all pages that contain the table data
+        queryClient.setQueryData<InfiniteData<TableQueryResponse>>(
+          queryKeys.tables.data(tableId),
+          (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page, index) => {
+                if (!page.success) return page;
+                if (index === 0) {
+                  return {
+                    ...page,
+                    table: {
+                      ...page.table,
+                      data: [...page.table.data, ...rowsWithOrder],
+                    },
+                  };
+                }
+                return page;
+              }),
+            };
           },
         );
       }
@@ -507,20 +514,16 @@ export const useTable = (baseId: string, tableId: string) => {
     onError: (err, variables, context) => {
       if (context?.previousData) {
         queryClient.setQueryData(
-          queryKeys.tables.detail(tableId),
+          queryKeys.tables.data(tableId),
           context.previousData,
         );
       }
+      variables.optimisticRows.forEach((row) => {
+        pendingRowCreationsRef.current.delete(row.id);
+      });
     },
     onSettled: () => {
-      if (
-        latestMutationRef.current === "addBulkRows" &&
-        !updateCellMutation.isPending
-      ) {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.tables.detail(tableId),
-        });
-      }
+      // Don't invalidate queries here - let the user manually refresh if needed
     },
   });
 
@@ -544,7 +547,7 @@ export const useTable = (baseId: string, tableId: string) => {
         queryKey: queryKeys.bases.tables.list(baseId),
       });
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.detail(tableId),
+        queryKey: queryKeys.tables.data(tableId),
       });
 
       // Snapshot the previous value
@@ -565,11 +568,11 @@ export const useTable = (baseId: string, tableId: string) => {
 
       // Optimistically update table detail
       const previousTableData = queryClient.getQueryData<TableResponse>(
-        queryKeys.tables.detail(tableId),
+        queryKeys.tables.data(tableId),
       );
 
       if (previousTableData?.table) {
-        queryClient.setQueryData(queryKeys.tables.detail(tableId), {
+        queryClient.setQueryData(queryKeys.tables.data(tableId), {
           ...previousTableData,
           table: {
             ...previousTableData.table,
@@ -590,7 +593,7 @@ export const useTable = (baseId: string, tableId: string) => {
       }
       if (context?.previousTableData) {
         queryClient.setQueryData(
-          queryKeys.tables.detail(tableId),
+          queryKeys.tables.data(tableId),
           context.previousTableData,
         );
       }
@@ -652,14 +655,14 @@ export const useTable = (baseId: string, tableId: string) => {
       const startTime = Date.now();
       console.log("[Client] Starting optimistic update");
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.detail(tableId),
+        queryKey: queryKeys.tables.data(tableId),
       });
       await queryClient.cancelQueries({
         queryKey: queryKeys.bases.tables.list(baseId),
       });
 
       const previousTableData = queryClient.getQueryData<TableResponse>(
-        queryKeys.tables.detail(tableId),
+        queryKeys.tables.data(tableId),
       );
       const previousTables = queryClient.getQueryData<{
         success: boolean;
@@ -687,7 +690,7 @@ export const useTable = (baseId: string, tableId: string) => {
       });
       if (context?.previousTableData) {
         queryClient.setQueryData(
-          queryKeys.tables.detail(tableId),
+          queryKeys.tables.data(tableId),
           context.previousTableData,
         );
       }

@@ -14,6 +14,7 @@ export const queryKeys = {
   tables: {
     root: ["tables"] as const,
     detail: (tableId: string) => ["tables", tableId],
+    data: (tableId: string) => ["tables", tableId, "data"] as const,
     columns: (tableId: string) =>
       [...queryKeys.tables.detail(tableId), "columns"] as const,
     rows: (tableId: string) =>
