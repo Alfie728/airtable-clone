@@ -13,12 +13,15 @@ interface AddFieldProps {
 }
 
 export function AddField({ tableId, onColumnUpdated }: AddFieldProps) {
- 
   const { addColumn, isAddingColumn } = useColumns(tableId);
 
   const handleAddColumn = async () => {
     try {
-      await addColumn({ name: "Field", type: "text" });
+      await addColumn({
+        name: "Field",
+        type: "text",
+        defaultValue: "",
+      });
       toast.success("Column added successfully");
       onColumnUpdated();
     } catch (error) {

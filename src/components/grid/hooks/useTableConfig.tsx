@@ -40,9 +40,9 @@ const useTableConfig = ({
         id: col.id,
         accessorKey: col.id,
         sortingFn: "alphanumeric" as const,
-        cell: (props: CellContext<Row, string | number>) => (
-          <GridCell context={props} initialData={initialData} />
-        ),
+        cell: (props: CellContext<Row, string | number>) => {
+          return <GridCell context={props} initialData={initialData} />;
+        },
         enableSorting: col.isSortable,
         meta: {
           name: col.name,
@@ -67,7 +67,8 @@ const useTableConfig = ({
     data,
     columns: tableColumns,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
+    // getSortedRowModel: getSortedRowModel(),
+    manualSorting: true,
     isMultiSortEvent: () => true,
     enableMultiSort: true,
     sortDescFirst: false,

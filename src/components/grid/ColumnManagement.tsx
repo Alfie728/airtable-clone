@@ -133,7 +133,7 @@ export function ColumnManagement({
       setNewColumnName(column.name);
     }
   };
-  console.log(isRenaming);
+  
   return (
     <>
       <DropdownMenu modal={false} open={isOpen} onOpenChange={handleOpenChange}>

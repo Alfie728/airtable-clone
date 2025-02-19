@@ -36,20 +36,21 @@ interface TableResponse {
     name: string;
     baseId: string;
     columns: Column[];
-    rows: Row[];
+    data: Row[];
   };
+}
+
+interface AddColumnParams {
+  name: string;
+  type: "text" | "number";
+  defaultValue?: string;
 }
 
 export const useColumns = (tableId: string) => {
   const queryClient = useQueryClient();
 
-  const addColumnMutation = useMutation<
-    { success: boolean; column?: Column },
-    Error,
-    { name: string; type: "text" | "number" },
-    AddColumnContext
-  >({
-    mutationFn: async ({ name, type }) => {
+  const addColumnMutation = useMutation({
+    mutationFn: async ({ name, type, defaultValue }: AddColumnParams) => {
       const previousData = queryClient.getQueryData<TableResponse>(
         queryKeys.tables.detail(tableId),
       );
@@ -79,7 +80,15 @@ export const useColumns = (tableId: string) => {
         isVisible: true,
       };
 
-      // Update client state immediately
+      // Update client state immediately with default values
+      if (
+        !previousData?.table?.data ||
+        !Array.isArray(previousData.table.data)
+      ) {
+        console.error("Invalid table data structure");
+        return;
+      }
+
       queryClient.setQueryData<TableResponse>(
         queryKeys.tables.detail(tableId),
         {
@@ -87,6 +96,11 @@ export const useColumns = (tableId: string) => {
           table: {
             ...previousData.table,
             columns: [...previousData.table.columns, optimisticColumn],
+            data: previousData.table.data.map((row) => ({
+              ...row,
+              [optimisticColumn.id]:
+                type === "number" ? 0 : (defaultValue ?? ""),
+            })),
           },
         },
       );
@@ -97,38 +111,11 @@ export const useColumns = (tableId: string) => {
         throw new Error(result.error ?? "Failed to add column");
       }
 
-      // Update the client state with the server's column ID
-      const updatedData = queryClient.getQueryData<TableResponse>(
-        queryKeys.tables.detail(tableId),
-      );
-
-      if (updatedData?.table) {
-        queryClient.setQueryData<TableResponse>(
-          queryKeys.tables.detail(tableId),
-          {
-            ...updatedData,
-            table: {
-              ...updatedData.table,
-              columns: updatedData.table.columns.map((col) =>
-                col.id === optimisticColumn.id ? result.column! : col,
-              ),
-            },
-          },
-        );
-      }
-
       return result;
     },
-    onError: (error, newColumn, context) => {
-      if (context?.previousData) {
-        queryClient.setQueryData(
-          queryKeys.tables.detail(tableId),
-          context.previousData,
-        );
-        toast.error(
-          error instanceof Error ? error.message : "Failed to add column",
-        );
-      }
+    onSuccess: (data, variables, context) => {
+      // The mutation function already updates the cache optimistically
+      // and handles the server response, so we don't need additional logic here
     },
   });
 
@@ -172,8 +159,8 @@ export const useColumns = (tableId: string) => {
                 : col,
             );
 
-          // Update rows by removing the deleted column's data
-          const updatedRows = (previousData.table.rows ?? []).map(
+          // Update data by removing the deleted column's data
+          const updatedData = (previousData.table.data ?? []).map(
             (row: Row) => {
               const newRow = { ...row };
               delete newRow[deletedColumn.name];
@@ -189,7 +176,7 @@ export const useColumns = (tableId: string) => {
               table: {
                 ...previousData.table,
                 columns: updatedColumns,
-                rows: updatedRows,
+                data: updatedData,
               },
             },
           );
@@ -360,19 +347,19 @@ export const useColumns = (tableId: string) => {
       console.log("onMutate - previousData:", {
         hasTable: !!previousData?.table,
         tableId: previousData?.table?.id,
-        rowsType: typeof previousData?.table?.rows,
-        isArray: Array.isArray(previousData?.table?.rows),
-        rowsLength: previousData?.table?.rows?.length,
-        rows: previousData?.table?.rows,
+        rowsType: typeof previousData?.table?.data,
+        isArray: Array.isArray(previousData?.table?.data),
+        rowsLength: previousData?.table?.data?.length,
+        rows: previousData?.table?.data,
       });
 
-      if (!previousData?.table?.rows) {
-        console.log("onMutate - no rows found, returning empty state");
+      if (!previousData?.table?.data) {
+        console.log("onMutate - no data found, returning empty state");
         return { previousData };
       }
 
-      if (!Array.isArray(previousData.table.rows)) {
-        console.log("onMutate - rows is not an array, returning empty state");
+      if (!Array.isArray(previousData.table.data)) {
+        console.log("onMutate - data is not an array, returning empty state");
         return { previousData };
       }
 
@@ -383,7 +370,7 @@ export const useColumns = (tableId: string) => {
           Object.fromEntries(orderMap),
         );
 
-        const updatedRows = [...previousData.table.rows].map((row) => {
+        const updatedData = [...previousData.table.data].map((row) => {
           const newOrder = orderMap.get(row.id) ?? row.order;
           console.log("onMutate - updating row:", {
             id: row.id,
@@ -396,16 +383,16 @@ export const useColumns = (tableId: string) => {
           };
         });
 
-        console.log("onMutate - updatedRows:", updatedRows);
+        console.log("onMutate - updatedData:", updatedData);
 
-        // Update the cache with sorted rows
+        // Update the cache with sorted data
         queryClient.setQueryData<TableResponse>(
           queryKeys.tables.detail(tableId),
           {
             ...previousData,
             table: {
               ...previousData.table,
-              rows: updatedRows,
+              data: updatedData,
             },
           },
         );
@@ -439,8 +426,11 @@ export const useColumns = (tableId: string) => {
   });
 
   return {
-    addColumn: (params: { name: string; type: "text" | "number" }) =>
-      addColumnMutation.mutateAsync(params),
+    addColumn: (params: {
+      name: string;
+      type: "text" | "number";
+      defaultValue: string;
+    }) => addColumnMutation.mutateAsync(params),
     deleteColumn: (columnId: string) =>
       deleteColumnMutation.mutateAsync(columnId),
     renameColumn: (params: { columnId: string; newName: string }) =>
