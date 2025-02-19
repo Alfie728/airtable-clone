@@ -67,6 +67,9 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     isBatchAdding,
     renameTable,
     isRenaming,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
   } = useTable(baseId, tableId);
 
   const {
@@ -447,6 +450,9 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   isBatchAdding={isBatchAdding}
                   sorting={sorting}
                   onSortingChangeAction={handleSortingChange}
+                  fetchNextPage={fetchNextPage}
+                  hasNextPage={hasNextPage}
+                  isFetchingNextPage={isFetchingNextPage}
                 />
               )
             )}

@@ -5,9 +5,10 @@ import {
   useQuery,
   useMutation,
   useQueries,
+  useInfiniteQuery,
 } from "@tanstack/react-query";
 import { faker } from "@faker-js/faker";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useMemo, useCallback } from "react";
 import {
   getTableData,
   addRow,
@@ -139,39 +140,74 @@ export const useTable = (baseId: string, tableId: string) => {
 
   const { tables } = useBase(baseId);
 
-  // Get all table queries in parallel using useQueries
-  const tableQueries = useQueries({
-    queries: tables.map((table) => ({
-      queryKey: queryKeys.tables.detail(table.id),
-      queryFn: () => getTableData(table.id, table.name),
-      staleTime: 5 * 1000,
-      enabled: table.id === tableId,
-      refetchOnMount: true,
-      refetchOnWindowFocus: false,
-      placeholderData: () =>
-        queryClient.getQueryData<TableResponse>(
-          queryKeys.tables.detail(table.id),
-        ),
-      gcTime: 300000,
-    })),
+  // Use infinite query for table data
+  const {
+    data: infiniteData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: isTableLoading,
+    error: tableError,
+  } = useInfiniteQuery({
+    queryKey: queryKeys.tables.detail(tableId),
+    queryFn: async ({ pageParam = 1 }) => {
+      console.log("[useTable] Fetching page:", pageParam);
+      const table = tables.find((t) => t.id === tableId);
+      if (!table) throw new Error("Table not found");
+      return getTableData(table.id, table.name, pageParam);
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      console.log("[useTable] getNextPageParam:", {
+        currentPage: lastPage.table?.pagination?.page,
+        hasMore: lastPage.table?.pagination?.hasMore,
+        currentCount: lastPage.table?.pagination?.currentCount,
+        total: lastPage.table?.pagination?.total,
+      });
+
+      if (!lastPage.success || !lastPage.table?.pagination?.hasMore) {
+        console.log("[useTable] No more pages to fetch");
+        return undefined;
+      }
+      const nextPage = lastPage.table.pagination.page + 1;
+      console.log("[useTable] Next page to fetch:", nextPage);
+      return nextPage;
+    },
+    enabled: Boolean(tableId && tables.length > 0),
+    staleTime: 5 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    maxPages: Infinity,
+    gcTime: Infinity, // Prevent garbage collection of pages
   });
 
-  // Cancel previous table queries when switching tables
-  useEffect(() => {
-    return () => {
-      void queryClient.cancelQueries({
-        queryKey: queryKeys.tables.detail(tableId),
-      });
+  // Combine all pages of data
+  const tableData = useMemo(() => {
+    if (!infiniteData?.pages || infiniteData.pages.length === 0) {
+      console.log("[useTable] No pages available");
+      return undefined;
+    }
+
+    const firstPage = infiniteData.pages[0];
+    if (!firstPage?.success || !firstPage?.table) {
+      console.log("[useTable] First page invalid");
+      return undefined;
+    }
+
+    const combinedData = infiniteData.pages.reduce<Row[]>((acc, page) => {
+      if (page?.success && page?.table) {
+        return [...acc, ...page.table.data];
+      }
+      return acc;
+    }, []);
+
+    console.log("[useTable] Combined data length:", combinedData.length);
+
+    return {
+      ...firstPage.table,
+      data: combinedData,
     };
-  }, [queryClient, tableId]);
-
-  // Find the current table query based on the index in the base tables array
-  const currentTableIndex = tables.findIndex((t) => t.id === tableId) ?? -1;
-  const currentTableQuery =
-    currentTableIndex >= 0 ? tableQueries[currentTableIndex] : undefined;
-
-  // Check loading state for the current table
-  const isTableLoading = currentTableQuery?.status === "pending";
+  }, [infiniteData?.pages]);
 
   const addRowMutation = useMutation({
     mutationFn: async (optimisticRow: Row) => {
@@ -621,18 +657,18 @@ export const useTable = (baseId: string, tableId: string) => {
   };
 
   return {
-    tableData: currentTableQuery?.data?.table,
+    tableData,
     isLoading: isTableLoading,
-    tableError: currentTableQuery?.error ?? null,
+    tableError,
     addRow: () => {
       const optimisticRow = generateMockRow(
-        currentTableQuery?.data?.table?.columns ?? [],
+        infiniteData?.pages?.[0]?.table?.columns ?? [],
       );
       return addRowMutation.mutateAsync(optimisticRow);
     },
     addBulkRows: (count: number) => {
       const optimisticRows = Array.from({ length: count }, () =>
-        generateMockRow(currentTableQuery?.data?.table?.columns ?? []),
+        generateMockRow(infiniteData?.pages?.[0]?.table?.columns ?? []),
       );
       return addBulkRowsMutation.mutateAsync({ optimisticRows });
     },
@@ -647,5 +683,8 @@ export const useTable = (baseId: string, tableId: string) => {
     isDeletingColumn: false,
     isAddingColumn: false,
     isRenamingColumn: false,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
   };
 };

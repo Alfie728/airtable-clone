@@ -3,7 +3,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "~/server/db";
 import { tables, columns, rows, cells, views } from "~/server/db/schema";
-import { eq, and, sql, desc, or } from "drizzle-orm";
+import { eq, and, sql, desc, or, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getBaseById } from "./bases.action";
 import type {
@@ -220,11 +220,18 @@ export async function renameTable(
   }
 }
 
-export async function getTableData(tableId: string, tableName: string) {
+export async function getTableData(
+  tableId: string,
+  tableName: string,
+  page = 1,
+  pageSize = 500,
+) {
   const user = await currentUser();
   if (!user) throw new Error("Unauthorized");
 
   try {
+    console.log(`[getTableData] Starting page ${page}, pageSize ${pageSize}`);
+
     // Get all columns for this table
     const tableColumns = await db
       .select()
@@ -232,22 +239,60 @@ export async function getTableData(tableId: string, tableName: string) {
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
 
-    // Get all rows and their cells in a single query
-    const rowsWithCells = await db
-      .select({
-        row: rows,
-        cell: cells,
-      })
+    // Calculate offset
+    const offset = (page - 1) * pageSize;
+    console.log(`[getTableData] Calculated offset: ${offset}`);
+
+    // Get total count of rows
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(rows)
+      .where(eq(rows.tableId, tableId));
+
+    const totalCount = countResult[0]?.count ?? 0;
+    console.log(`[getTableData] Total rows: ${totalCount}`);
+
+    // First get the paginated row IDs
+    const paginatedRows = await db
+      .select()
       .from(rows)
       .where(eq(rows.tableId, tableId))
-      .leftJoin(cells, eq(cells.rowId, rows.id))
-      .orderBy(rows.order);
+      .orderBy(rows.order)
+      .offset(offset)
+      .limit(pageSize);
+
+    // Process rows in chunks to avoid PostgreSQL limitations
+    const CHUNK_SIZE = 50; // Process 50 rows at a time
+    const allRowsWithCells = [];
+
+    for (let i = 0; i < paginatedRows.length; i += CHUNK_SIZE) {
+      const chunk = paginatedRows.slice(i, i + CHUNK_SIZE);
+      const chunkIds = chunk.map(r => r.id);
+      
+      // Get cells for this chunk of rows
+      const rowsWithCells = await db
+        .select({
+          row: rows,
+          cell: cells,
+        })
+        .from(rows)
+        .where(
+          and(
+            eq(rows.tableId, tableId),
+            inArray(rows.id, chunkIds)
+          ),
+        )
+        .leftJoin(cells, eq(cells.rowId, rows.id))
+        .orderBy(rows.order);
+
+      allRowsWithCells.push(...rowsWithCells);
+    }
 
     // Transform the data efficiently
     const gridData: Row[] = [];
     let currentRow: Row | null = null;
 
-    for (const record of rowsWithCells) {
+    for (const record of allRowsWithCells) {
       if (!currentRow || currentRow.id !== record.row.id) {
         if (currentRow) {
           gridData.push(currentRow);
@@ -271,6 +316,8 @@ export async function getTableData(tableId: string, tableName: string) {
       gridData.push(currentRow);
     }
 
+    console.log(`[getTableData] Fetched rows count: ${gridData.length}`);
+
     const transformedColumns = tableColumns.map((col) => ({
       id: col.id,
       name: col.name,
@@ -282,6 +329,13 @@ export async function getTableData(tableId: string, tableName: string) {
       isVisible: col.isVisible,
     }));
 
+    // Calculate hasMore correctly based on total count and current offset
+    const hasMore = offset + gridData.length < totalCount;
+
+    console.log(
+      `[getTableData] hasMore: ${hasMore}, offset: ${offset}, gridData.length: ${gridData.length}, totalCount: ${totalCount}`,
+    );
+
     return {
       success: true,
       table: {
@@ -289,9 +343,16 @@ export async function getTableData(tableId: string, tableName: string) {
         name: tableName,
         columns: transformedColumns,
         data: gridData,
+        pagination: {
+          total: Number(totalCount),
+          page,
+          pageSize,
+          hasMore,
+        },
       },
     };
   } catch (error) {
+    console.error("[getTableData] Error:", error);
     if (error instanceof Error) {
       return { success: false, error: error.message };
     }

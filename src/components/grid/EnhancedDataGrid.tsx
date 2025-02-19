@@ -54,6 +54,9 @@ interface EnhancedDataGridProps {
   isBatchAdding: boolean;
   sorting: SortingState;
   onSortingChangeAction: (sorting: SortingState) => void;
+  fetchNextPage: () => void;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
 }
 
 // Add useSkipper hook
@@ -87,6 +90,9 @@ export function EnhancedDataGrid({
   sorting,
   onSortingChangeAction,
   updateCellAction,
+  fetchNextPage,
+  hasNextPage,
+  isFetchingNextPage,
 }: EnhancedDataGridProps) {
   const [columnOrder, setColumnOrder] = useState<string[]>(() =>
     (initialColumns ?? [])
@@ -102,6 +108,30 @@ export function EnhancedDataGrid({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [rowManagementWidth, setRowManagementWidth] = useState<number>(0);
   const { reorderColumns } = useColumns(tableId);
+
+  // Create intersection observer for infinite loading
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const loadMoreElement = loadMoreRef.current;
+    if (!loadMoreElement) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]) return;
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.2 },
+    );
+
+    observer.observe(loadMoreElement);
+
+    return () => {
+      observer.unobserve(loadMoreElement);
+    };
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   // Update row order when initialData changes
   useEffect(() => {
@@ -267,7 +297,7 @@ export function EnhancedDataGrid({
     );
   };
 
-  console.log('rerendering');
+  console.log("rerendering");
 
   return (
     <div className="flex h-full flex-col">
@@ -457,6 +487,28 @@ export function EnhancedDataGrid({
               />
             </div>
           </div>
+
+          {/* Move infinite loading trigger here */}
+          {(hasNextPage || isFetchingNextPage) && (
+            <div
+              ref={loadMoreRef}
+              style={{
+                position: "absolute",
+                top: Math.max(
+                  rowVirtualizer.getTotalSize() - 100, // Show trigger 100px before the end
+                  0,
+                ),
+                width: "100%",
+                height: "50px",
+              }}
+            >
+              {isFetchingNextPage && (
+                <div className="flex h-full items-center justify-center">
+                  <div className="text-sm text-gray-500">Loading more...</div>
+                </div>
+              )}
+            </div>
+          )}
         </DndContext>
       </div>
       <GridFooter
