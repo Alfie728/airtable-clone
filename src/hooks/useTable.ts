@@ -188,13 +188,13 @@ export const useTable = (baseId: string, tableId: string) => {
         table.name,
         pageParam as number,
       );
-      console.log("[useTable] Fetch response:", {
-        success: response.success,
-        rowCount: response.table?.data.length,
-        hasMore: response.table?.pagination?.hasMore,
-        page: response.table?.pagination?.page,
-        error: response.success ? undefined : response.error,
-      });
+      // console.log("[useTable] Fetch response:", {
+      //   success: response.success,
+      //   rowCount: response.table?.data.length,
+      //   hasMore: response.table?.pagination?.hasMore,
+      //   page: response.table?.pagination?.page,
+      //   error: response.success ? undefined : response.error,
+      // });
 
       if (!response.success) {
         throw new Error(response.error ?? "Failed to fetch table data");
@@ -229,17 +229,17 @@ export const useTable = (baseId: string, tableId: string) => {
   });
 
   // Log query status with more details
-  console.log("[useTable] Query status:", {
-    isLoading: status === "pending",
-    hasError: status === "error",
-    errorMessage: queryError?.message,
-    hasData: !!pages,
-    pagesCount: pages?.pages?.length,
-    enabled: Boolean(tableId && tables && tables.length > 0),
-    tableId,
-    baseId,
-    tablesCount: tables?.length,
-  });
+  // console.log("[useTable] Query status:", {
+  //   isLoading: status === "pending",
+  //   hasError: status === "error",
+  //   errorMessage: queryError?.message,
+  //   hasData: !!pages,
+  //   pagesCount: pages?.pages?.length,
+  //   enabled: Boolean(tableId && tables && tables.length > 0),
+  //   tableId,
+  //   baseId,
+  //   tablesCount: tables?.length,
+  // });
 
   // Combine all pages of data
   const tableData = useMemo(() => {

@@ -109,29 +109,29 @@ export function EnhancedDataGrid({
   const [rowManagementWidth, setRowManagementWidth] = useState<number>(0);
   const { reorderColumns } = useColumns(tableId);
 
-  // Create intersection observer for infinite loading
-  const loadMoreRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const loadMoreElement = loadMoreRef.current;
-    if (!loadMoreElement) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0]) return;
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+  // Add scroll handler for infinite loading
+  const fetchMoreOnBottomReached = useCallback(
+    (containerRefElement?: HTMLDivElement | null) => {
+      if (containerRefElement) {
+        const { scrollHeight, scrollTop, clientHeight } = containerRefElement;
+        // Fetch more data when user has scrolled within 1000px of the bottom
+        if (
+          scrollHeight - scrollTop - clientHeight < 2000 &&
+          !isFetchingNextPage &&
+          hasNextPage
+        ) {
+          console.log("Fetching next page...");
           fetchNextPage();
         }
-      },
-      { threshold: 0.2 },
-    );
+      }
+    },
+    [fetchNextPage, isFetchingNextPage, hasNextPage],
+  );
 
-    observer.observe(loadMoreElement);
-
-    return () => {
-      observer.unobserve(loadMoreElement);
-    };
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+  // Check if we need to fetch more data on mount and after each fetch
+  useEffect(() => {
+    fetchMoreOnBottomReached(tableContainerRef.current);
+  }, [fetchMoreOnBottomReached]);
 
   // Update row order when initialData changes
   useEffect(() => {
@@ -301,7 +301,11 @@ export function EnhancedDataGrid({
 
   return (
     <div className="flex h-full flex-col">
-      <div ref={tableContainerRef} className="relative flex-1 overflow-auto">
+      <div
+        ref={tableContainerRef}
+        className="relative flex-1 overflow-auto"
+        onScroll={(e) => fetchMoreOnBottomReached(e.currentTarget)}
+      >
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -487,30 +491,6 @@ export function EnhancedDataGrid({
               />
             </div>
           </div>
-
-          {/* Move infinite loading trigger here */}
-          {(hasNextPage || isFetchingNextPage) && (
-            <div
-              ref={loadMoreRef}
-              style={{
-                position: "absolute",
-                top: Math.max(
-                  rowVirtualizer.getTotalSize() - 1000, // Show trigger 1000px before the end
-                  0,
-                ),
-                width: "100%",
-                height: "100px", // Increased height for better detection
-              }}
-            >
-              {isFetchingNextPage && (
-                <div className="flex h-full items-center justify-center">
-                  <div className="text-sm text-gray-500">
-                    Loading more rows...
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </DndContext>
       </div>
       <GridFooter

@@ -224,14 +224,12 @@ export async function getTableData(
   tableId: string,
   tableName: string,
   page = 1,
-  pageSize = 100,
+  pageSize = 250,
 ) {
   const user = await currentUser();
   if (!user) throw new Error("Unauthorized");
 
   try {
-    console.log(`[getTableData] Starting page ${page}, pageSize ${pageSize}`);
-
     // Get all columns for this table
     const tableColumns = await db
       .select()
@@ -241,7 +239,6 @@ export async function getTableData(
 
     // Calculate offset
     const offset = (page - 1) * pageSize;
-    console.log(`[getTableData] Calculated offset: ${offset}`);
 
     // Get total count of rows
     const countResult = await db
@@ -250,7 +247,6 @@ export async function getTableData(
       .where(eq(rows.tableId, tableId));
 
     const totalCount = countResult[0]?.count ?? 0;
-    console.log(`[getTableData] Total rows: ${totalCount}`);
 
     // First get the paginated row IDs
     const paginatedRows = await db
@@ -260,10 +256,6 @@ export async function getTableData(
       .orderBy(rows.order)
       .offset(offset)
       .limit(pageSize);
-
-    console.log(
-      `[getTableData] Fetched ${paginatedRows.length} rows for page ${page}`,
-    );
 
     // Process rows in chunks to avoid PostgreSQL limitations
     const CHUNK_SIZE = 50; // Process 50 rows at a time
@@ -285,9 +277,6 @@ export async function getTableData(
         .orderBy(rows.order);
 
       allRowsWithCells.push(...rowsWithCells);
-      console.log(
-        `[getTableData] Processed chunk ${i / CHUNK_SIZE + 1}, got ${rowsWithCells.length} cells`,
-      );
     }
 
     // Transform the data efficiently
@@ -318,10 +307,6 @@ export async function getTableData(
       gridData.push(currentRow);
     }
 
-    console.log(
-      `[getTableData] Final transformed rows count: ${gridData.length}`,
-    );
-
     const transformedColumns = tableColumns.map((col) => ({
       id: col.id,
       name: col.name,
@@ -335,16 +320,6 @@ export async function getTableData(
 
     // Calculate hasMore correctly based on total count and current offset
     const hasMore = offset + gridData.length < totalCount;
-
-    console.log(`[getTableData] Response summary:`, {
-      page,
-      pageSize,
-      offset,
-      rowsFetched: gridData.length,
-      totalCount,
-      hasMore,
-      columnsCount: transformedColumns.length,
-    });
 
     return {
       success: true,
