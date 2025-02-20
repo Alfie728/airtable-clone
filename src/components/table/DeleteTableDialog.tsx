@@ -106,7 +106,7 @@ export function DeleteTableDialog({
         console.log("[UI] Navigating to first remaining table:", firstTable);
         // Check for cached view first
         const cachedView = queryClient.getQueryData<string>(
-          queryKeys.tables.views.detail(firstTable.id, "default"),
+          queryKeys.views.detail(firstTable.id),
         );
 
         if (cachedView) {

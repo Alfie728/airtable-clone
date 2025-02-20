@@ -32,7 +32,6 @@ import { useTableConfig } from "./hooks/useTableConfig";
 import { type CellType } from "~/types/grid";
 import { AddField } from "./components/AddField";
 import { GridFooter } from "./components/GridFooter";
-import { useSortedTable } from "~/hooks/useSortedTable";
 
 interface EnhancedDataGridProps {
   baseId: string;
@@ -315,10 +314,7 @@ export function EnhancedDataGrid({
 
                         // Invalidate the sorted data query to refetch with new order
                         await queryClient.invalidateQueries({
-                          queryKey: queryKeys.tables.sortedData(
-                            tableId,
-                            viewId,
-                          ),
+                          queryKey: queryKeys.tables.viewData(tableId, viewId),
                         });
                       } catch (error) {
                         toast.error(

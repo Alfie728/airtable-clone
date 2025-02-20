@@ -51,28 +51,25 @@ export async function prefetchTable(
 
   // Prefetch table data
   await queryClient.prefetchQuery({
-    queryKey: queryKeys.tables.detail(tableId),
+    queryKey: queryKeys.tables.data(tableId),
     queryFn: () => getTableDataWithSort({ tableId, tableName }),
     staleTime: 5 * 1000,
   });
 
   // Prefetch views list and default view
   await queryClient.prefetchQuery({
-    queryKey: queryKeys.tables.views.list(tableId),
+    queryKey: queryKeys.views.list(tableId),
     queryFn: async () => {
       const viewsResult = await getTableViews(tableId);
       const { viewId } = await getDefaultView(tableId);
 
       if (viewId) {
         // Cache the default view ID
-        queryClient.setQueryData(
-          queryKeys.tables.views.detail(tableId, "default"),
-          viewId,
-        );
+        queryClient.setQueryData(queryKeys.views.detail(viewId), viewId);
 
         // Prefetch sorts for the default view
         void queryClient.prefetchQuery({
-          queryKey: queryKeys.views.sorts(viewId),
+          queryKey: queryKeys.views.customizations.sorts(viewId),
           queryFn: async () => {
             const result = await getViewSorts(viewId);
             if (!result.success) {
@@ -121,7 +118,7 @@ export async function prefetchBaseTables(
         void Promise.all(
           tablesResult.tables.map((table) =>
             queryClient.prefetchQuery({
-              queryKey: queryKeys.tables.detail(table.id),
+              queryKey: queryKeys.tables.data(table.id),
               queryFn: () =>
                 getTableDataWithSort({
                   tableId: table.id,
@@ -137,7 +134,7 @@ export async function prefetchBaseTables(
           tablesResult.tables.map(async (table) => {
             // Prefetch views list
             const viewsPromise = queryClient.prefetchQuery({
-              queryKey: queryKeys.tables.views.list(table.id),
+              queryKey: queryKeys.views.list(table.id),
               queryFn: async () => {
                 const viewsResult = await getTableViews(table.id);
                 const { viewId } = await getDefaultView(table.id);
@@ -145,13 +142,13 @@ export async function prefetchBaseTables(
                 if (viewId) {
                   // Cache the default view ID
                   queryClient.setQueryData(
-                    queryKeys.tables.views.detail(table.id, "default"),
+                    queryKeys.views.detail(viewId),
                     viewId,
                   );
 
                   // Prefetch sorts for the default view
                   void queryClient.prefetchQuery({
-                    queryKey: queryKeys.views.sorts(viewId),
+                    queryKey: queryKeys.views.customizations.sorts(viewId),
                     queryFn: async () => {
                       const result = await getViewSorts(viewId);
                       if (!result.success) {

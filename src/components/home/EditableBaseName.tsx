@@ -120,7 +120,7 @@ export function EditableBaseName({
 
           // Check for cached view first
           const cachedView = queryClient.getQueryData<string>(
-            queryKeys.tables.views.list(firstTable.id),
+            queryKeys.views.list(firstTable.id),
           );
 
           if (cachedView) {
@@ -137,10 +137,7 @@ export function EditableBaseName({
           }
 
           // Cache the view ID for future use
-          queryClient.setQueryData(
-            queryKeys.tables.views.list(firstTable.id),
-            viewId,
-          );
+          queryClient.setQueryData(queryKeys.views.list(firstTable.id), viewId);
 
           router.push(`/${baseId}/${firstTable.id}/${viewId}`);
         } catch (err) {

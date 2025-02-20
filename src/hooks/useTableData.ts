@@ -1,5 +1,4 @@
 import {
-  useQuery,
   useQueryClient,
   useInfiniteQuery,
   useMutation,
@@ -214,11 +213,12 @@ export function useTableData({
     isLoading,
     error,
   } = useInfiniteQuery<TableDataResponse, Error>({
-    queryKey: [
-      ...queryKeys.tables.data(tableId),
-      viewId,
-      JSON.stringify(initialSortState),
-    ],
+    queryKey: viewId
+      ? [
+          ...queryKeys.tables.viewData(tableId, viewId),
+          JSON.stringify(initialSortState),
+        ]
+      : queryKeys.tables.data(tableId),
     queryFn: async ({ pageParam }) => {
       const response = (await getTableDataWithSort({
         tableId,
@@ -297,12 +297,18 @@ export function useTableData({
         return promise;
       },
       onMutate: async (optimisticRow): Promise<AddRowContext> => {
+        const queryKey = viewId
+          ? [
+              ...queryKeys.tables.viewData(tableId, viewId),
+              JSON.stringify(initialSortState),
+            ]
+          : queryKeys.tables.data(tableId);
+
         await queryClient.cancelQueries({
-          queryKey: queryKeys.tables.data(tableId),
+          queryKey,
         });
-        const previousData = queryClient.getQueryData<InfiniteTableData>(
-          queryKeys.tables.data(tableId),
-        );
+        const previousData =
+          queryClient.getQueryData<InfiniteTableData>(queryKey);
 
         if (tableData) {
           const maxOrder = Math.max(
@@ -315,37 +321,37 @@ export function useTableData({
             order: maxOrder + 1,
           };
 
-          queryClient.setQueryData<InfiniteTableData>(
-            queryKeys.tables.data(tableId),
-            (old) => {
-              if (!old) return old;
-              return {
-                ...old,
-                pages: old.pages.map((page, index) => {
-                  if (index === 0 && page.success && page.table) {
-                    return {
-                      ...page,
-                      table: {
-                        ...page.table,
-                        data: [...page.table.data, rowWithOrder],
-                      },
-                    };
-                  }
-                  return page;
-                }),
-              };
-            },
-          );
+          queryClient.setQueryData<InfiniteTableData>(queryKey, (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page, index) => {
+                if (index === 0 && page.success && page.table) {
+                  return {
+                    ...page,
+                    table: {
+                      ...page.table,
+                      data: [...page.table.data, rowWithOrder],
+                    },
+                  };
+                }
+                return page;
+              }),
+            };
+          });
         }
 
         return { previousData };
       },
       onError: (err, variables, context) => {
         if (context?.previousData) {
-          queryClient.setQueryData(
-            queryKeys.tables.data(tableId),
-            context.previousData,
-          );
+          const queryKey = viewId
+            ? [
+                ...queryKeys.tables.viewData(tableId, viewId),
+                JSON.stringify(initialSortState),
+              ]
+            : queryKeys.tables.data(tableId);
+          queryClient.setQueryData(queryKey, context.previousData);
         }
         pendingRowCreationsRef.current.delete(variables.id);
       },
@@ -411,56 +417,62 @@ export function useTableData({
       throw new Error("Max retries exceeded");
     },
     onMutate: async (params): Promise<UpdateCellContext> => {
+      const queryKey = viewId
+        ? [
+            ...queryKeys.tables.viewData(tableId, viewId),
+            JSON.stringify(initialSortState),
+          ]
+        : queryKeys.tables.data(tableId);
+
       if (!pendingRowCreationsRef.current.has(params.rowId)) {
         await queryClient.cancelQueries({
-          queryKey: queryKeys.tables.data(tableId),
+          queryKey,
         });
       }
 
-      const previousData = queryClient.getQueryData<InfiniteTableData>(
-        queryKeys.tables.data(tableId),
-      );
+      const previousData =
+        queryClient.getQueryData<InfiniteTableData>(queryKey);
 
       if (tableData) {
-        queryClient.setQueryData<InfiniteTableData>(
-          queryKeys.tables.data(tableId),
-          (old) => {
-            if (!old) return old;
-            return {
-              ...old,
-              pages: old.pages.map((page) => {
-                if (page.success && page.table) {
-                  return {
-                    ...page,
-                    table: {
-                      ...page.table,
-                      data: page.table.data.map((row) => {
-                        if (row.id === params.rowId) {
-                          return {
-                            ...row,
-                            [params.columnId]: params.value,
-                          };
-                        }
-                        return row;
-                      }),
-                    },
-                  };
-                }
-                return page;
-              }),
-            };
-          },
-        );
+        queryClient.setQueryData<InfiniteTableData>(queryKey, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => {
+              if (page.success && page.table) {
+                return {
+                  ...page,
+                  table: {
+                    ...page.table,
+                    data: page.table.data.map((row) => {
+                      if (row.id === params.rowId) {
+                        return {
+                          ...row,
+                          [params.columnId]: params.value,
+                        };
+                      }
+                      return row;
+                    }),
+                  },
+                };
+              }
+              return page;
+            }),
+          };
+        });
       }
 
       return { previousData };
     },
     onError: (err, variables, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(
-          queryKeys.tables.data(tableId),
-          context.previousData,
-        );
+        const queryKey = viewId
+          ? [
+              ...queryKeys.tables.viewData(tableId, viewId),
+              JSON.stringify(initialSortState),
+            ]
+          : queryKeys.tables.data(tableId);
+        queryClient.setQueryData(queryKey, context.previousData);
       }
     },
   });
@@ -481,12 +493,18 @@ export function useTableData({
       return promise;
     },
     onMutate: async (params): Promise<AddBulkRowsContext> => {
+      const queryKey = viewId
+        ? [
+            ...queryKeys.tables.viewData(tableId, viewId),
+            JSON.stringify(initialSortState),
+          ]
+        : queryKeys.tables.data(tableId);
+
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.data(tableId),
+        queryKey,
       });
-      const previousData = queryClient.getQueryData<InfiniteTableData>(
-        queryKeys.tables.data(tableId),
-      );
+      const previousData =
+        queryClient.getQueryData<InfiniteTableData>(queryKey);
 
       if (tableData) {
         const maxOrder = Math.max(
@@ -499,37 +517,37 @@ export function useTableData({
           order: maxOrder + 1 + index,
         }));
 
-        queryClient.setQueryData<InfiniteTableData>(
-          queryKeys.tables.data(tableId),
-          (old) => {
-            if (!old) return old;
-            return {
-              ...old,
-              pages: old.pages.map((page, index) => {
-                if (index === 0 && page.success && page.table) {
-                  return {
-                    ...page,
-                    table: {
-                      ...page.table,
-                      data: [...page.table.data, ...rowsWithOrder],
-                    },
-                  };
-                }
-                return page;
-              }),
-            };
-          },
-        );
+        queryClient.setQueryData<InfiniteTableData>(queryKey, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page, index) => {
+              if (index === 0 && page.success && page.table) {
+                return {
+                  ...page,
+                  table: {
+                    ...page.table,
+                    data: [...page.table.data, ...rowsWithOrder],
+                  },
+                };
+              }
+              return page;
+            }),
+          };
+        });
       }
 
       return { previousData };
     },
     onError: (err, variables, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(
-          queryKeys.tables.data(tableId),
-          context.previousData,
-        );
+        const queryKey = viewId
+          ? [
+              ...queryKeys.tables.viewData(tableId, viewId),
+              JSON.stringify(initialSortState),
+            ]
+          : queryKeys.tables.data(tableId);
+        queryClient.setQueryData(queryKey, context.previousData);
       }
       variables.optimisticRows.forEach((row) => {
         pendingRowCreationsRef.current.delete(row.id);
@@ -596,7 +614,7 @@ export function useTableData({
     try {
       // Optimistically update the sort state
       queryClient.setQueryData<SortingState>(
-        queryKeys.views.sorts(viewId),
+        queryKeys.views.customizations.sorts(viewId),
         newSorting,
       );
 
@@ -604,15 +622,12 @@ export function useTableData({
       await Promise.all([
         // Reset the sort state
         queryClient.resetQueries({
-          queryKey: queryKeys.views.sorts(viewId),
+          queryKey: queryKeys.views.customizations.sorts(viewId),
         }),
         // Reset the table data
         queryClient.resetQueries({
-          queryKey: [
-            ...queryKeys.tables.data(tableId),
-            viewId,
-            JSON.stringify(newSorting),
-          ],
+          queryKey: [...queryKeys.tables.viewData(tableId, viewId)],
+          exact: false, // This ensures we invalidate all queries that start with this key, including those with sort state
         }),
       ]);
 
@@ -621,7 +636,7 @@ export function useTableData({
     } catch (error) {
       // On error, revert the optimistic update
       queryClient.setQueryData(
-        queryKeys.views.sorts(viewId),
+        queryKeys.views.customizations.sorts(viewId),
         initialSortState ?? [],
       );
       throw error;

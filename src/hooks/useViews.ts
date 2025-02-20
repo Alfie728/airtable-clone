@@ -5,7 +5,7 @@ import type { views } from "~/server/db/schema";
 
 export function useViews(tableId: string) {
   const { data, isLoading, error } = useQuery({
-    queryKey: queryKeys.tables.views.list(tableId),
+    queryKey: queryKeys.views.list(tableId),
     queryFn: async () => {
       const result = await getTableViews(tableId);
       if (!result.success) {

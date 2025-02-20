@@ -9,6 +9,7 @@ import { useTableSort } from "./useTableSort";
 import type { SortingState } from "@tanstack/react-table";
 import { useMemo } from "react";
 import type { Row, Column } from "~/types/table";
+import { getViewSorts } from "~/lib/actions/sort.action";
 
 // Define the response type for getSortedTableData
 interface SortedTableResponse {
@@ -58,11 +59,12 @@ export function useSortedTable(
     isLoading: isSortingData,
     error: sortError,
   } = useInfiniteQuery<SortedTableResponse>({
-    queryKey: queryKeys.tables.sortedData(tableId, viewId),
+    queryKey: queryKeys.tables.viewData(tableId, viewId),
     queryFn: async ({ pageParam }) => {
       const sortState =
-        queryClient.getQueryData<SortingState>(queryKeys.views.sorts(viewId)) ??
-        [];
+        queryClient.getQueryData<SortingState>(
+          queryKeys.views.customizations.sorts(viewId),
+        ) ?? [];
 
       return getTableDataWithSort({
         tableId,
@@ -110,7 +112,7 @@ export function useSortedTable(
     try {
       // Optimistically update the sort state
       queryClient.setQueryData<SortingState>(
-        queryKeys.views.sorts(viewId),
+        queryKeys.views.customizations.sorts(viewId),
         newSorting,
       );
 
@@ -118,11 +120,11 @@ export function useSortedTable(
       await Promise.all([
         // Reset the sort state
         queryClient.resetQueries({
-          queryKey: queryKeys.views.sorts(viewId),
+          queryKey: queryKeys.views.customizations.sorts(viewId),
         }),
         // Reset the sorted data
         queryClient.resetQueries({
-          queryKey: queryKeys.tables.sortedData(tableId, viewId),
+          queryKey: queryKeys.tables.viewData(tableId, viewId),
         }),
       ]);
 
@@ -131,7 +133,7 @@ export function useSortedTable(
     } catch (error) {
       // On error, revert the optimistic update
       queryClient.setQueryData(
-        queryKeys.views.sorts(viewId),
+        queryKeys.views.customizations.sorts(viewId),
         initialSortState ?? [],
       );
       throw error;

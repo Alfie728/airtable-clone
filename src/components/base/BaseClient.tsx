@@ -17,7 +17,6 @@ import { getDefaultView } from "~/lib/actions/views.action";
 import { useViews } from "~/hooks/useViews";
 import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
 import { queryKeys } from "~/lib/query/keys";
-import { useSortedTable } from "~/hooks/useSortedTable";
 import { prefetchTable } from "~/lib/query/prefetch";
 
 interface BaseClientProps {
@@ -109,7 +108,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
         // Try to get the cached view first
         const cachedView = queryClient.getQueryData<string>(
-          queryKeys.tables.views.detail(firstTable.id, "default"),
+          queryKeys.views.detail("default"),
         );
 
         if (cachedView) {
@@ -140,10 +139,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
           // Set pending view before navigation
           setPendingActiveViewId(viewId);
-          queryClient.setQueryData(
-            queryKeys.tables.views.detail(firstTable.id, "default"),
-            viewId,
-          );
+          queryClient.setQueryData(queryKeys.views.detail("default"), viewId);
 
           router.replace(`/${baseId}/${firstTable.id}/${viewId}`, {
             scroll: false,
@@ -227,7 +223,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
     // Get cached view
     const cachedView = queryClient.getQueryData<string>(
-      queryKeys.tables.views.detail(tableId, "default"),
+      queryKeys.views.detail("default"),
     );
 
     if (cachedView) {
@@ -277,10 +273,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       // Set pending view before navigation
       setPendingActiveViewId(viewId);
       // Cache the view ID and navigate
-      queryClient.setQueryData(
-        queryKeys.tables.views.detail(tableId, "default"),
-        viewId,
-      );
+      queryClient.setQueryData(queryKeys.views.detail("default"), viewId);
       router.replace(`/${baseId}/${tableId}/${viewId}`, { scroll: false });
       setIsHandlingNavigation(false);
     } catch (error) {
