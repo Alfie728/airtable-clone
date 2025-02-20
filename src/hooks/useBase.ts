@@ -9,7 +9,11 @@ import type {
   SerializedBase,
   BaseRenameResponse,
 } from "~/types/base";
-import type { TableCreateResponse, TableListResponse } from "~/types/table";
+import type {
+  TableCreateResponse,
+  TableListResponse,
+  SerializedTable,
+} from "~/types/table";
 import { queryKeys } from "~/lib/query/keys";
 
 export const useBase = (baseId: string) => {
@@ -31,16 +35,25 @@ export const useBase = (baseId: string) => {
 
   const addTableMutation = useMutation({
     mutationFn: async (params: { tableName: string; optimisticId: string }) => {
-      const promise = createTable(
+      const result = await createTable(
         baseId,
         params.tableName,
         params.optimisticId,
       );
-      const result = await promise;
-      if (!result.success) {
+      if (!result.success || !result.table) {
         throw new Error(result.error ?? "Failed to create table");
       }
-      return result;
+      return {
+        success: true as const,
+        table: {
+          ...result.table,
+          createdAt: result.table.createdAt.toISOString(),
+          updatedAt:
+            result.table.updatedAt?.toISOString() ??
+            result.table.createdAt.toISOString(),
+        },
+        defaultViewId: result.defaultViewId,
+      };
     },
     onMutate: async (params) => {
       await queryClient.cancelQueries({

@@ -93,40 +93,35 @@ export function DeleteTableDialog({
         throw new Error(result.error ?? "Unknown error");
       }
 
-      // Remove invalidateQueries since we've already updated the cache optimistically
-      // and the server action was successful
-
-      // Navigate AFTER server action completes successfully
+      // Get remaining tables after successful deletion
       const remainingTables = previousTablesData?.success
         ? previousTablesData.tables.filter((t) => t.id !== tableId)
         : [];
 
       const firstTable = remainingTables[0];
+
+      // Show success message
+      toast.success("Table deleted successfully");
+
+      // Navigate based on remaining tables
       if (firstTable) {
         console.log("[UI] Navigating to first remaining table:", firstTable);
         // Check for cached view first
         const cachedView = queryClient.getQueryData<string>(
-          queryKeys.tables.views.detail(firstTable.id, "default"),
+          queryKeys.views.list(firstTable.id),
         );
 
         if (cachedView) {
-          router.push(`/${baseId}/${firstTable.id}/${cachedView}`, {
-            scroll: false,
-          });
+          // Use replace instead of push to avoid history stack issues
+          router.replace(`/${baseId}/${firstTable.id}/${cachedView}`);
         } else {
-          // If no cached view, use loading state
-          router.push(`/${baseId}/${firstTable.id}/loading`, {
-            scroll: false,
-          });
+          // If no cached view, redirect to base page
+          router.replace(`/${baseId}/${firstTable.id}`);
         }
       } else {
         console.log("[UI] No tables remaining, navigating to home");
-        router.push("/", {
-          scroll: false,
-        });
+        router.replace("/");
       }
-
-      toast.success("Table deleted successfully");
     } catch (error) {
       console.error("[UI] Error in handleDelete:", {
         error: error instanceof Error ? error.message : "Unknown error",

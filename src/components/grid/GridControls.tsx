@@ -27,8 +27,11 @@ import {
 import { Switch } from "~/components/ui/switch";
 import type { Column } from "~/types/table";
 import type { SortingState } from "@tanstack/react-table";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { cn } from "~/lib/utils";
+import type { FilterPreference } from "~/types/filter";
+import { Input } from "~/components/ui/input";
+import { FilterDropdown } from "./components/FilterDropdown";
 
 interface GridControlsProps {
   isSidebarOpen: boolean;
@@ -36,6 +39,8 @@ interface GridControlsProps {
   columns?: Column[];
   sorting?: SortingState;
   onSortingChange?: (sorting: SortingState) => void;
+  filtering?: FilterPreference[];
+  onFilteringChange?: (filtering: FilterPreference[]) => void;
 }
 
 export function GridControls({
@@ -44,6 +49,8 @@ export function GridControls({
   columns = [],
   sorting = [],
   onSortingChange = (newSorting: SortingState) => void 0,
+  filtering = [],
+  onFilteringChange = () => void 0,
 }: GridControlsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [addSortOpen, setAddSortOpen] = useState(false);
@@ -134,14 +141,11 @@ export function GridControls({
           Hide fields
         </Button>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-1.5 rounded px-2 text-sm font-normal text-gray-700 hover:bg-gray-100"
-        >
-          <Filter className="h-4 w-4" />
-          Filter
-        </Button>
+        <FilterDropdown
+          columns={columns}
+          filtering={filtering}
+          onFilteringChange={onFilteringChange}
+        />
 
         <Button
           variant="ghost"

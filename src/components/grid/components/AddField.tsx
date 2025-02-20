@@ -9,11 +9,12 @@ import { toast } from "sonner";
 
 interface AddFieldProps {
   tableId: string;
+  viewId?: string;
   onColumnUpdated: () => void;
 }
 
-export function AddField({ tableId, onColumnUpdated }: AddFieldProps) {
-  const { addColumn, isAddingColumn } = useColumns(tableId);
+export function AddField({ tableId, viewId, onColumnUpdated }: AddFieldProps) {
+  const { addColumn, isAddingColumn } = useColumns(tableId, viewId);
 
   const handleAddColumn = async () => {
     try {

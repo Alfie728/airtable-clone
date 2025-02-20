@@ -6,11 +6,16 @@ import type {
   HeaderContext,
   SortingState,
   ColumnDef,
+  FilterFn,
+  FilterFnOption,
+  ColumnFiltersState,
+  Column as TableColumn,
 } from "@tanstack/react-table";
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
+  getFilteredRowModel,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Row, Column } from "~/types/table";
@@ -19,6 +24,12 @@ import type { ColumnDefWithMeta, ColumnMeta, TableType } from "~/types/grid";
 import { useQueryClient } from "@tanstack/react-query";
 import { GridCell } from "../components/GridCell";
 import { GridHeader } from "../components/GridHeader";
+import type { FilterPreference } from "~/types/filter";
+
+interface ExtendedTableConfigProps extends TableConfigProps {
+  filtering: FilterPreference[];
+  onFilteringChange: (filtering: FilterPreference[]) => void;
+}
 
 const useTableConfig = ({
   columns,
@@ -26,11 +37,13 @@ const useTableConfig = ({
   initialData,
   tableId,
   sorting,
+  filtering,
   columnOrder,
   onSortingChangeAction,
+  onFilteringChange,
   onColumnOrderChange,
   updateCellAction,
-}: TableConfigProps): TableConfig => {
+}: ExtendedTableConfigProps): TableConfig => {
   const queryClient = useQueryClient();
   const tableContainerRef = useRef<HTMLDivElement>(null);
 
@@ -63,18 +76,67 @@ const useTableConfig = ({
     [columns, initialData, queryClient, tableId],
   );
 
+  const filterFn = (
+    row: Row,
+    columnId: string,
+    filterValue: string,
+    operator: string,
+  ) => {
+    const value = String(row[columnId] ?? "");
+    if (!value && value !== "") return false;
+
+    switch (operator) {
+      case "equals":
+        return value === filterValue;
+      case "not_equals":
+        return value !== filterValue;
+      case "contains":
+        return value.toLowerCase().includes(filterValue.toLowerCase());
+      case "not_contains":
+        return !value.toLowerCase().includes(filterValue.toLowerCase());
+      case "greater_than":
+        return Number(value) > Number(filterValue);
+      case "less_than":
+        return Number(value) < Number(filterValue);
+      case "is_empty":
+        return !value;
+      case "is_not_empty":
+        return Boolean(value);
+      default:
+        return true;
+    }
+  };
+
+  const customFilterFn: FilterFn<Row> = (
+    row,
+    columnId,
+    filterValue: { value: string; operator: string },
+  ) => {
+    return filterFn(
+      row.original,
+      columnId,
+      filterValue.value,
+      filterValue.operator,
+    );
+  };
+
   const table = useReactTable({
     data,
     columns: tableColumns,
     getCoreRowModel: getCoreRowModel(),
     // getSortedRowModel: getSortedRowModel(),
     manualSorting: true,
+    manualFiltering: true,
     isMultiSortEvent: () => true,
     enableMultiSort: true,
     sortDescFirst: false,
     state: {
       sorting,
       columnOrder,
+      columnFilters: filtering.map((f) => ({
+        id: f.columnId,
+        value: { value: f.value, operator: f.operator },
+      })),
     },
     onSortingChange: (updater) => {
       const newSorting =
@@ -112,6 +174,41 @@ const useTableConfig = ({
       onSortingChangeAction(newSorting);
     },
     onColumnOrderChange: onColumnOrderChange,
+    onColumnFiltersChange: (updater) => {
+      // Convert current filters to table's format
+      const currentTableFilters = filtering.map((f) => ({
+        id: f.columnId,
+        value: { value: f.value, operator: f.operator },
+      }));
+
+      // Get new filters, properly handling function updaters
+      const newFilters =
+        typeof updater === "function" ? updater(currentTableFilters) : updater;
+
+      // Convert back to our format
+      const newFiltering: FilterPreference[] = newFilters.map(
+        (filter, index) => {
+          const filterValue = filter.value as {
+            value: string;
+            operator: FilterPreference["operator"];
+          };
+          return {
+            id: crypto.randomUUID(),
+            columnId: filter.id,
+            operator: filterValue.operator,
+            value: filterValue.value,
+            order: index,
+          };
+        },
+      );
+      onFilteringChange(newFiltering);
+    },
+    filterFns: {
+      custom: customFilterFn,
+    },
+    defaultColumn: {
+      filterFn: "custom" as unknown as FilterFnOption<Row>,
+    },
     meta: {
       updateData: async (
         rowIndex: number,
@@ -132,6 +229,8 @@ const useTableConfig = ({
       },
     },
   }) as TableType;
+
+  const { rows } = table.getRowModel();
 
   const rowVirtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
     count: table.getRowModel().rows.length,

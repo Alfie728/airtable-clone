@@ -17,8 +17,8 @@ import { getDefaultView } from "~/lib/actions/views.action";
 import { useViews } from "~/hooks/useViews";
 import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
 import { queryKeys } from "~/lib/query/keys";
-import { useSortedTable } from "~/hooks/useSortedTable";
 import { prefetchTable } from "~/lib/query/prefetch";
+import { useTableStructure } from "~/hooks/useTableStructure";
 
 interface BaseClientProps {
   baseId: string;
@@ -51,10 +51,13 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
   const tableName = baseTables.find((t) => t.id === tableId)?.name ?? "";
 
+  // Get table structure separately to prevent UI flickering
+  const { data: structureData } = useTableStructure(tableId);
+
   const {
     tableData,
-    isLoading: isTableLoading,
-    error: tableError,
+    isLoading,
+    error,
     addRow,
     addBulkRows,
     updateCell,
@@ -64,10 +67,13 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     isRenaming,
     sortState,
     handleSortChange,
+    filterState,
+    handleFilterChange,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
     isUpdatingSort,
+    isUpdatingFilter,
   } = useTableData({ baseId, tableId, tableName, viewId });
 
   const {
@@ -90,14 +96,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     // Skip if we're already handling navigation through handleTableSelect
     if (isHandlingNavigation) return;
 
-    // Clear pendingActiveViewId when navigation is complete
-    if (pendingActiveViewId && pendingActiveViewId === viewId) {
-      setPendingActiveViewId(null);
-      return;
-    }
-
     // Only handle invalid table scenarios
-    if (!isBaseLoading && !isTableLoading && baseTables?.length > 0) {
+    if (!isBaseLoading && !isLoading && baseTables?.length > 0) {
       const isInvalidTable =
         !baseTables.some((t) => t.id === tableId) || tableId === "tables";
 
@@ -109,47 +109,19 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
         // Try to get the cached view first
         const cachedView = queryClient.getQueryData<string>(
-          queryKeys.tables.views.detail(firstTable.id, "default"),
+          queryKeys.views.detail("default"),
         );
 
         if (cachedView) {
-          // Set pending view before navigation
-          setPendingActiveViewId(cachedView);
-          router.replace(`/${baseId}/${firstTable.id}/${cachedView}`, {
-            scroll: false,
-          });
+          // Use replace instead of push to avoid history stack issues
+          router.replace(`/${baseId}/${firstTable.id}/${cachedView}`);
           setIsHandlingNavigation(false);
           return;
         }
 
-        // If no cached view, show loading state and fetch it
-        router.replace(`/${baseId}/${firstTable.id}/loading`, {
-          scroll: false,
-        });
-
-        void getDefaultView(firstTable.id).then(({ viewId, error }) => {
-          if (!viewId) {
-            console.error("Failed to get or create default view:", error);
-            toast.error(
-              "Failed to load table view. Please contact support if this persists.",
-            );
-            setIsHandlingNavigation(false);
-            setPendingActiveViewId(null);
-            return;
-          }
-
-          // Set pending view before navigation
-          setPendingActiveViewId(viewId);
-          queryClient.setQueryData(
-            queryKeys.tables.views.detail(firstTable.id, "default"),
-            viewId,
-          );
-
-          router.replace(`/${baseId}/${firstTable.id}/${viewId}`, {
-            scroll: false,
-          });
-          setIsHandlingNavigation(false);
-        });
+        // If no cached view, redirect to base page
+        router.replace(`/${baseId}`);
+        setIsHandlingNavigation(false);
       }
     } else if (!isBaseLoading && (!baseTables || baseTables.length === 0)) {
       // Handle empty base case
@@ -157,7 +129,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     }
   }, [
     isBaseLoading,
-    isTableLoading,
+    isLoading,
     baseTables,
     isAddingTable,
     tableId,
@@ -165,9 +137,15 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     router,
     queryClient,
     isHandlingNavigation,
-    pendingActiveViewId,
-    viewId,
   ]);
+
+  // Clear pending states when navigation is complete
+  useEffect(() => {
+    if (!isHandlingNavigation) {
+      setPendingActiveTableId(null);
+      setPendingActiveViewId(null);
+    }
+  }, [isHandlingNavigation]);
 
   const handleTableCreated = async (
     newTable: typeof tables.$inferSelect & { defaultViewId?: string },
@@ -227,7 +205,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
     // Get cached view
     const cachedView = queryClient.getQueryData<string>(
-      queryKeys.tables.views.detail(tableId, "default"),
+      queryKeys.views.detail("default"),
     );
 
     if (cachedView) {
@@ -277,10 +255,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       // Set pending view before navigation
       setPendingActiveViewId(viewId);
       // Cache the view ID and navigate
-      queryClient.setQueryData(
-        queryKeys.tables.views.detail(tableId, "default"),
-        viewId,
-      );
+      queryClient.setQueryData(queryKeys.views.detail("default"), viewId);
       router.replace(`/${baseId}/${tableId}/${viewId}`, { scroll: false });
       setIsHandlingNavigation(false);
     } catch (error) {
@@ -345,9 +320,11 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         <GridControls
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-          columns={tableData?.columns ?? []}
+          columns={structureData?.success ? structureData.columns : []}
           sorting={sortState}
           onSortingChange={handleSortChange}
+          filtering={filterState}
+          onFilteringChange={handleFilterChange}
         />
 
         {!isAddingTable && (
@@ -385,19 +362,17 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
               <div className="flex h-full items-center justify-center">
                 <div className="text-sm text-gray-500">Creating table...</div>
               </div>
-            ) : isTableLoading ? (
+            ) : isLoading ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-sm text-gray-500">
                   Loading table data...
                 </div>
               </div>
-            ) : tableError ? (
+            ) : error ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
                   <h3 className="text-lg font-semibold text-red-600">Error</h3>
-                  <p className="mt-2 text-sm text-gray-500">
-                    {tableError.message}
-                  </p>
+                  <p className="mt-2 text-sm text-gray-500">{error.message}</p>
                 </div>
               </div>
             ) : (
@@ -416,6 +391,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   isBatchAdding={isBatchAdding}
                   sorting={sortState}
                   onSortingChangeAction={handleSortChange}
+                  filtering={filterState}
+                  onFilteringChangeAction={handleFilterChange}
                   fetchNextPage={fetchNextPage}
                   hasNextPage={hasNextPage}
                   isFetchingNextPage={isFetchingNextPage}

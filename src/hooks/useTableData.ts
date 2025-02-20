@@ -1,5 +1,4 @@
 import {
-  useQuery,
   useQueryClient,
   useInfiniteQuery,
   useMutation,
@@ -13,6 +12,7 @@ import {
   renameTable,
 } from "~/lib/actions/tables.action";
 import { useTableSort } from "./useTableSort";
+import { useTableFilter } from "./useTableFilter";
 import type { SortingState } from "@tanstack/react-table";
 import { useMemo, useRef } from "react";
 import type {
@@ -21,9 +21,11 @@ import type {
   TableResponse,
   TableRenameResponse,
   SerializedTable,
+  TableData,
 } from "~/types/table";
 import { faker } from "@faker-js/faker";
 import pages from "next/dist/build/templates/pages";
+import { useTableStructure } from "./useTableStructure";
 
 function generateMockRow(columns: Column[]): Row {
   const row: Row = {
@@ -181,9 +183,15 @@ type GetTableDataResponse =
     };
 
 function isSuccessResponse(
-  response: GetTableDataResponse,
-): response is Extract<GetTableDataResponse, { success: true }> {
+  response: TableResponse,
+): response is { success: true; table: TableData } {
   return response.success;
+}
+
+function isErrorResponse(
+  response: TableResponse,
+): response is { success: false; error: string } {
+  return !response.success;
 }
 
 export function useTableData({
@@ -205,87 +213,90 @@ export function useTableData({
     isUpdating: isUpdatingSort,
   } = useTableSort(viewId ?? "");
 
+  // Get filtering state if viewId is provided
+  const {
+    initialFilterState,
+    updateFilter,
+    isUpdating: isUpdatingFilter,
+  } = useTableFilter(viewId ?? "");
+
+  // Get table structure (columns)
+  const { data: structureData, isLoading: isLoadingStructure } =
+    useTableStructure(tableId);
+
   // Query for table data with infinite pagination
   const {
     data: pages,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-    isLoading,
+    isLoading: isLoadingData,
     error,
-  } = useInfiniteQuery<TableDataResponse, Error>({
-    queryKey: [
-      ...queryKeys.tables.data(tableId),
-      viewId,
-      JSON.stringify(initialSortState),
-    ],
-    queryFn: async ({ pageParam }) => {
-      const response = (await getTableDataWithSort({
+  } = useInfiniteQuery<TableResponse, Error>({
+    queryKey: viewId
+      ? queryKeys.views.data.withConfig(tableId, viewId, {
+          sorts: JSON.stringify(initialSortState),
+          filters: JSON.stringify(initialFilterState),
+          page: 1,
+        })
+      : queryKeys.tables.data.root(tableId),
+    queryFn: async ({ pageParam }): Promise<TableResponse> => {
+      const response = await getTableDataWithSort({
         tableId,
         tableName,
         sorting: viewId ? initialSortState : undefined,
+        filtering: viewId ? initialFilterState : undefined,
         page: pageParam as number,
-      })) as GetTableDataResponse;
+      });
 
-      // Transform the response to match TableDataResponse
-      if (!isSuccessResponse(response)) {
-        return {
-          success: false,
-          error: response.error,
-          pagination: {
-            hasMore: false,
-            page: pageParam as number,
-          },
-        } satisfies TableDataResponse;
+      if (isErrorResponse(response)) {
+        throw new Error(response.error);
       }
 
-      return {
-        success: true,
-        table: {
-          id: response.table.id,
-          name: response.table.name,
-          columns: response.table.columns,
-          data: response.table.data,
-        },
-        pagination: {
-          hasMore: response.table.pagination.hasMore,
-          page: response.table.pagination.page,
-        },
-      } satisfies TableDataResponse;
+      return response;
     },
-    getNextPageParam: (lastPage) => {
-      if (!lastPage.success || !lastPage.pagination) return undefined;
-      return lastPage.pagination.hasMore
-        ? lastPage.pagination.page + 1
-        : undefined;
+    getNextPageParam: (lastPage): number | undefined => {
+      if (!lastPage.success) return undefined;
+      if (!isSuccessResponse(lastPage)) return undefined;
+      const { table } = lastPage;
+      const { pagination } = table;
+      return pagination.hasMore ? pagination.page + 1 : undefined;
     },
     initialPageParam: 1,
-    enabled: Boolean(tableId && tableName),
-    staleTime: 0, // Always consider data stale when sorting changes
+    enabled: Boolean(tableId && tableName && structureData?.success),
+    staleTime: 30000,
     refetchOnMount: true,
     maxPages: undefined, // Allow unlimited pages
   });
 
   // Combine all pages of data
   const tableData = useMemo(() => {
-    if (!pages?.pages || pages.pages.length === 0) return undefined;
+    if (!pages?.pages || pages.pages.length === 0 || !structureData?.success)
+      return undefined;
 
     const firstPage = pages.pages[0];
-    if (!firstPage?.success || !firstPage.table) return undefined;
+    if (!firstPage?.success) return undefined;
+    if (!isSuccessResponse(firstPage)) return undefined;
+    const { table } = firstPage;
 
     // Combine data from all pages
     const allData = pages.pages.reduce<Row[]>((acc, page) => {
-      if (page?.success && page.table) {
+      if (page && isSuccessResponse(page)) {
         return [...acc, ...page.table.data];
       }
       return acc;
     }, []);
 
-    return {
-      ...firstPage.table,
+    const result: TableData = {
+      ...table,
+      columns: structureData.columns ?? [],
       data: allData,
     };
-  }, [pages?.pages]);
+
+    return result;
+  }, [pages?.pages, structureData]);
+
+  const isLoading = isLoadingStructure || isLoadingData;
 
   // Add row mutation
   const addRowMutation = useMutation<AddRowResponse, Error, Row, AddRowContext>(
@@ -297,55 +308,57 @@ export function useTableData({
         return promise;
       },
       onMutate: async (optimisticRow): Promise<AddRowContext> => {
-        await queryClient.cancelQueries({
-          queryKey: queryKeys.tables.data(tableId),
-        });
-        const previousData = queryClient.getQueryData<InfiniteTableData>(
-          queryKeys.tables.data(tableId),
-        );
+        const queryKey = viewId
+          ? queryKeys.views.data.withConfig(tableId, viewId, {
+              sorts: JSON.stringify(initialSortState),
+              filters: JSON.stringify(initialFilterState),
+              page: 1,
+            })
+          : queryKeys.tables.data.root(tableId);
+
+        await queryClient.cancelQueries({ queryKey });
+        const previousData =
+          queryClient.getQueryData<InfiniteTableData>(queryKey);
 
         if (tableData) {
           const maxOrder = Math.max(
             ...tableData.data.map((row) => row.order),
             -1,
           );
+          const rowWithOrder = { ...optimisticRow, order: maxOrder + 1 };
 
-          const rowWithOrder = {
-            ...optimisticRow,
-            order: maxOrder + 1,
-          };
-
-          queryClient.setQueryData<InfiniteTableData>(
-            queryKeys.tables.data(tableId),
-            (old) => {
-              if (!old) return old;
-              return {
-                ...old,
-                pages: old.pages.map((page, index) => {
-                  if (index === 0 && page.success && page.table) {
-                    return {
-                      ...page,
-                      table: {
-                        ...page.table,
-                        data: [...page.table.data, rowWithOrder],
-                      },
-                    };
-                  }
-                  return page;
-                }),
-              };
-            },
-          );
+          queryClient.setQueryData<InfiniteTableData>(queryKey, (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page, index) => {
+                if (index === 0 && page.success && page.table) {
+                  return {
+                    ...page,
+                    table: {
+                      ...page.table,
+                      data: [...page.table.data, rowWithOrder],
+                    },
+                  };
+                }
+                return page;
+              }),
+            };
+          });
         }
 
         return { previousData };
       },
       onError: (err, variables, context) => {
         if (context?.previousData) {
-          queryClient.setQueryData(
-            queryKeys.tables.data(tableId),
-            context.previousData,
-          );
+          const queryKey = viewId
+            ? queryKeys.views.data.withConfig(tableId, viewId, {
+                sorts: JSON.stringify(initialSortState),
+                filters: JSON.stringify(initialFilterState),
+                page: 1,
+              })
+            : queryKeys.tables.data.root(tableId);
+          queryClient.setQueryData(queryKey, context.previousData);
         }
         pendingRowCreationsRef.current.delete(variables.id);
       },
@@ -411,56 +424,62 @@ export function useTableData({
       throw new Error("Max retries exceeded");
     },
     onMutate: async (params): Promise<UpdateCellContext> => {
+      const queryKey = viewId
+        ? queryKeys.views.data.withConfig(tableId, viewId, {
+            sorts: JSON.stringify(initialSortState),
+            filters: JSON.stringify(initialFilterState),
+            page: 1,
+          })
+        : queryKeys.tables.data.root(tableId);
+
       if (!pendingRowCreationsRef.current.has(params.rowId)) {
-        await queryClient.cancelQueries({
-          queryKey: queryKeys.tables.data(tableId),
-        });
+        await queryClient.cancelQueries({ queryKey });
       }
 
-      const previousData = queryClient.getQueryData<InfiniteTableData>(
-        queryKeys.tables.data(tableId),
-      );
+      const previousData =
+        queryClient.getQueryData<InfiniteTableData>(queryKey);
 
       if (tableData) {
-        queryClient.setQueryData<InfiniteTableData>(
-          queryKeys.tables.data(tableId),
-          (old) => {
-            if (!old) return old;
-            return {
-              ...old,
-              pages: old.pages.map((page) => {
-                if (page.success && page.table) {
-                  return {
-                    ...page,
-                    table: {
-                      ...page.table,
-                      data: page.table.data.map((row) => {
-                        if (row.id === params.rowId) {
-                          return {
-                            ...row,
-                            [params.columnId]: params.value,
-                          };
-                        }
-                        return row;
-                      }),
-                    },
-                  };
-                }
-                return page;
-              }),
-            };
-          },
-        );
+        queryClient.setQueryData<InfiniteTableData>(queryKey, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => {
+              if (page.success && page.table) {
+                return {
+                  ...page,
+                  table: {
+                    ...page.table,
+                    data: page.table.data.map((row) => {
+                      if (row.id === params.rowId) {
+                        return {
+                          ...row,
+                          [params.columnId]: params.value,
+                        };
+                      }
+                      return row;
+                    }),
+                  },
+                };
+              }
+              return page;
+            }),
+          };
+        });
       }
 
       return { previousData };
     },
     onError: (err, variables, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(
-          queryKeys.tables.data(tableId),
-          context.previousData,
-        );
+        const queryKey = viewId
+          ? queryKeys.views.data.withConfig(tableId, viewId, {
+              sorts: JSON.stringify(initialSortState),
+              filters: JSON.stringify(initialFilterState),
+              page: 1,
+            })
+          : queryKeys.tables.data.root(tableId);
+        queryClient.setQueryData(queryKey, context.previousData);
       }
     },
   });
@@ -481,55 +500,60 @@ export function useTableData({
       return promise;
     },
     onMutate: async (params): Promise<AddBulkRowsContext> => {
-      await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.data(tableId),
-      });
-      const previousData = queryClient.getQueryData<InfiniteTableData>(
-        queryKeys.tables.data(tableId),
-      );
+      const queryKey = viewId
+        ? queryKeys.views.data.withConfig(tableId, viewId, {
+            sorts: JSON.stringify(initialSortState),
+            filters: JSON.stringify(initialFilterState),
+            page: 1,
+          })
+        : queryKeys.tables.data.root(tableId);
+
+      await queryClient.cancelQueries({ queryKey });
+      const previousData =
+        queryClient.getQueryData<InfiniteTableData>(queryKey);
 
       if (tableData) {
         const maxOrder = Math.max(
           ...tableData.data.map((row) => row.order),
           -1,
         );
-
         const rowsWithOrder = params.optimisticRows.map((row, index) => ({
           ...row,
           order: maxOrder + 1 + index,
         }));
 
-        queryClient.setQueryData<InfiniteTableData>(
-          queryKeys.tables.data(tableId),
-          (old) => {
-            if (!old) return old;
-            return {
-              ...old,
-              pages: old.pages.map((page, index) => {
-                if (index === 0 && page.success && page.table) {
-                  return {
-                    ...page,
-                    table: {
-                      ...page.table,
-                      data: [...page.table.data, ...rowsWithOrder],
-                    },
-                  };
-                }
-                return page;
-              }),
-            };
-          },
-        );
+        queryClient.setQueryData<InfiniteTableData>(queryKey, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page, index) => {
+              if (index === 0 && page.success && page.table) {
+                return {
+                  ...page,
+                  table: {
+                    ...page.table,
+                    data: [...page.table.data, ...rowsWithOrder],
+                  },
+                };
+              }
+              return page;
+            }),
+          };
+        });
       }
 
       return { previousData };
     },
     onError: (err, variables, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(
-          queryKeys.tables.data(tableId),
-          context.previousData,
-        );
+        const queryKey = viewId
+          ? queryKeys.views.data.withConfig(tableId, viewId, {
+              sorts: JSON.stringify(initialSortState),
+              filters: JSON.stringify(initialFilterState),
+              page: 1,
+            })
+          : queryKeys.tables.data.root(tableId);
+        queryClient.setQueryData(queryKey, context.previousData);
       }
       variables.optimisticRows.forEach((row) => {
         pendingRowCreationsRef.current.delete(row.id);
@@ -557,7 +581,7 @@ export function useTableData({
         queryKey: queryKeys.bases.tables.list(baseId),
       });
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.data(tableId),
+        queryKey: queryKeys.tables.data.root(tableId),
       });
 
       const previousTables = queryClient.getQueryData<{
@@ -590,71 +614,37 @@ export function useTableData({
     },
   });
 
-  // Function to handle sort changes
-  const handleSortChange = async (newSorting: SortingState) => {
-    if (!viewId) return;
-    try {
-      // Optimistically update the sort state
-      queryClient.setQueryData<SortingState>(
-        queryKeys.views.sorts(viewId),
-        newSorting,
-      );
-
-      // Reset all queries related to this view
-      await Promise.all([
-        // Reset the sort state
-        queryClient.resetQueries({
-          queryKey: queryKeys.views.sorts(viewId),
-        }),
-        // Reset the table data
-        queryClient.resetQueries({
-          queryKey: [
-            ...queryKeys.tables.data(tableId),
-            viewId,
-            JSON.stringify(newSorting),
-          ],
-        }),
-      ]);
-
-      // Update the sort state in the database
-      await updateSort(newSorting);
-    } catch (error) {
-      // On error, revert the optimistic update
-      queryClient.setQueryData(
-        queryKeys.views.sorts(viewId),
-        initialSortState ?? [],
-      );
-      throw error;
-    }
-  };
-
   return {
     tableData,
     isLoading,
     error,
     addRow: () => {
-      const columns = tableData?.columns ?? [];
-      const optimisticRow = generateMockRow(columns);
+      if (!tableData?.columns)
+        return Promise.reject(new Error("No columns found"));
+      const optimisticRow = generateMockRow(tableData.columns);
       return addRowMutation.mutateAsync(optimisticRow);
     },
     addBulkRows: (count: number) => {
-      const columns = tableData?.columns ?? [];
+      if (!tableData?.columns)
+        return Promise.reject(new Error("No columns found"));
       const optimisticRows = Array.from({ length: count }, () =>
-        generateMockRow(columns),
+        generateMockRow(tableData.columns),
       );
       return addBulkRowsMutation.mutateAsync({ optimisticRows });
     },
     updateCell: updateCellMutation.mutateAsync,
     isAddingRow: addRowMutation.isPending,
-    isUpdatingCell: updateCellMutation.isPending,
     isBatchAdding: addBulkRowsMutation.isPending,
     renameTable: (newName: string) => renameMutation.mutateAsync(newName),
     isRenaming: renameMutation.isPending,
+    sortState: initialSortState ?? [],
+    handleSortChange: updateSort,
+    filterState: initialFilterState ?? [],
+    handleFilterChange: updateFilter,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-    sortState: initialSortState ?? [],
-    handleSortChange,
     isUpdatingSort,
+    isUpdatingFilter,
   };
 }

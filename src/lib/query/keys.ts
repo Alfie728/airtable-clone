@@ -1,45 +1,62 @@
 export const queryKeys = {
   bases: {
     root: ["bases"] as const,
-    list: () => ["bases"],
-    detail: (baseId: string) => ["bases", baseId],
+    list: () => ["bases"] as const,
+    detail: (baseId: string) => ["bases", baseId] as const,
     info: (baseId: string) =>
       [...queryKeys.bases.detail(baseId), "info"] as const,
     tables: {
-      list: (baseId: string) => ["bases", baseId, "tables"],
+      list: (baseId: string) => ["bases", baseId, "tables"] as const,
       detail: (baseId: string, tableId: string) =>
         [...queryKeys.bases.detail(baseId), "tables", tableId] as const,
     },
   },
   tables: {
     root: ["tables"] as const,
-    detail: (tableId: string) => ["tables", tableId],
-    data: (tableId: string) => ["tables", tableId, "data"] as const,
-    sortedData: (tableId: string, viewId: string) =>
-      ["tables", tableId, "sortedData", viewId] as const,
-    columns: (tableId: string) =>
-      [...queryKeys.tables.detail(tableId), "columns"] as const,
-    rows: (tableId: string) =>
-      [...queryKeys.tables.detail(tableId), "rows"] as const,
-    views: {
-      list: (tableId: string) =>
-        [...queryKeys.tables.detail(tableId), "views", "list"] as const,
-      detail: (tableId: string, viewId: string) =>
-        [
-          ...queryKeys.tables.detail(tableId),
-          "views",
-          "detail",
-          viewId,
-        ] as const,
+    detail: (tableId: string) => ["tables", tableId] as const,
+    structure: {
+      root: (tableId: string) => ["tables", tableId, "structure"] as const,
+      columns: (tableId: string) =>
+        ["tables", tableId, "structure", "columns"] as const,
+      metadata: (tableId: string) =>
+        ["tables", tableId, "structure", "metadata"] as const,
+    },
+    data: {
+      root: (tableId: string) => ["tables", tableId, "data"] as const,
+      paginated: (tableId: string, page: number) =>
+        ["tables", tableId, "data", "page", page] as const,
     },
   },
   views: {
     root: ["views"] as const,
+    list: (tableId: string) => ["tables", tableId, "views"] as const,
     detail: (viewId: string) => ["views", viewId] as const,
-    filters: (viewId: string) =>
-      [...queryKeys.views.detail(viewId), "filters"] as const,
-    sorts: (viewId: string) =>
-      [...queryKeys.views.detail(viewId), "sorts"] as const,
+    structure: {
+      root: (viewId: string) => ["views", viewId, "structure"] as const,
+      metadata: (viewId: string) => ["views", viewId, "metadata"] as const,
+      configuration: {
+        root: (viewId: string) => ["views", viewId, "configuration"] as const,
+        sorts: (viewId: string) =>
+          ["views", viewId, "configuration", "sorts"] as const,
+        filters: (viewId: string) =>
+          ["views", viewId, "configuration", "filters"] as const,
+        columns: (viewId: string) =>
+          ["views", viewId, "configuration", "columns"] as const,
+      },
+    },
+    data: {
+      root: (tableId: string, viewId: string) =>
+        ["tables", tableId, "views", viewId, "data"] as const,
+      withConfig: (
+        tableId: string,
+        viewId: string,
+        config: {
+          sorts?: string;
+          filters?: string;
+          page?: number;
+        },
+      ) => ["tables", tableId, "views", viewId, "data", config] as const,
+    },
   },
   user: {
     root: ["user"] as const,
@@ -51,33 +68,41 @@ export const queryKeys = {
   },
 } as const;
 
+type QueryKeyType = readonly unknown[];
+
 // Helper to get all query keys under a specific base
-export const getBaseRelatedQueryKeys = (baseId: string) => [
+export const getBaseRelatedQueryKeys = (baseId: string): QueryKeyType[] => [
   queryKeys.bases.detail(baseId),
   queryKeys.bases.info(baseId),
   queryKeys.bases.tables.list(baseId),
 ];
 
 // Helper to get all query keys under a specific table
-export const getTableRelatedQueryKeys = (tableId: string) => [
+export const getTableRelatedQueryKeys = (tableId: string): QueryKeyType[] => [
   queryKeys.tables.detail(tableId),
-  queryKeys.tables.data(tableId),
-  queryKeys.tables.columns(tableId),
-  queryKeys.tables.rows(tableId),
-  queryKeys.tables.views.list(tableId),
+  queryKeys.tables.data.root(tableId),
+  queryKeys.tables.structure.root(tableId),
+  queryKeys.views.list(tableId),
 ];
 
 // Helper to get all query keys under a specific view
-export const getViewRelatedQueryKeys = (viewId: string) => [
+export const getViewRelatedQueryKeys = (viewId: string): QueryKeyType[] => [
   queryKeys.views.detail(viewId),
-  queryKeys.views.filters(viewId),
-  queryKeys.views.sorts(viewId),
+  queryKeys.views.structure.root(viewId),
+  queryKeys.views.structure.metadata(viewId),
+  queryKeys.views.structure.configuration.root(viewId),
+  queryKeys.views.structure.configuration.sorts(viewId),
+  queryKeys.views.structure.configuration.filters(viewId),
+  queryKeys.views.structure.configuration.columns(viewId),
 ];
 
-// Add a new helper for view-specific table data
-export const getViewSpecificTableKeys = (tableId: string, viewId: string) => [
-  queryKeys.tables.sortedData(tableId, viewId),
-  queryKeys.views.sorts(viewId),
-  queryKeys.views.filters(viewId),
-  queryKeys.tables.views.detail(tableId, viewId),
+// Helper to get all view-specific table data keys
+export const getViewSpecificTableKeys = (
+  tableId: string,
+  viewId: string,
+): QueryKeyType[] => [
+  queryKeys.tables.data.root(tableId),
+  queryKeys.tables.structure.root(tableId),
+  queryKeys.views.data.root(tableId, viewId),
+  ...getViewRelatedQueryKeys(viewId),
 ];
