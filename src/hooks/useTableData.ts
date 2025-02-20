@@ -218,7 +218,7 @@ export function useTableData({
           ...queryKeys.tables.viewData(tableId, viewId),
           JSON.stringify(initialSortState),
         ]
-      : queryKeys.tables.data(tableId),
+      : ["tables", tableId, "data"],
     queryFn: async ({ pageParam }) => {
       const response = (await getTableDataWithSort({
         tableId,
@@ -261,7 +261,7 @@ export function useTableData({
     },
     initialPageParam: 1,
     enabled: Boolean(tableId && tableName),
-    staleTime: 0, // Always consider data stale when sorting changes
+    staleTime: 30000,
     refetchOnMount: true,
     maxPages: undefined, // Allow unlimited pages
   });
@@ -618,21 +618,13 @@ export function useTableData({
         newSorting,
       );
 
-      // Reset all queries related to this view
-      await Promise.all([
-        // Reset the sort state
-        queryClient.resetQueries({
-          queryKey: queryKeys.views.customizations.sorts(viewId),
-        }),
-        // Reset the table data
-        queryClient.resetQueries({
-          queryKey: [...queryKeys.tables.viewData(tableId, viewId)],
-          exact: false, // This ensures we invalidate all queries that start with this key, including those with sort state
-        }),
-      ]);
-
       // Update the sort state in the database
       await updateSort(newSorting);
+
+      // Invalidate the table data to reflect the new sort state
+      await queryClient.invalidateQueries({
+        queryKey: [...queryKeys.tables.viewData(tableId, viewId)],
+      });
     } catch (error) {
       // On error, revert the optimistic update
       queryClient.setQueryData(

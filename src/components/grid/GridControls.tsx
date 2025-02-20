@@ -27,7 +27,7 @@ import {
 import { Switch } from "~/components/ui/switch";
 import type { Column } from "~/types/table";
 import type { SortingState } from "@tanstack/react-table";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { cn } from "~/lib/utils";
 
 interface GridControlsProps {

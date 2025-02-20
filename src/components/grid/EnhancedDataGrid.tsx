@@ -436,6 +436,7 @@ export function EnhancedDataGrid({
             <div className="sticky right-0 top-0 z-20 flex h-full items-center border-b border-r border-gray-300 bg-gray-50 px-1 shadow-sm">
               <AddField
                 tableId={tableId}
+                viewId={viewId}
                 onColumnUpdated={() => {
                   void queryClient.invalidateQueries({
                     queryKey: queryKeys.tables.detail(tableId),
