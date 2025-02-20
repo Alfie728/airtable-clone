@@ -12,6 +12,7 @@ import {
   renameTable,
 } from "~/lib/actions/tables.action";
 import { useTableSort } from "./useTableSort";
+import { useTableFilter } from "./useTableFilter";
 import type { SortingState } from "@tanstack/react-table";
 import { useMemo, useRef } from "react";
 import type {
@@ -20,6 +21,7 @@ import type {
   TableResponse,
   TableRenameResponse,
   SerializedTable,
+  TableData,
 } from "~/types/table";
 import { faker } from "@faker-js/faker";
 import pages from "next/dist/build/templates/pages";
@@ -180,9 +182,15 @@ type GetTableDataResponse =
     };
 
 function isSuccessResponse(
-  response: GetTableDataResponse,
-): response is Extract<GetTableDataResponse, { success: true }> {
+  response: TableResponse,
+): response is { success: true; table: TableData } {
   return response.success;
+}
+
+function isErrorResponse(
+  response: TableResponse,
+): response is { success: false; error: string } {
+  return !response.success;
 }
 
 export function useTableData({
@@ -204,6 +212,13 @@ export function useTableData({
     isUpdating: isUpdatingSort,
   } = useTableSort(viewId ?? "");
 
+  // Get filtering state if viewId is provided
+  const {
+    initialFilterState,
+    updateFilter,
+    isUpdating: isUpdatingFilter,
+  } = useTableFilter(viewId ?? "");
+
   // Query for table data with infinite pagination
   const {
     data: pages,
@@ -212,52 +227,35 @@ export function useTableData({
     isFetchingNextPage,
     isLoading,
     error,
-  } = useInfiniteQuery<TableDataResponse, Error>({
+  } = useInfiniteQuery<TableResponse, Error>({
     queryKey: viewId
       ? [
           ...queryKeys.tables.viewData(tableId, viewId),
           JSON.stringify(initialSortState),
+          JSON.stringify(initialFilterState),
         ]
       : ["tables", tableId, "data"],
-    queryFn: async ({ pageParam }) => {
-      const response = (await getTableDataWithSort({
+    queryFn: async ({ pageParam }): Promise<TableResponse> => {
+      const response = await getTableDataWithSort({
         tableId,
         tableName,
         sorting: viewId ? initialSortState : undefined,
+        filtering: viewId ? initialFilterState : undefined,
         page: pageParam as number,
-      })) as GetTableDataResponse;
+      });
 
-      // Transform the response to match TableDataResponse
-      if (!isSuccessResponse(response)) {
-        return {
-          success: false,
-          error: response.error,
-          pagination: {
-            hasMore: false,
-            page: pageParam as number,
-          },
-        } satisfies TableDataResponse;
+      if (isErrorResponse(response)) {
+        throw new Error(response.error);
       }
 
-      return {
-        success: true,
-        table: {
-          id: response.table.id,
-          name: response.table.name,
-          columns: response.table.columns,
-          data: response.table.data,
-        },
-        pagination: {
-          hasMore: response.table.pagination.hasMore,
-          page: response.table.pagination.page,
-        },
-      } satisfies TableDataResponse;
+      return response;
     },
-    getNextPageParam: (lastPage) => {
-      if (!lastPage.success || !lastPage.pagination) return undefined;
-      return lastPage.pagination.hasMore
-        ? lastPage.pagination.page + 1
-        : undefined;
+    getNextPageParam: (lastPage): number | undefined => {
+      if (!lastPage.success) return undefined;
+      if (!isSuccessResponse(lastPage)) return undefined;
+      const { table } = lastPage;
+      const { pagination } = table;
+      return pagination.hasMore ? pagination.page + 1 : undefined;
     },
     initialPageParam: 1,
     enabled: Boolean(tableId && tableName),
@@ -271,20 +269,24 @@ export function useTableData({
     if (!pages?.pages || pages.pages.length === 0) return undefined;
 
     const firstPage = pages.pages[0];
-    if (!firstPage?.success || !firstPage.table) return undefined;
+    if (!firstPage?.success) return undefined;
+    if (!isSuccessResponse(firstPage)) return undefined;
+    const { table } = firstPage;
 
     // Combine data from all pages
     const allData = pages.pages.reduce<Row[]>((acc, page) => {
-      if (page?.success && page.table) {
+      if (page && isSuccessResponse(page)) {
         return [...acc, ...page.table.data];
       }
       return acc;
     }, []);
 
-    return {
-      ...firstPage.table,
+    const result: TableData = {
+      ...table,
       data: allData,
     };
+
+    return result;
   }, [pages?.pages]);
 
   // Add row mutation
@@ -301,6 +303,7 @@ export function useTableData({
           ? [
               ...queryKeys.tables.viewData(tableId, viewId),
               JSON.stringify(initialSortState),
+              JSON.stringify(initialFilterState),
             ]
           : queryKeys.tables.data(tableId);
 
@@ -349,6 +352,7 @@ export function useTableData({
             ? [
                 ...queryKeys.tables.viewData(tableId, viewId),
                 JSON.stringify(initialSortState),
+                JSON.stringify(initialFilterState),
               ]
             : queryKeys.tables.data(tableId);
           queryClient.setQueryData(queryKey, context.previousData);
@@ -421,6 +425,7 @@ export function useTableData({
         ? [
             ...queryKeys.tables.viewData(tableId, viewId),
             JSON.stringify(initialSortState),
+            JSON.stringify(initialFilterState),
           ]
         : queryKeys.tables.data(tableId);
 
@@ -470,6 +475,7 @@ export function useTableData({
           ? [
               ...queryKeys.tables.viewData(tableId, viewId),
               JSON.stringify(initialSortState),
+              JSON.stringify(initialFilterState),
             ]
           : queryKeys.tables.data(tableId);
         queryClient.setQueryData(queryKey, context.previousData);
@@ -497,6 +503,7 @@ export function useTableData({
         ? [
             ...queryKeys.tables.viewData(tableId, viewId),
             JSON.stringify(initialSortState),
+            JSON.stringify(initialFilterState),
           ]
         : queryKeys.tables.data(tableId);
 
@@ -545,6 +552,7 @@ export function useTableData({
           ? [
               ...queryKeys.tables.viewData(tableId, viewId),
               JSON.stringify(initialSortState),
+              JSON.stringify(initialFilterState),
             ]
           : queryKeys.tables.data(tableId);
         queryClient.setQueryData(queryKey, context.previousData);
@@ -608,60 +616,37 @@ export function useTableData({
     },
   });
 
-  // Function to handle sort changes
-  const handleSortChange = async (newSorting: SortingState) => {
-    if (!viewId) return;
-    try {
-      // Optimistically update the sort state
-      queryClient.setQueryData<SortingState>(
-        queryKeys.views.customizations.sorts(viewId),
-        newSorting,
-      );
-
-      // Update the sort state in the database
-      await updateSort(newSorting);
-
-      // Invalidate the table data to reflect the new sort state
-      await queryClient.invalidateQueries({
-        queryKey: [...queryKeys.tables.viewData(tableId, viewId)],
-      });
-    } catch (error) {
-      // On error, revert the optimistic update
-      queryClient.setQueryData(
-        queryKeys.views.customizations.sorts(viewId),
-        initialSortState ?? [],
-      );
-      throw error;
-    }
-  };
-
   return {
     tableData,
     isLoading,
     error,
     addRow: () => {
-      const columns = tableData?.columns ?? [];
-      const optimisticRow = generateMockRow(columns);
+      if (!tableData?.columns)
+        return Promise.reject(new Error("No columns found"));
+      const optimisticRow = generateMockRow(tableData.columns);
       return addRowMutation.mutateAsync(optimisticRow);
     },
     addBulkRows: (count: number) => {
-      const columns = tableData?.columns ?? [];
+      if (!tableData?.columns)
+        return Promise.reject(new Error("No columns found"));
       const optimisticRows = Array.from({ length: count }, () =>
-        generateMockRow(columns),
+        generateMockRow(tableData.columns),
       );
       return addBulkRowsMutation.mutateAsync({ optimisticRows });
     },
     updateCell: updateCellMutation.mutateAsync,
     isAddingRow: addRowMutation.isPending,
-    isUpdatingCell: updateCellMutation.isPending,
     isBatchAdding: addBulkRowsMutation.isPending,
     renameTable: (newName: string) => renameMutation.mutateAsync(newName),
     isRenaming: renameMutation.isPending,
+    sortState: initialSortState ?? [],
+    handleSortChange: updateSort,
+    filterState: initialFilterState ?? [],
+    handleFilterChange: updateFilter,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-    sortState: initialSortState ?? [],
-    handleSortChange,
     isUpdatingSort,
+    isUpdatingFilter,
   };
 }

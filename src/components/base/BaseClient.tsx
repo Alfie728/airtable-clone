@@ -52,8 +52,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
   const {
     tableData,
-    isLoading: isTableLoading,
-    error: tableError,
+    isLoading,
+    error,
     addRow,
     addBulkRows,
     updateCell,
@@ -63,12 +63,15 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     isRenaming,
     sortState,
     handleSortChange,
+    filterState,
+    handleFilterChange,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
     isUpdatingSort,
+    isUpdatingFilter,
   } = useTableData({ baseId, tableId, tableName, viewId });
-
+  console.log("filterState", filterState);
   const {
     views: tableViews,
     isLoading: isViewsLoading,
@@ -90,7 +93,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     if (isHandlingNavigation) return;
 
     // Only handle invalid table scenarios
-    if (!isBaseLoading && !isTableLoading && baseTables?.length > 0) {
+    if (!isBaseLoading && !isLoading && baseTables?.length > 0) {
       const isInvalidTable =
         !baseTables.some((t) => t.id === tableId) || tableId === "tables";
 
@@ -122,7 +125,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     }
   }, [
     isBaseLoading,
-    isTableLoading,
+    isLoading,
     baseTables,
     isAddingTable,
     tableId,
@@ -316,6 +319,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           columns={tableData?.columns ?? []}
           sorting={sortState}
           onSortingChange={handleSortChange}
+          filtering={filterState}
+          onFilteringChange={handleFilterChange}
         />
 
         {!isAddingTable && (
@@ -353,19 +358,17 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
               <div className="flex h-full items-center justify-center">
                 <div className="text-sm text-gray-500">Creating table...</div>
               </div>
-            ) : isTableLoading ? (
+            ) : isLoading ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-sm text-gray-500">
                   Loading table data...
                 </div>
               </div>
-            ) : tableError ? (
+            ) : error ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
                   <h3 className="text-lg font-semibold text-red-600">Error</h3>
-                  <p className="mt-2 text-sm text-gray-500">
-                    {tableError.message}
-                  </p>
+                  <p className="mt-2 text-sm text-gray-500">{error.message}</p>
                 </div>
               </div>
             ) : (
@@ -384,6 +387,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   isBatchAdding={isBatchAdding}
                   sorting={sortState}
                   onSortingChangeAction={handleSortChange}
+                  filtering={filterState}
+                  onFilteringChangeAction={handleFilterChange}
                   fetchNextPage={fetchNextPage}
                   hasNextPage={hasNextPage}
                   isFetchingNextPage={isFetchingNextPage}

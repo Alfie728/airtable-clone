@@ -5,10 +5,10 @@ export interface Column {
   name: string;
   type: "text" | "number";
   order: number;
-  width?: number;
-  isSearchable?: boolean;
-  isSortable?: boolean;
-  isVisible?: boolean;
+  width: number;
+  isSearchable: boolean;
+  isSortable: boolean;
+  isVisible: boolean;
 }
 
 export interface Row {
@@ -39,32 +39,53 @@ export interface TableData {
   name: string;
   columns: Column[];
   data: Row[];
+  pagination: {
+    total: number;
+    page: number;
+    pageSize: number;
+    hasMore: boolean;
+  };
 }
 
-export interface TableResponse {
-  success: boolean;
-  error?: string;
-  table?: TableData;
-}
+export type TableResponse =
+  | {
+      success: true;
+      table: TableData;
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
-export interface TableCreateResponse {
-  success: boolean;
-  error?: string;
-  table?: typeof tables.$inferSelect;
-  defaultViewId?: string;
-}
+export type TableCreateResponse =
+  | {
+      success: true;
+      table: SerializedTable;
+      defaultViewId: string;
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
-export interface TableRenameResponse {
-  success: boolean;
-  error?: string;
-  table?: SerializedTable;
-}
+export type TableRenameResponse =
+  | {
+      success: true;
+      table: SerializedTable;
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
-export interface TableDeleteResponse {
-  success: boolean;
-  error?: string;
-  table?: SerializedTable;
-}
+export type TableDeleteResponse =
+  | {
+      success: true;
+    }
+  | {
+      success: false;
+      error: string;
+    };
 
 export interface TableListResponse {
   success: boolean;

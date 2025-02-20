@@ -3,6 +3,7 @@ import type { SortingState } from "@tanstack/react-table";
 import type { ColumnDefWithMeta, TableType } from "./grid";
 import type { Virtualizer } from "@tanstack/react-virtual";
 import type { RefObject } from "react";
+import type { FilterPreference } from "./filter";
 
 export interface TableConfigProps {
   columns: Column[];
@@ -10,8 +11,10 @@ export interface TableConfigProps {
   initialData: Row[] | undefined;
   tableId: string;
   sorting: SortingState;
+  filtering: FilterPreference[];
   columnOrder: string[];
   onSortingChangeAction: (sorting: SortingState) => void;
+  onFilteringChange: (filtering: FilterPreference[]) => void;
   onColumnOrderChange: (
     updater: string[] | ((old: string[]) => string[]),
   ) => void;

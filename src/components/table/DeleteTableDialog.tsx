@@ -16,7 +16,6 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "~/lib/query/keys";
 import { deleteTableAction } from "~/lib/actions/tables.action";
-import { getDefaultView } from "~/lib/actions/views.action";
 
 interface DeleteTableDialogProps {
   baseId: string;

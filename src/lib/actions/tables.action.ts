@@ -13,8 +13,11 @@ import type {
   TableRenameResponse,
   TableCreateResponse,
   TableDeleteResponse,
+  Column,
+  TableData,
 } from "~/types/table";
 import type { SortingState } from "@tanstack/react-table";
+import type { FilterPreference } from "~/types/filter";
 
 export async function createTable(
   baseId: string,
@@ -225,10 +228,18 @@ export async function getTableDataWithSort(params: {
   tableId: string;
   tableName: string;
   sorting?: SortingState;
+  filtering?: FilterPreference[];
   page?: number;
   pageSize?: number;
-}) {
-  const { tableId, tableName, sorting = [], page = 1, pageSize = 250 } = params;
+}): Promise<TableResponse> {
+  const {
+    tableId,
+    tableName,
+    sorting = [],
+    filtering = [],
+    page = 1,
+    pageSize = 250,
+  } = params;
 
   const user = await currentUser();
   if (!user) throw new Error("Unauthorized");
@@ -241,13 +252,49 @@ export async function getTableDataWithSort(params: {
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
 
-    // Get total count (common for both cases)
-    const countResult = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(rows)
-      .where(eq(rows.tableId, tableId));
+    // Build filter conditions
+    const filterConditions = filtering
+      .map((filter) => {
+        const column = tableColumns.find((col) => col.id === filter.columnId);
+        if (!column) return undefined;
 
-    const totalCount = countResult[0]?.count ?? 0;
+        switch (filter.operator) {
+          case "equals":
+            return sql`c.column_id = ${column.id} AND c.value = ${filter.value}`;
+          case "not_equals":
+            return sql`c.column_id = ${column.id} AND c.value != ${filter.value}`;
+          case "contains":
+            return sql`c.column_id = ${column.id} AND c.value ILIKE ${`%${filter.value}%`}`;
+          case "not_contains":
+            return sql`c.column_id = ${column.id} AND c.value NOT ILIKE ${`%${filter.value}%`}`;
+          case "greater_than":
+            return sql`c.column_id = ${column.id} AND CAST(c.value AS NUMERIC) > ${filter.value}`;
+          case "less_than":
+            return sql`c.column_id = ${column.id} AND CAST(c.value AS NUMERIC) < ${filter.value}`;
+          case "is_empty":
+            return sql`(c.column_id = ${column.id} AND (c.value IS NULL OR c.value = ''))`;
+          case "is_not_empty":
+            return sql`(c.column_id = ${column.id} AND c.value IS NOT NULL AND c.value != '')`;
+          default:
+            return undefined;
+        }
+      })
+      .filter((x): x is SQL<unknown> => x !== undefined);
+
+    // Get total count with filters
+    const countQuery = sql`
+      WITH filtered_rows AS (
+        SELECT DISTINCT r.id
+        FROM "airtable-clone_rows" r
+        LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
+        WHERE r.table_id = ${tableId}
+        ${filterConditions.length > 0 ? sql`AND (${sql.join(filterConditions, sql` OR `)})` : sql``}
+      )
+      SELECT COUNT(*) as count FROM filtered_rows
+    `;
+
+    const countResult = await db.execute<{ count: number }>(countQuery);
+    const totalCount = Number(countResult.rows[0]?.count ?? 0);
     const offset = (page - 1) * pageSize;
 
     // If sorting is requested, use the sorting logic
@@ -263,15 +310,22 @@ export async function getTableDataWithSort(params: {
         })
         .filter((x): x is SQL<unknown> => x !== undefined);
 
-      // Use the CTE approach for sorted data
-      const { rows: sortedRows } = await db.execute<QueryResult>(sql`
-        WITH sorted_rows AS (
-          SELECT r.id, r.order, ROW_NUMBER() OVER (
-            ORDER BY ${sql.join(sortCases, sql`, `)}, r.order ASC
-          ) as row_num
+      // Use the CTE approach for sorted and filtered data
+      const sortedQuery = sql`
+        WITH filtered_rows AS (
+          SELECT DISTINCT r.id
           FROM "airtable-clone_rows" r
           LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
           WHERE r.table_id = ${tableId}
+          ${filterConditions.length > 0 ? sql`AND (${sql.join(filterConditions, sql` OR `)})` : sql``}
+        ),
+        sorted_rows AS (
+          SELECT r.id, r.order, ROW_NUMBER() OVER (
+            ORDER BY ${sql.join(sortCases, sql`, `)}, r.order ASC
+          ) as row_num
+          FROM filtered_rows fr
+          JOIN "airtable-clone_rows" r ON r.id = fr.id
+          LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
           GROUP BY r.id, r.order
         )
         SELECT r.id as row_id, r.order as row_order, c.id as cell_id, c.column_id, c.value
@@ -280,7 +334,9 @@ export async function getTableDataWithSort(params: {
         LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
         WHERE sr.row_num > ${offset} AND sr.row_num <= ${offset + pageSize}
         ORDER BY sr.row_num;
-      `);
+      `;
+
+      const { rows: sortedRows } = await db.execute<QueryResult>(sortedQuery);
 
       return transformResults(sortedRows, tableColumns, tableId, tableName, {
         total: totalCount,
@@ -290,14 +346,27 @@ export async function getTableDataWithSort(params: {
       });
     }
 
-    // For unsorted data, use the chunked approach
-    const paginatedRows = await db
-      .select()
-      .from(rows)
-      .where(eq(rows.tableId, tableId))
-      .orderBy(rows.order)
-      .offset(offset)
-      .limit(pageSize);
+    // For unsorted data, use the chunked approach with filters
+    const paginatedQuery = sql`
+      WITH filtered_rows AS (
+        SELECT DISTINCT r.id
+        FROM "airtable-clone_rows" r
+        LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
+        WHERE r.table_id = ${tableId}
+        ${filterConditions.length > 0 ? sql`AND (${sql.join(filterConditions, sql` OR `)})` : sql``}
+      )
+      SELECT r.id, r.order
+      FROM filtered_rows fr
+      JOIN "airtable-clone_rows" r ON r.id = fr.id
+      ORDER BY r.order
+      OFFSET ${offset}
+      LIMIT ${pageSize}
+    `;
+
+    const { rows: paginatedRows } = await db.execute<{
+      id: string;
+      order: number;
+    }>(paginatedQuery);
 
     const CHUNK_SIZE = 50;
     const allRowsWithCells = [];
@@ -319,7 +388,7 @@ export async function getTableDataWithSort(params: {
       allRowsWithCells.push(...rowsWithCells);
     }
 
-    return transformResults(
+    const result = transformResults(
       allRowsWithCells.map((record) => ({
         row_id: record.row.id,
         row_order: record.row.order,
@@ -337,10 +406,16 @@ export async function getTableDataWithSort(params: {
         hasMore: offset + paginatedRows.length < totalCount,
       },
     );
+
+    if (!result.success) {
+      return { success: false as const, error: result.error };
+    }
+
+    return { success: true as const, table: result.table };
   } catch (error) {
     console.error("[getTableDataWithSort] Error:", error);
     return {
-      success: false,
+      success: false as const,
       error:
         error instanceof Error ? error.message : "Failed to get table data",
     };
@@ -720,49 +795,67 @@ function transformResults(
     pageSize: number;
     hasMore: boolean;
   },
-) {
-  const gridData: Row[] = [];
-  const rowDataMap = new Map<string, Row>();
-
-  for (const record of rows) {
-    if (!rowDataMap.has(record.row_id)) {
-      const newRow: Row = {
-        id: record.row_id,
-        order: record.row_order,
-      };
-      rowDataMap.set(record.row_id, newRow);
-      gridData.push(newRow);
-    }
-
-    if (record.column_id) {
-      const column = tableColumns.find((col) => col.id === record.column_id);
-      if (column) {
-        const row = rowDataMap.get(record.row_id)!;
-        row[column.id] =
-          column.type === "number"
-            ? Number(record.value) || 0
-            : (record.value ?? "");
+): TableResponse {
+  try {
+    // Group rows by row_id
+    const rowsMap = new Map<
+      string,
+      { order: number; cells: Map<string, string> }
+    >();
+    rows.forEach((row) => {
+      if (!rowsMap.has(row.row_id)) {
+        rowsMap.set(row.row_id, {
+          order: row.row_order,
+          cells: new Map(),
+        });
       }
-    }
-  }
+      if (row.column_id && row.value !== null) {
+        rowsMap.get(row.row_id)!.cells.set(row.column_id, row.value);
+      }
+    });
 
-  return {
-    success: true,
-    table: {
-      id: tableId,
-      name: tableName,
-      columns: tableColumns.map((col) => ({
-        id: col.id,
-        name: col.name,
-        type: col.type,
-        order: col.order,
-        width: col.width,
-        isSearchable: col.isSearchable,
-        isSortable: col.isSortable,
-        isVisible: col.isVisible,
-      })),
-      data: gridData,
-      pagination,
-    },
-  };
+    // Convert to array and sort by order
+    const data = Array.from(rowsMap.entries()).map(([rowId, rowData]) => {
+      const row: Row = {
+        id: rowId,
+        order: rowData.order,
+      };
+
+      // Add cell values to row
+      tableColumns.forEach((column) => {
+        row[column.id] = rowData.cells.get(column.id) ?? "";
+      });
+
+      return row;
+    });
+
+    const typedColumns: Column[] = tableColumns.map((col) => ({
+      id: col.id,
+      name: col.name,
+      type: col.type,
+      order: col.order,
+      width: col.width ?? 200,
+      isSearchable: col.isSearchable ?? true,
+      isSortable: col.isSortable ?? true,
+      isVisible: col.isVisible ?? true,
+    }));
+
+    return {
+      success: true as const,
+      table: {
+        id: tableId,
+        name: tableName,
+        columns: typedColumns,
+        data,
+        pagination,
+      },
+    };
+  } catch (error) {
+    console.error("[transformResults] Error:", error);
+    return {
+      success: false as const,
+      error:
+        error instanceof Error ? error.message : "Failed to transform results",
+    };
+  }
 }

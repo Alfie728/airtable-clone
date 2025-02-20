@@ -32,6 +32,7 @@ import { useTableConfig } from "./hooks/useTableConfig";
 import { type CellType } from "~/types/grid";
 import { AddField } from "./components/AddField";
 import { GridFooter } from "./components/GridFooter";
+import type { FilterPreference } from "~/types/filter";
 
 interface EnhancedDataGridProps {
   baseId: string;
@@ -52,6 +53,8 @@ interface EnhancedDataGridProps {
   isBatchAdding: boolean;
   sorting: SortingState;
   onSortingChangeAction: (sorting: SortingState) => void;
+  filtering: FilterPreference[];
+  onFilteringChangeAction: (filtering: FilterPreference[]) => void;
   fetchNextPage: () => void;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
@@ -87,6 +90,8 @@ export function EnhancedDataGrid({
   isBatchAdding,
   sorting,
   onSortingChangeAction,
+  filtering,
+  onFilteringChangeAction,
   updateCellAction,
   fetchNextPage,
   hasNextPage,
@@ -201,8 +206,10 @@ export function EnhancedDataGrid({
       initialData,
       tableId,
       sorting,
+      filtering,
       columnOrder,
       onSortingChangeAction,
+      onFilteringChange: onFilteringChangeAction,
       onColumnOrderChange: handleColumnOrderChange,
       updateCellAction,
     });
