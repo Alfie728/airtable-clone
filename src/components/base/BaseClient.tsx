@@ -89,12 +89,6 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     // Skip if we're already handling navigation through handleTableSelect
     if (isHandlingNavigation) return;
 
-    // Clear pendingActiveViewId when navigation is complete
-    if (pendingActiveViewId && pendingActiveViewId === viewId) {
-      setPendingActiveViewId(null);
-      return;
-    }
-
     // Only handle invalid table scenarios
     if (!isBaseLoading && !isTableLoading && baseTables?.length > 0) {
       const isInvalidTable =
@@ -112,40 +106,15 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         );
 
         if (cachedView) {
-          // Set pending view before navigation
-          setPendingActiveViewId(cachedView);
-          router.replace(`/${baseId}/${firstTable.id}/${cachedView}`, {
-            scroll: false,
-          });
+          // Use replace instead of push to avoid history stack issues
+          router.replace(`/${baseId}/${firstTable.id}/${cachedView}`);
           setIsHandlingNavigation(false);
           return;
         }
 
-        // If no cached view, show loading state and fetch it
-        router.replace(`/${baseId}/${firstTable.id}/loading`, {
-          scroll: false,
-        });
-
-        void getDefaultView(firstTable.id).then(({ viewId, error }) => {
-          if (!viewId) {
-            console.error("Failed to get or create default view:", error);
-            toast.error(
-              "Failed to load table view. Please contact support if this persists.",
-            );
-            setIsHandlingNavigation(false);
-            setPendingActiveViewId(null);
-            return;
-          }
-
-          // Set pending view before navigation
-          setPendingActiveViewId(viewId);
-          queryClient.setQueryData(queryKeys.views.detail("default"), viewId);
-
-          router.replace(`/${baseId}/${firstTable.id}/${viewId}`, {
-            scroll: false,
-          });
-          setIsHandlingNavigation(false);
-        });
+        // If no cached view, redirect to base page
+        router.replace(`/${baseId}`);
+        setIsHandlingNavigation(false);
       }
     } else if (!isBaseLoading && (!baseTables || baseTables.length === 0)) {
       // Handle empty base case
@@ -161,9 +130,15 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     router,
     queryClient,
     isHandlingNavigation,
-    pendingActiveViewId,
-    viewId,
   ]);
+
+  // Clear pending states when navigation is complete
+  useEffect(() => {
+    if (!isHandlingNavigation) {
+      setPendingActiveTableId(null);
+      setPendingActiveViewId(null);
+    }
+  }, [isHandlingNavigation]);
 
   const handleTableCreated = async (
     newTable: typeof tables.$inferSelect & { defaultViewId?: string },
