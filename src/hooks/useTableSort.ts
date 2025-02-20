@@ -13,7 +13,7 @@ export function useTableSort(viewId: string) {
 
   // Query for initial sort state
   const { data: initialSortState } = useQuery<SortingState>({
-    queryKey: queryKeys.views.customizations.sorts(viewId),
+    queryKey: queryKeys.views.structure.configuration.sorts(viewId),
     queryFn: async () => {
       const result = await getViewSorts(viewId);
       if (!result.success) {
@@ -53,16 +53,16 @@ export function useTableSort(viewId: string) {
     },
     onMutate: async (newSorting) => {
       await queryClient.cancelQueries({
-        queryKey: queryKeys.views.customizations.sorts(viewId),
+        queryKey: queryKeys.views.structure.configuration.sorts(viewId),
       });
 
       const previousSorting = queryClient.getQueryData<SortingState>(
-        queryKeys.views.customizations.sorts(viewId),
+        queryKeys.views.structure.configuration.sorts(viewId),
       );
 
       // Update the cache optimistically
       queryClient.setQueryData<SortingState>(
-        queryKeys.views.customizations.sorts(viewId),
+        queryKeys.views.structure.configuration.sorts(viewId),
         newSorting,
       );
 
@@ -71,7 +71,7 @@ export function useTableSort(viewId: string) {
     onError: (err, newSorting, context) => {
       if (context?.previousSorting) {
         queryClient.setQueryData(
-          queryKeys.views.customizations.sorts(viewId),
+          queryKeys.views.structure.configuration.sorts(viewId),
           context.previousSorting,
         );
       }

@@ -51,7 +51,7 @@ export async function prefetchTable(
 
   // Prefetch table data
   await queryClient.prefetchQuery({
-    queryKey: queryKeys.tables.data(tableId),
+    queryKey: queryKeys.tables.data.root(tableId),
     queryFn: () => getTableDataWithSort({ tableId, tableName }),
     staleTime: 5 * 1000,
   });
@@ -69,7 +69,7 @@ export async function prefetchTable(
 
         // Prefetch sorts for the default view
         void queryClient.prefetchQuery({
-          queryKey: queryKeys.views.customizations.sorts(viewId),
+          queryKey: queryKeys.views.structure.configuration.sorts(viewId),
           queryFn: async () => {
             const result = await getViewSorts(viewId);
             if (!result.success) {
@@ -118,7 +118,7 @@ export async function prefetchBaseTables(
         void Promise.all(
           tablesResult.tables.map((table) =>
             queryClient.prefetchQuery({
-              queryKey: queryKeys.tables.data(table.id),
+              queryKey: queryKeys.tables.data.root(table.id),
               queryFn: () =>
                 getTableDataWithSort({
                   tableId: table.id,
@@ -148,7 +148,8 @@ export async function prefetchBaseTables(
 
                   // Prefetch sorts for the default view
                   void queryClient.prefetchQuery({
-                    queryKey: queryKeys.views.customizations.sorts(viewId),
+                    queryKey:
+                      queryKeys.views.structure.configuration.sorts(viewId),
                     queryFn: async () => {
                       const result = await getViewSorts(viewId);
                       if (!result.success) {

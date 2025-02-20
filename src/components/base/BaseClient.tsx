@@ -18,6 +18,7 @@ import { useViews } from "~/hooks/useViews";
 import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
 import { queryKeys } from "~/lib/query/keys";
 import { prefetchTable } from "~/lib/query/prefetch";
+import { useTableStructure } from "~/hooks/useTableStructure";
 
 interface BaseClientProps {
   baseId: string;
@@ -50,6 +51,9 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
   const tableName = baseTables.find((t) => t.id === tableId)?.name ?? "";
 
+  // Get table structure separately to prevent UI flickering
+  const { data: structureData } = useTableStructure(tableId);
+
   const {
     tableData,
     isLoading,
@@ -71,7 +75,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     isUpdatingSort,
     isUpdatingFilter,
   } = useTableData({ baseId, tableId, tableName, viewId });
-  console.log("filterState", filterState);
+
   const {
     views: tableViews,
     isLoading: isViewsLoading,
@@ -316,7 +320,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         <GridControls
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-          columns={tableData?.columns ?? []}
+          columns={structureData?.success ? structureData.columns : []}
           sorting={sortState}
           onSortingChange={handleSortChange}
           filtering={filterState}

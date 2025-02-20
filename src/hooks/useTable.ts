@@ -174,7 +174,7 @@ export const useTable = (baseId: string, tableId: string) => {
     status,
     error: queryError,
   } = useInfiniteQuery<TableQueryResponse, Error>({
-    queryKey: queryKeys.tables.data(tableId),
+    queryKey: queryKeys.tables.data.root(tableId),
     queryFn: async ({ pageParam }) => {
       if (!tables) throw new Error("Tables not loaded yet");
       console.log("[useTable] Fetching page:", { pageParam });
@@ -269,11 +269,11 @@ export const useTable = (baseId: string, tableId: string) => {
     },
     onMutate: async (optimisticRow) => {
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.data(tableId),
+        queryKey: queryKeys.tables.data.root(tableId),
       });
       const previousData = queryClient.getQueryData<
         InfiniteData<TableQueryResponse>
-      >(queryKeys.tables.data(tableId));
+      >(queryKeys.tables.data.root(tableId));
 
       if (previousData?.pages[0]?.success) {
         // Get the highest order using reduce - more efficient for large datasets
@@ -290,7 +290,7 @@ export const useTable = (baseId: string, tableId: string) => {
 
         // Update all pages that contain the table data
         queryClient.setQueryData<InfiniteData<TableQueryResponse>>(
-          queryKeys.tables.data(tableId),
+          queryKeys.tables.data.root(tableId),
           (old) => {
             if (!old) return old;
             return {
@@ -318,7 +318,7 @@ export const useTable = (baseId: string, tableId: string) => {
     onError: (err, _, context) => {
       if (context?.previousData) {
         queryClient.setQueryData(
-          queryKeys.tables.data(tableId),
+          queryKeys.tables.data.root(tableId),
           context.previousData,
         );
       }
@@ -392,17 +392,17 @@ export const useTable = (baseId: string, tableId: string) => {
     onMutate: async (params) => {
       if (!pendingRowCreationsRef.current.has(params.rowId)) {
         await queryClient.cancelQueries({
-          queryKey: queryKeys.tables.data(tableId),
+          queryKey: queryKeys.tables.data.root(tableId),
         });
       }
 
       const previousData = queryClient.getQueryData<
         InfiniteData<TableQueryResponse>
-      >(queryKeys.tables.data(tableId));
+      >(queryKeys.tables.data.root(tableId));
 
       if (previousData?.pages[0]?.success) {
         queryClient.setQueryData<InfiniteData<TableQueryResponse>>(
-          queryKeys.tables.data(tableId),
+          queryKeys.tables.data.root(tableId),
           (old) => {
             if (!old) return old;
             return {
@@ -435,7 +435,7 @@ export const useTable = (baseId: string, tableId: string) => {
     onError: (err, variables, context) => {
       if (context?.previousData) {
         queryClient.setQueryData(
-          queryKeys.tables.data(tableId),
+          queryKeys.tables.data.root(tableId),
           context.previousData,
         );
       }
@@ -463,11 +463,11 @@ export const useTable = (baseId: string, tableId: string) => {
     },
     onMutate: async (params: { optimisticRows: Row[] }) => {
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.data(tableId),
+        queryKey: queryKeys.tables.data.root(tableId),
       });
       const previousData = queryClient.getQueryData<
         InfiniteData<TableQueryResponse>
-      >(queryKeys.tables.data(tableId));
+      >(queryKeys.tables.data.root(tableId));
 
       if (previousData?.pages[0]?.success) {
         // Get the highest order using reduce - more efficient for large datasets
@@ -484,7 +484,7 @@ export const useTable = (baseId: string, tableId: string) => {
 
         // Update all pages that contain the table data
         queryClient.setQueryData<InfiniteData<TableQueryResponse>>(
-          queryKeys.tables.data(tableId),
+          queryKeys.tables.data.root(tableId),
           (old) => {
             if (!old) return old;
             return {
@@ -512,7 +512,7 @@ export const useTable = (baseId: string, tableId: string) => {
     onError: (err, variables, context) => {
       if (context?.previousData) {
         queryClient.setQueryData(
-          queryKeys.tables.data(tableId),
+          queryKeys.tables.data.root(tableId),
           context.previousData,
         );
       }
@@ -545,7 +545,7 @@ export const useTable = (baseId: string, tableId: string) => {
         queryKey: queryKeys.bases.tables.list(baseId),
       });
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.data(tableId),
+        queryKey: queryKeys.tables.data.root(tableId),
       });
 
       // Snapshot the previous value
@@ -566,11 +566,11 @@ export const useTable = (baseId: string, tableId: string) => {
 
       // Optimistically update table detail
       const previousTableData = queryClient.getQueryData<TableResponse>(
-        queryKeys.tables.data(tableId),
+        queryKeys.tables.data.root(tableId),
       );
 
       if (previousTableData?.table) {
-        queryClient.setQueryData(queryKeys.tables.data(tableId), {
+        queryClient.setQueryData(queryKeys.tables.data.root(tableId), {
           ...previousTableData,
           table: {
             ...previousTableData.table,
@@ -591,7 +591,7 @@ export const useTable = (baseId: string, tableId: string) => {
       }
       if (context?.previousTableData) {
         queryClient.setQueryData(
-          queryKeys.tables.data(tableId),
+          queryKeys.tables.data.root(tableId),
           context.previousTableData,
         );
       }
@@ -653,14 +653,14 @@ export const useTable = (baseId: string, tableId: string) => {
       const startTime = Date.now();
       console.log("[Client] Starting optimistic update");
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.data(tableId),
+        queryKey: queryKeys.tables.data.root(tableId),
       });
       await queryClient.cancelQueries({
         queryKey: queryKeys.bases.tables.list(baseId),
       });
 
       const previousTableData = queryClient.getQueryData<TableResponse>(
-        queryKeys.tables.data(tableId),
+        queryKeys.tables.data.root(tableId),
       );
       const previousTables = queryClient.getQueryData<{
         success: boolean;
@@ -688,7 +688,7 @@ export const useTable = (baseId: string, tableId: string) => {
       });
       if (context?.previousTableData) {
         queryClient.setQueryData(
-          queryKeys.tables.data(tableId),
+          queryKeys.tables.data.root(tableId),
           context.previousTableData,
         );
       }

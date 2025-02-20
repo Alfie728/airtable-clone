@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { type SortingState } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { Row, Column } from "~/types/table";
+import type { Row, Column, TableResponse } from "~/types/table";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "~/lib/query/keys";
 import {
@@ -321,7 +321,7 @@ export function EnhancedDataGrid({
 
                         // Invalidate the sorted data query to refetch with new order
                         await queryClient.invalidateQueries({
-                          queryKey: queryKeys.tables.viewData(tableId, viewId),
+                          queryKey: queryKeys.views.data.root(tableId, viewId),
                         });
                       } catch (error) {
                         toast.error(

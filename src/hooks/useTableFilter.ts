@@ -15,7 +15,7 @@ export function useTableFilter(viewId: string) {
 
   // Query for initial filter state
   const { data: initialFilterState } = useQuery<FilterState>({
-    queryKey: queryKeys.views.customizations.filters(viewId),
+    queryKey: queryKeys.views.structure.configuration.filters(viewId),
     queryFn: async () => {
       const result = await getViewFilters(viewId);
       if (!result.success) {
@@ -72,16 +72,16 @@ export function useTableFilter(viewId: string) {
     },
     onMutate: async (newFiltering) => {
       await queryClient.cancelQueries({
-        queryKey: queryKeys.views.customizations.filters(viewId),
+        queryKey: queryKeys.views.structure.configuration.filters(viewId),
       });
 
       const previousFiltering = queryClient.getQueryData<FilterState>(
-        queryKeys.views.customizations.filters(viewId),
+        queryKeys.views.structure.configuration.filters(viewId),
       );
 
       // Update the cache optimistically
       queryClient.setQueryData<FilterState>(
-        queryKeys.views.customizations.filters(viewId),
+        queryKeys.views.structure.configuration.filters(viewId),
         newFiltering,
       );
 
@@ -90,7 +90,7 @@ export function useTableFilter(viewId: string) {
     onError: (err, newFiltering, context) => {
       if (context?.previousFiltering) {
         queryClient.setQueryData(
-          queryKeys.views.customizations.filters(viewId),
+          queryKeys.views.structure.configuration.filters(viewId),
           context.previousFiltering,
         );
       }

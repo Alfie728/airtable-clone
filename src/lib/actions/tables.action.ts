@@ -859,3 +859,14 @@ function transformResults(
     };
   }
 }
+
+export async function getTableStructure(tableId: string) {
+  const result = await getTableDataWithSort({ tableId, tableName: "" });
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+  return {
+    success: true,
+    columns: result.table?.columns ?? [],
+  };
+}

@@ -25,6 +25,7 @@ import type {
 } from "~/types/table";
 import { faker } from "@faker-js/faker";
 import pages from "next/dist/build/templates/pages";
+import { useTableStructure } from "./useTableStructure";
 
 function generateMockRow(columns: Column[]): Row {
   const row: Row = {
@@ -219,22 +220,26 @@ export function useTableData({
     isUpdating: isUpdatingFilter,
   } = useTableFilter(viewId ?? "");
 
+  // Get table structure (columns)
+  const { data: structureData, isLoading: isLoadingStructure } =
+    useTableStructure(tableId);
+
   // Query for table data with infinite pagination
   const {
     data: pages,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-    isLoading,
+    isLoading: isLoadingData,
     error,
   } = useInfiniteQuery<TableResponse, Error>({
     queryKey: viewId
-      ? [
-          ...queryKeys.tables.viewData(tableId, viewId),
-          JSON.stringify(initialSortState),
-          JSON.stringify(initialFilterState),
-        ]
-      : ["tables", tableId, "data"],
+      ? queryKeys.views.data.withConfig(tableId, viewId, {
+          sorts: JSON.stringify(initialSortState),
+          filters: JSON.stringify(initialFilterState),
+          page: 1,
+        })
+      : queryKeys.tables.data.root(tableId),
     queryFn: async ({ pageParam }): Promise<TableResponse> => {
       const response = await getTableDataWithSort({
         tableId,
@@ -258,7 +263,7 @@ export function useTableData({
       return pagination.hasMore ? pagination.page + 1 : undefined;
     },
     initialPageParam: 1,
-    enabled: Boolean(tableId && tableName),
+    enabled: Boolean(tableId && tableName && structureData?.success),
     staleTime: 30000,
     refetchOnMount: true,
     maxPages: undefined, // Allow unlimited pages
@@ -266,7 +271,8 @@ export function useTableData({
 
   // Combine all pages of data
   const tableData = useMemo(() => {
-    if (!pages?.pages || pages.pages.length === 0) return undefined;
+    if (!pages?.pages || pages.pages.length === 0 || !structureData?.success)
+      return undefined;
 
     const firstPage = pages.pages[0];
     if (!firstPage?.success) return undefined;
@@ -283,11 +289,14 @@ export function useTableData({
 
     const result: TableData = {
       ...table,
+      columns: structureData.columns ?? [],
       data: allData,
     };
 
     return result;
-  }, [pages?.pages]);
+  }, [pages?.pages, structureData]);
+
+  const isLoading = isLoadingStructure || isLoadingData;
 
   // Add row mutation
   const addRowMutation = useMutation<AddRowResponse, Error, Row, AddRowContext>(
@@ -300,16 +309,14 @@ export function useTableData({
       },
       onMutate: async (optimisticRow): Promise<AddRowContext> => {
         const queryKey = viewId
-          ? [
-              ...queryKeys.tables.viewData(tableId, viewId),
-              JSON.stringify(initialSortState),
-              JSON.stringify(initialFilterState),
-            ]
-          : queryKeys.tables.data(tableId);
+          ? queryKeys.views.data.withConfig(tableId, viewId, {
+              sorts: JSON.stringify(initialSortState),
+              filters: JSON.stringify(initialFilterState),
+              page: 1,
+            })
+          : queryKeys.tables.data.root(tableId);
 
-        await queryClient.cancelQueries({
-          queryKey,
-        });
+        await queryClient.cancelQueries({ queryKey });
         const previousData =
           queryClient.getQueryData<InfiniteTableData>(queryKey);
 
@@ -318,11 +325,7 @@ export function useTableData({
             ...tableData.data.map((row) => row.order),
             -1,
           );
-
-          const rowWithOrder = {
-            ...optimisticRow,
-            order: maxOrder + 1,
-          };
+          const rowWithOrder = { ...optimisticRow, order: maxOrder + 1 };
 
           queryClient.setQueryData<InfiniteTableData>(queryKey, (old) => {
             if (!old) return old;
@@ -349,12 +352,12 @@ export function useTableData({
       onError: (err, variables, context) => {
         if (context?.previousData) {
           const queryKey = viewId
-            ? [
-                ...queryKeys.tables.viewData(tableId, viewId),
-                JSON.stringify(initialSortState),
-                JSON.stringify(initialFilterState),
-              ]
-            : queryKeys.tables.data(tableId);
+            ? queryKeys.views.data.withConfig(tableId, viewId, {
+                sorts: JSON.stringify(initialSortState),
+                filters: JSON.stringify(initialFilterState),
+                page: 1,
+              })
+            : queryKeys.tables.data.root(tableId);
           queryClient.setQueryData(queryKey, context.previousData);
         }
         pendingRowCreationsRef.current.delete(variables.id);
@@ -422,17 +425,15 @@ export function useTableData({
     },
     onMutate: async (params): Promise<UpdateCellContext> => {
       const queryKey = viewId
-        ? [
-            ...queryKeys.tables.viewData(tableId, viewId),
-            JSON.stringify(initialSortState),
-            JSON.stringify(initialFilterState),
-          ]
-        : queryKeys.tables.data(tableId);
+        ? queryKeys.views.data.withConfig(tableId, viewId, {
+            sorts: JSON.stringify(initialSortState),
+            filters: JSON.stringify(initialFilterState),
+            page: 1,
+          })
+        : queryKeys.tables.data.root(tableId);
 
       if (!pendingRowCreationsRef.current.has(params.rowId)) {
-        await queryClient.cancelQueries({
-          queryKey,
-        });
+        await queryClient.cancelQueries({ queryKey });
       }
 
       const previousData =
@@ -472,12 +473,12 @@ export function useTableData({
     onError: (err, variables, context) => {
       if (context?.previousData) {
         const queryKey = viewId
-          ? [
-              ...queryKeys.tables.viewData(tableId, viewId),
-              JSON.stringify(initialSortState),
-              JSON.stringify(initialFilterState),
-            ]
-          : queryKeys.tables.data(tableId);
+          ? queryKeys.views.data.withConfig(tableId, viewId, {
+              sorts: JSON.stringify(initialSortState),
+              filters: JSON.stringify(initialFilterState),
+              page: 1,
+            })
+          : queryKeys.tables.data.root(tableId);
         queryClient.setQueryData(queryKey, context.previousData);
       }
     },
@@ -500,16 +501,14 @@ export function useTableData({
     },
     onMutate: async (params): Promise<AddBulkRowsContext> => {
       const queryKey = viewId
-        ? [
-            ...queryKeys.tables.viewData(tableId, viewId),
-            JSON.stringify(initialSortState),
-            JSON.stringify(initialFilterState),
-          ]
-        : queryKeys.tables.data(tableId);
+        ? queryKeys.views.data.withConfig(tableId, viewId, {
+            sorts: JSON.stringify(initialSortState),
+            filters: JSON.stringify(initialFilterState),
+            page: 1,
+          })
+        : queryKeys.tables.data.root(tableId);
 
-      await queryClient.cancelQueries({
-        queryKey,
-      });
+      await queryClient.cancelQueries({ queryKey });
       const previousData =
         queryClient.getQueryData<InfiniteTableData>(queryKey);
 
@@ -518,7 +517,6 @@ export function useTableData({
           ...tableData.data.map((row) => row.order),
           -1,
         );
-
         const rowsWithOrder = params.optimisticRows.map((row, index) => ({
           ...row,
           order: maxOrder + 1 + index,
@@ -549,12 +547,12 @@ export function useTableData({
     onError: (err, variables, context) => {
       if (context?.previousData) {
         const queryKey = viewId
-          ? [
-              ...queryKeys.tables.viewData(tableId, viewId),
-              JSON.stringify(initialSortState),
-              JSON.stringify(initialFilterState),
-            ]
-          : queryKeys.tables.data(tableId);
+          ? queryKeys.views.data.withConfig(tableId, viewId, {
+              sorts: JSON.stringify(initialSortState),
+              filters: JSON.stringify(initialFilterState),
+              page: 1,
+            })
+          : queryKeys.tables.data.root(tableId);
         queryClient.setQueryData(queryKey, context.previousData);
       }
       variables.optimisticRows.forEach((row) => {
@@ -583,7 +581,7 @@ export function useTableData({
         queryKey: queryKeys.bases.tables.list(baseId),
       });
       await queryClient.cancelQueries({
-        queryKey: queryKeys.tables.data(tableId),
+        queryKey: queryKeys.tables.data.root(tableId),
       });
 
       const previousTables = queryClient.getQueryData<{

@@ -59,11 +59,14 @@ export function useSortedTable(
     isLoading: isSortingData,
     error: sortError,
   } = useInfiniteQuery<SortedTableResponse>({
-    queryKey: queryKeys.tables.viewData(tableId, viewId),
+    queryKey: queryKeys.views.data.withConfig(tableId, viewId, {
+      sorts: JSON.stringify(initialSortState),
+      page: 1,
+    }),
     queryFn: async ({ pageParam }) => {
       const sortState =
         queryClient.getQueryData<SortingState>(
-          queryKeys.views.customizations.sorts(viewId),
+          queryKeys.views.structure.configuration.sorts(viewId),
         ) ?? [];
 
       return getTableDataWithSort({
@@ -107,48 +110,15 @@ export function useSortedTable(
     };
   }, [pages?.pages]);
 
-  // Function to handle sort changes
-  const handleSortChange = async (newSorting: SortingState) => {
-    try {
-      // Optimistically update the sort state
-      queryClient.setQueryData<SortingState>(
-        queryKeys.views.customizations.sorts(viewId),
-        newSorting,
-      );
-
-      // Reset all queries related to this view
-      await Promise.all([
-        // Reset the sort state
-        queryClient.resetQueries({
-          queryKey: queryKeys.views.customizations.sorts(viewId),
-        }),
-        // Reset the sorted data
-        queryClient.resetQueries({
-          queryKey: queryKeys.tables.viewData(tableId, viewId),
-        }),
-      ]);
-
-      // Update the sort state in the database
-      await updateSort(newSorting);
-    } catch (error) {
-      // On error, revert the optimistic update
-      queryClient.setQueryData(
-        queryKeys.views.customizations.sorts(viewId),
-        initialSortState ?? [],
-      );
-      throw error;
-    }
-  };
-
   return {
     sortedData,
-    isSortingData,
-    sortError,
+    isLoading: isSortingData,
+    error: sortError,
     sortState: initialSortState ?? [],
-    handleSortChange,
+    handleSortChange: updateSort,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
     isUpdatingSort,
-    fetchNextPageSorted: fetchNextPage,
-    hasNextPageSorted: hasNextPage,
-    isFetchingNextPageSorted: isFetchingNextPage,
   };
 }
