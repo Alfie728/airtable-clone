@@ -2,7 +2,7 @@
 
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "~/server/db";
-import { columns, cells } from "~/server/db/schema";
+import { columns, cells, rows } from "~/server/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import type { Column } from "~/types/table";
 
@@ -22,6 +22,7 @@ export async function addColumn(
   tableId: string,
   name: string,
   type: "text" | "number",
+  defaultValue?: string,
 ): Promise<ColumnResponse> {
   try {
     const user = await currentUser();
@@ -37,7 +38,7 @@ export async function addColumn(
 
     const newOrder = (maxOrderResult?.maxOrder ?? -1) + 1;
 
-    // Create the new column with the client-provided name
+    // Create the new column with the client-provided name and default value
     const [newColumn] = await db
       .insert(columns)
       .values({
@@ -49,8 +50,32 @@ export async function addColumn(
         isSearchable: true,
         isSortable: true,
         isVisible: true,
+        defaultValue: defaultValue ?? "",
       })
       .returning();
+
+    if (!newColumn) {
+      return { success: false, error: "Failed to create column" };
+    }
+
+    // Get all existing rows for this table
+    const existingRows = await db
+      .select()
+      .from(rows)
+      .where(eq(rows.tableId, tableId));
+
+    // Create cells for all existing rows with the default value
+    if (existingRows.length > 0) {
+      await db.insert(cells).values(
+        existingRows.map((row) => ({
+          rowId: row.id,
+          columnId: newColumn.id,
+          value: defaultValue ?? "",
+          displayValue: defaultValue ?? "",
+          searchVector: sql`to_tsvector(${defaultValue ?? ""})`,
+        })),
+      );
+    }
 
     return { success: true, column: newColumn };
   } catch (error) {

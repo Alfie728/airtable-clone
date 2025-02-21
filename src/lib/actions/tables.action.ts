@@ -304,9 +304,14 @@ export async function getTableDataWithSort(params: {
           const column = tableColumns.find((col) => col.id === sort.id);
           if (!column) return undefined;
 
+          const sortExpression =
+            column.type === "number"
+              ? sql`CAST(CASE WHEN c.column_id = ${column.id} THEN c.value END AS NUMERIC)`
+              : sql`CASE WHEN c.column_id = ${column.id} THEN c.value END`;
+
           return sort.desc
-            ? sql`MAX(CASE WHEN c.column_id = ${column.id} THEN c.value END) DESC NULLS LAST`
-            : sql`MAX(CASE WHEN c.column_id = ${column.id} THEN c.value END) ASC NULLS LAST`;
+            ? sql`MAX(${sortExpression}) DESC NULLS LAST`
+            : sql`MAX(${sortExpression}) ASC NULLS LAST`;
         })
         .filter((x): x is SQL<unknown> => x !== undefined);
 
@@ -484,19 +489,29 @@ export async function addRow(
 
 export async function addCell(rowId: string, columnId: string, value: string) {
   try {
-    // Get the row and table info for revalidation
+    // Get the row, column and table info for revalidation
     const rowData = await db
       .select({
         row: rows,
         table: tables,
+        column: columns,
       })
       .from(rows)
       .where(eq(rows.id, rowId))
       .innerJoin(tables, eq(tables.id, rows.tableId))
+      .innerJoin(columns, eq(columns.id, columnId))
       .limit(1);
 
     if (!rowData[0]) {
-      return { success: false, error: "Row not found" };
+      return { success: false, error: "Row or column not found" };
+    }
+
+    // Validate number type
+    if (rowData[0].column.type === "number") {
+      const numValue = Number(value);
+      if (isNaN(numValue)) {
+        return { success: false, error: "Invalid number value" };
+      }
     }
 
     // Check if cell already exists

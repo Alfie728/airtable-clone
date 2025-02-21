@@ -254,7 +254,13 @@ export function GridControls({
                         handleToggleSortDirection(sort.id);
                       }}
                     >
-                      {sort.desc ? "Z → A" : "A → Z"}
+                      {column.type === "number"
+                        ? sort.desc
+                          ? "9 → 1"
+                          : "1 → 9"
+                        : sort.desc
+                          ? "Z → A"
+                          : "A → Z"}
                     </Button>
 
                     <Button
@@ -286,7 +292,8 @@ export function GridControls({
                     }}
                     className="h-7 text-xs"
                   >
-                    {column.name}
+                    {column.name} (
+                    {column.type === "number" ? "1 → 9" : "A → Z"})
                   </DropdownMenuItem>
                 ))}
               </div>

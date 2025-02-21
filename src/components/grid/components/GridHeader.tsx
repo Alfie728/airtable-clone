@@ -2,7 +2,7 @@
 
 import type { HeaderContext } from "@tanstack/react-table";
 import type { Row, Column } from "~/types/table";
-import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown, Hash, Text } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { ColumnManagement } from "../ColumnManagement";
 import type { QueryClient } from "@tanstack/react-query";
@@ -21,6 +21,7 @@ export function GridHeader({
   tableId,
   queryClient,
 }: GridHeaderProps) {
+  const columnType = column.type;
   const sortIndex = headerContext.table
     .getState()
     .sorting.findIndex((sort) => sort.id === column.id);
@@ -28,6 +29,11 @@ export function GridHeader({
   return (
     <div className="flex w-full items-center justify-between">
       <div className="flex items-center gap-2">
+        {columnType === "number" ? (
+          <Hash className="h-4 w-4 text-gray-400" />
+        ) : (
+          <Text className="h-4 w-4 text-gray-400" />
+        )}
         <span>{column.name}</span>
         {headerContext.column.getCanSort() && (
           <div

@@ -13,6 +13,7 @@ import { queryKeys } from "~/lib/query/keys";
 import { toast } from "sonner";
 import { type SortingState } from "@tanstack/react-table";
 import { type FilterPreference } from "~/types/filter";
+import { queryClient } from "~/lib/query";
 
 interface AddColumnContext {
   previousData?: TableResponse;
@@ -70,91 +71,11 @@ export const useColumns = (tableId: string, viewId?: string) => {
 
   const addColumnMutation = useMutation({
     mutationFn: async ({ name, type, defaultValue }: AddColumnParams) => {
-      // Get the current sort state
-      const sortState = viewId
-        ? (queryClient.getQueryData<SortingState>(
-            queryKeys.views.structure.configuration.sorts(viewId),
-          ) ?? [])
-        : [];
-
-      // Get the current filter state
-      const filterState = viewId
-        ? (queryClient.getQueryData<FilterPreference[]>(
-            queryKeys.views.structure.configuration.filters(viewId),
-          ) ?? [])
-        : [];
-
-      // Use the queryKeys helper
-      const fullQueryKey = viewId
-        ? queryKeys.views.data.withConfig(tableId, viewId, {
-            sorts: JSON.stringify(sortState),
-            filters: JSON.stringify(filterState),
-            page: 1,
-          })
-        : queryKeys.tables.data.root(tableId);
-
-      const previousData =
-        queryClient.getQueryData<InfiniteTableData>(fullQueryKey);
-      console.log("Found data:", previousData);
-
-      if (!previousData?.pages?.[0]?.table) {
-        throw new Error("No table data found");
-      }
-
-      const firstPage = previousData.pages[0];
-      const existingColumns = firstPage.table?.columns ?? [];
-
-      // Generate unique name based on client state
-      let uniqueName = name;
-      let counter = 1;
-      while (existingColumns.some((col) => col.name === uniqueName)) {
-        uniqueName = `${name} ${counter}`;
-        counter++;
-      }
-
-      // Create optimistic column
-      const optimisticColumn: Column = {
-        id: crypto.randomUUID(),
-        name: uniqueName,
-        type,
-        order: existingColumns.length,
-        width: 200,
-        isSearchable: true,
-        isSortable: true,
-        isVisible: true,
-      };
-
-      // Update client state immediately with default values
-      queryClient.setQueryData<InfiniteTableData>(fullQueryKey, {
-        ...previousData,
-        pages: previousData.pages.map((page) => {
-          if (!page.success || !page.table) return page;
-          return {
-            ...page,
-            table: {
-              ...page.table,
-              columns: [...page.table.columns, optimisticColumn],
-              data: page.table.data.map((row) => ({
-                ...row,
-                [optimisticColumn.id]:
-                  type === "number" ? 0 : (defaultValue ?? ""),
-              })),
-            },
-          };
-        }),
-      });
-
-      // Sync with server
-      const result = await addColumn(tableId, uniqueName, type);
+      const result = await addColumn(tableId, name, type, defaultValue ?? "");
       if (!result.success) {
         throw new Error(result.error ?? "Failed to add column");
       }
-
       return result;
-    },
-    onSuccess: (data, variables, context) => {
-      // The mutation function already updates the cache optimistically
-      // and handles the server response, so we don't need additional logic here
     },
     onSettled: () => {
       const sortState = viewId
@@ -191,8 +112,7 @@ export const useColumns = (tableId: string, viewId?: string) => {
   const deleteColumnMutation = useMutation<
     { success: boolean; column?: Column },
     Error,
-    string,
-    { previousData?: InfiniteTableData }
+    string
   >({
     mutationFn: async (columnId: string) => {
       const result = await deleteColumn(tableId, columnId);
@@ -201,105 +121,10 @@ export const useColumns = (tableId: string, viewId?: string) => {
       }
       return result;
     },
-    onMutate: async (columnId) => {
-      const sortState = viewId
-        ? (queryClient.getQueryData<SortingState>(
-            queryKeys.views.structure.configuration.sorts(viewId),
-          ) ?? [])
-        : [];
-
-      const filterState = viewId
-        ? (queryClient.getQueryData<FilterPreference[]>(
-            queryKeys.views.structure.configuration.filters(viewId),
-          ) ?? [])
-        : [];
-
-      const fullQueryKey = viewId
-        ? queryKeys.views.data.withConfig(tableId, viewId, {
-            sorts: JSON.stringify(sortState),
-            filters: JSON.stringify(filterState),
-            page: 1,
-          })
-        : queryKeys.tables.data.root(tableId);
-
-      // Cancel any outgoing refetches
-      await queryClient.cancelQueries({
-        queryKey: fullQueryKey,
-      });
-
-      // Snapshot the previous value
-      const previousData =
-        queryClient.getQueryData<InfiniteTableData>(fullQueryKey);
-
-      if (previousData?.pages?.[0]?.table?.columns) {
-        const firstPage = previousData.pages[0];
-        // Get the column being deleted
-        const deletedColumn = firstPage.table?.columns.find(
-          (col) => col.id === columnId,
-        );
-
-        if (deletedColumn) {
-          // Update the cache with new data
-          queryClient.setQueryData<InfiniteTableData>(fullQueryKey, {
-            ...previousData,
-            pages: previousData.pages.map((page) => {
-              if (!page.success || !page.table) return page;
-
-              // Update columns with new order
-              const updatedColumns = page.table.columns
-                .filter((col) => col.id !== columnId)
-                .map((col) =>
-                  col.order > deletedColumn.order
-                    ? { ...col, order: col.order - 1 }
-                    : col,
-                );
-
-              // Update data by removing the deleted column's data
-              const updatedData = page.table.data.map((row: Row) => {
-                const newRow = { ...row };
-                delete newRow[columnId];
-                return newRow;
-              });
-
-              return {
-                ...page,
-                table: {
-                  ...page.table,
-                  columns: updatedColumns,
-                  data: updatedData,
-                },
-              };
-            }),
-          });
-        }
-      }
-
-      return { previousData };
-    },
-    onError: (err, columnId, context) => {
-      const sortState = viewId
-        ? (queryClient.getQueryData<SortingState>(
-            queryKeys.views.structure.configuration.sorts(viewId),
-          ) ?? [])
-        : [];
-
-      const filterState = viewId
-        ? (queryClient.getQueryData<FilterPreference[]>(
-            queryKeys.views.structure.configuration.filters(viewId),
-          ) ?? [])
-        : [];
-
-      const fullQueryKey = viewId
-        ? queryKeys.views.data.withConfig(tableId, viewId, {
-            sorts: JSON.stringify(sortState),
-            filters: JSON.stringify(filterState),
-            page: 1,
-          })
-        : queryKeys.tables.data.root(tableId);
-
-      if (context?.previousData) {
-        queryClient.setQueryData(fullQueryKey, context.previousData);
-      }
+    onError: (err) => {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete column",
+      );
     },
     onSettled: () => {
       const sortState = viewId
@@ -314,7 +139,7 @@ export const useColumns = (tableId: string, viewId?: string) => {
           ) ?? [])
         : [];
 
-      const fullQueryKey = viewId
+      const tableDataQueryKey = viewId
         ? queryKeys.views.data.withConfig(tableId, viewId, {
             sorts: JSON.stringify(sortState),
             filters: JSON.stringify(filterState),
@@ -322,14 +147,19 @@ export const useColumns = (tableId: string, viewId?: string) => {
           })
         : queryKeys.tables.data.root(tableId);
 
-      void queryClient.invalidateQueries({
-        queryKey: fullQueryKey,
-      });
+      const tableStructureQueryKey =
+        queryKeys.tables.structure.columns(tableId);
 
-      // Also invalidate the table structure
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.tables.structure.columns(tableId),
-      });
+      // Invalidate specific queries
+      void queryClient.invalidateQueries({ queryKey: tableDataQueryKey });
+      void queryClient.invalidateQueries({ queryKey: tableStructureQueryKey });
+
+      // Also invalidate view configuration if in a view
+      if (viewId) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.views.structure.configuration.root(viewId),
+        });
+      }
     },
   });
 

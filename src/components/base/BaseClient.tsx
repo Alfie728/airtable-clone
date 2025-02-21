@@ -288,7 +288,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       </div>
     );
   }
-  console.log("sortState", sortState);
+  
   return (
     <div className="flex h-screen flex-col bg-white">
       <BaseTopNavigation baseName={baseName} baseId={baseId} />
