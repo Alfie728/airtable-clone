@@ -13,6 +13,7 @@ import { queryKeys } from "~/lib/query/keys";
 import { toast } from "sonner";
 import { type SortingState } from "@tanstack/react-table";
 import { type FilterPreference } from "~/types/filter";
+import { queryClient } from "~/lib/query";
 
 interface AddColumnContext {
   previousData?: TableResponse;
@@ -70,6 +71,38 @@ export const useColumns = (tableId: string, viewId?: string) => {
 
   const addColumnMutation = useMutation({
     mutationFn: async ({ name, type, defaultValue }: AddColumnParams) => {
+      // Get existing columns to generate unique name
+      const tableStructure = queryClient.getQueryData<{
+        success: boolean;
+        columns: Column[];
+      }>(queryKeys.tables.structure.columns(tableId));
+
+      const existingColumns = tableStructure?.columns ?? [];
+
+      // Generate unique name based on server state
+      let uniqueName = name;
+      let counter = 1;
+      while (existingColumns.some((col) => col.name === uniqueName)) {
+        uniqueName = `${name} ${counter}`;
+        counter++;
+      }
+
+      // Use the same default value logic as optimistic update
+      const defaultValueToUse = type === "number" ? "0" : (defaultValue ?? "");
+
+      // Sync with server using the unique name and default value
+      const result = await addColumn(
+        tableId,
+        uniqueName,
+        type,
+        defaultValueToUse,
+      );
+      if (!result.success) {
+        throw new Error(result.error ?? "Failed to add column");
+      }
+      return result;
+    },
+    onMutate: async ({ name, type, defaultValue }: AddColumnParams) => {
       // Get the current sort state
       const sortState = viewId
         ? (queryClient.getQueryData<SortingState>(
@@ -84,8 +117,8 @@ export const useColumns = (tableId: string, viewId?: string) => {
           ) ?? [])
         : [];
 
-      // Use the queryKeys helper
-      const fullQueryKey = viewId
+      // Use the queryKeys helper for table data
+      const tableDataQueryKey = viewId
         ? queryKeys.views.data.withConfig(tableId, viewId, {
             sorts: JSON.stringify(sortState),
             filters: JSON.stringify(filterState),
@@ -93,15 +126,32 @@ export const useColumns = (tableId: string, viewId?: string) => {
           })
         : queryKeys.tables.data.root(tableId);
 
-      const previousData =
-        queryClient.getQueryData<InfiniteTableData>(fullQueryKey);
-      console.log("Found data:", previousData);
+      // Use the queryKey for table structure
+      const tableStructureQueryKey =
+        queryKeys.tables.structure.columns(tableId);
 
-      if (!previousData?.pages?.[0]?.table) {
-        throw new Error("No table data found");
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: tableDataQueryKey });
+      await queryClient.cancelQueries({ queryKey: tableStructureQueryKey });
+
+      // Get previous data states
+      const previousTableData =
+        queryClient.getQueryData<InfiniteTableData>(tableDataQueryKey);
+      const previousTableStructure = queryClient.getQueryData<{
+        success: boolean;
+        columns: Column[];
+      }>(tableStructureQueryKey);
+
+      if (!previousTableData?.pages?.[0]?.table) {
+        return {
+          previousData: {
+            tableData: previousTableData,
+            tableStructure: previousTableStructure,
+          },
+        };
       }
 
-      const firstPage = previousData.pages[0];
+      const firstPage = previousTableData.pages[0];
       const existingColumns = firstPage.table?.columns ?? [];
 
       // Generate unique name based on client state
@@ -124,10 +174,13 @@ export const useColumns = (tableId: string, viewId?: string) => {
         isVisible: true,
       };
 
-      // Update client state immediately with default values
-      queryClient.setQueryData<InfiniteTableData>(fullQueryKey, {
-        ...previousData,
-        pages: previousData.pages.map((page) => {
+      // Use consistent default value
+      const defaultValueToUse = type === "number" ? "0" : (defaultValue ?? "");
+
+      // Update table data state
+      queryClient.setQueryData<InfiniteTableData>(tableDataQueryKey, {
+        ...previousTableData,
+        pages: previousTableData.pages.map((page) => {
           if (!page.success || !page.table) return page;
           return {
             ...page,
@@ -136,25 +189,75 @@ export const useColumns = (tableId: string, viewId?: string) => {
               columns: [...page.table.columns, optimisticColumn],
               data: page.table.data.map((row) => ({
                 ...row,
-                [optimisticColumn.id]:
-                  type === "number" ? 0 : (defaultValue ?? ""),
+                [optimisticColumn.id]: defaultValueToUse,
               })),
             },
           };
         }),
       });
 
-      // Sync with server
-      const result = await addColumn(tableId, uniqueName, type);
-      if (!result.success) {
-        throw new Error(result.error ?? "Failed to add column");
+      // Update table structure state
+      if (previousTableStructure?.success) {
+        queryClient.setQueryData<{ success: boolean; columns: Column[] }>(
+          tableStructureQueryKey,
+          {
+            success: true,
+            columns: [...previousTableStructure.columns, optimisticColumn],
+          },
+        );
+      } else {
+        // If no previous structure exists, create a new one
+        queryClient.setQueryData<{ success: boolean; columns: Column[] }>(
+          tableStructureQueryKey,
+          {
+            success: true,
+            columns: [optimisticColumn],
+          },
+        );
       }
 
-      return result;
+      return {
+        previousData: {
+          tableData: previousTableData,
+          tableStructure: previousTableStructure,
+        },
+      };
     },
-    onSuccess: (data, variables, context) => {
-      // The mutation function already updates the cache optimistically
-      // and handles the server response, so we don't need additional logic here
+    onError: (err, variables, context) => {
+      const sortState = viewId
+        ? (queryClient.getQueryData<SortingState>(
+            queryKeys.views.structure.configuration.sorts(viewId),
+          ) ?? [])
+        : [];
+
+      const filterState = viewId
+        ? (queryClient.getQueryData<FilterPreference[]>(
+            queryKeys.views.structure.configuration.filters(viewId),
+          ) ?? [])
+        : [];
+
+      const tableDataQueryKey = viewId
+        ? queryKeys.views.data.withConfig(tableId, viewId, {
+            sorts: JSON.stringify(sortState),
+            filters: JSON.stringify(filterState),
+            page: 1,
+          })
+        : queryKeys.tables.data.root(tableId);
+
+      const tableStructureQueryKey =
+        queryKeys.tables.structure.columns(tableId);
+
+      if (context?.previousData) {
+        // Restore both states
+        queryClient.setQueryData(
+          tableDataQueryKey,
+          context.previousData.tableData,
+        );
+        queryClient.setQueryData(
+          tableStructureQueryKey,
+          context.previousData.tableStructure,
+        );
+      }
     },
     onSettled: () => {
       const sortState = viewId
@@ -192,7 +295,12 @@ export const useColumns = (tableId: string, viewId?: string) => {
     { success: boolean; column?: Column },
     Error,
     string,
-    { previousData?: InfiniteTableData }
+    {
+      previousData?: {
+        tableData: InfiniteTableData;
+        tableStructure: { success: boolean; columns: Column[] } | undefined;
+      };
+    }
   >({
     mutationFn: async (columnId: string) => {
       const result = await deleteColumn(tableId, columnId);
@@ -214,7 +322,7 @@ export const useColumns = (tableId: string, viewId?: string) => {
           ) ?? [])
         : [];
 
-      const fullQueryKey = viewId
+      const tableDataQueryKey = viewId
         ? queryKeys.views.data.withConfig(tableId, viewId, {
             sorts: JSON.stringify(sortState),
             filters: JSON.stringify(filterState),
@@ -222,59 +330,97 @@ export const useColumns = (tableId: string, viewId?: string) => {
           })
         : queryKeys.tables.data.root(tableId);
 
+      const tableStructureQueryKey =
+        queryKeys.tables.structure.columns(tableId);
+
       // Cancel any outgoing refetches
-      await queryClient.cancelQueries({
-        queryKey: fullQueryKey,
-      });
+      await queryClient.cancelQueries({ queryKey: tableDataQueryKey });
+      await queryClient.cancelQueries({ queryKey: tableStructureQueryKey });
 
-      // Snapshot the previous value
-      const previousData =
-        queryClient.getQueryData<InfiniteTableData>(fullQueryKey);
+      // Get previous data states
+      const previousTableData =
+        queryClient.getQueryData<InfiniteTableData>(tableDataQueryKey);
+      const previousTableStructure = queryClient.getQueryData<{
+        success: boolean;
+        columns: Column[];
+      }>(tableStructureQueryKey);
 
-      if (previousData?.pages?.[0]?.table?.columns) {
-        const firstPage = previousData.pages[0];
-        // Get the column being deleted
-        const deletedColumn = firstPage.table?.columns.find(
-          (col) => col.id === columnId,
-        );
+      if (!previousTableData?.pages?.[0]?.table) {
+        return {
+          previousData: {
+            tableData: previousTableData ?? {
+              pages: [],
+              pageParams: [],
+            },
+            tableStructure: previousTableStructure,
+          },
+        };
+      }
 
-        if (deletedColumn) {
-          // Update the cache with new data
-          queryClient.setQueryData<InfiniteTableData>(fullQueryKey, {
-            ...previousData,
-            pages: previousData.pages.map((page) => {
-              if (!page.success || !page.table) return page;
+      const firstPage = previousTableData.pages[0];
+      // Ensure table exists since we checked above
+      const table = firstPage.table!;
+      const deletedColumn = table.columns.find((col) => col.id === columnId);
 
-              // Update columns with new order
-              const updatedColumns = page.table.columns
-                .filter((col) => col.id !== columnId)
-                .map((col) =>
-                  col.order > deletedColumn.order
-                    ? { ...col, order: col.order - 1 }
-                    : col,
-                );
+      if (deletedColumn) {
+        // Update table data state - remove column from all rows
+        queryClient.setQueryData<InfiniteTableData>(tableDataQueryKey, {
+          ...previousTableData,
+          pages: previousTableData.pages.map((page) => {
+            if (!page.success || !page.table) return page;
 
-              // Update data by removing the deleted column's data
-              const updatedData = page.table.data.map((row: Row) => {
-                const newRow = { ...row };
-                delete newRow[columnId];
-                return newRow;
-              });
+            // Update columns with new order
+            const updatedColumns = page.table.columns
+              .filter((col) => col.id !== columnId)
+              .map((col) =>
+                col.order > deletedColumn.order
+                  ? { ...col, order: col.order - 1 }
+                  : col,
+              );
 
-              return {
-                ...page,
-                table: {
-                  ...page.table,
-                  columns: updatedColumns,
-                  data: updatedData,
-                },
-              };
-            }),
-          });
+            // Remove column data from all rows while preserving Row type
+            const updatedData = page.table.data.map((row) => {
+              const { [columnId]: _, ...rest } = row;
+              return rest as Row; // Safe cast since we're only removing a property
+            });
+
+            return {
+              ...page,
+              table: {
+                ...page.table,
+                columns: updatedColumns,
+                data: updatedData,
+              },
+            };
+          }),
+        });
+
+        // Update table structure state
+        if (previousTableStructure?.success) {
+          const updatedColumns = previousTableStructure.columns
+            .filter((col) => col.id !== columnId)
+            .map((col) =>
+              col.order > deletedColumn.order
+                ? { ...col, order: col.order - 1 }
+                : col,
+            );
+
+          queryClient.setQueryData<{ success: boolean; columns: Column[] }>(
+            tableStructureQueryKey,
+            {
+              success: true,
+              columns: updatedColumns,
+            },
+          );
         }
       }
 
-      return { previousData };
+      return {
+        previousData: {
+          tableData: previousTableData,
+          tableStructure: previousTableStructure,
+        },
+      };
     },
     onError: (err, columnId, context) => {
       const sortState = viewId
@@ -289,7 +435,7 @@ export const useColumns = (tableId: string, viewId?: string) => {
           ) ?? [])
         : [];
 
-      const fullQueryKey = viewId
+      const tableDataQueryKey = viewId
         ? queryKeys.views.data.withConfig(tableId, viewId, {
             sorts: JSON.stringify(sortState),
             filters: JSON.stringify(filterState),
@@ -297,9 +443,23 @@ export const useColumns = (tableId: string, viewId?: string) => {
           })
         : queryKeys.tables.data.root(tableId);
 
+      const tableStructureQueryKey =
+        queryKeys.tables.structure.columns(tableId);
+
       if (context?.previousData) {
-        queryClient.setQueryData(fullQueryKey, context.previousData);
+        // Restore both states
+        queryClient.setQueryData(
+          tableDataQueryKey,
+          context.previousData.tableData,
+        );
+        queryClient.setQueryData(
+          tableStructureQueryKey,
+          context.previousData.tableStructure,
+        );
       }
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete column",
+      );
     },
     onSettled: () => {
       const sortState = viewId
@@ -314,7 +474,7 @@ export const useColumns = (tableId: string, viewId?: string) => {
           ) ?? [])
         : [];
 
-      const fullQueryKey = viewId
+      const tableDataQueryKey = viewId
         ? queryKeys.views.data.withConfig(tableId, viewId, {
             sorts: JSON.stringify(sortState),
             filters: JSON.stringify(filterState),
@@ -322,14 +482,19 @@ export const useColumns = (tableId: string, viewId?: string) => {
           })
         : queryKeys.tables.data.root(tableId);
 
-      void queryClient.invalidateQueries({
-        queryKey: fullQueryKey,
-      });
+      const tableStructureQueryKey =
+        queryKeys.tables.structure.columns(tableId);
 
-      // Also invalidate the table structure
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.tables.structure.columns(tableId),
-      });
+      // Invalidate specific queries like in addColumnMutation
+      void queryClient.invalidateQueries({ queryKey: tableDataQueryKey });
+      void queryClient.invalidateQueries({ queryKey: tableStructureQueryKey });
+
+      // Also invalidate view configuration if in a view
+      if (viewId) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.views.structure.configuration.root(viewId),
+        });
+      }
     },
   });
 
