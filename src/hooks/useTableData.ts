@@ -394,7 +394,10 @@ export function useTableData({
           );
 
           if (!result.success) {
-            if (result.error?.includes("Row not found")) {
+            if (
+              result.error?.includes("Row not found") ||
+              result.error?.includes("Column not found")
+            ) {
               retryCount++;
               if (retryCount < MAX_RETRIES) {
                 await new Promise((resolve) =>

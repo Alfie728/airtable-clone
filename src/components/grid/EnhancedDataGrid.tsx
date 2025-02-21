@@ -29,7 +29,7 @@ import { RowManagement } from "./RowManagement";
 import { Checkbox } from "~/components/ui/checkbox";
 import { DraggableColumn } from "./DraggableColumn";
 import { useTableConfig } from "./hooks/useTableConfig";
-import { type CellType } from "~/types/grid";
+import { HeaderType, type CellType } from "~/types/grid";
 import { AddField } from "./components/AddField";
 import { GridFooter } from "./components/GridFooter";
 import type { FilterPreference } from "~/types/filter";
@@ -432,7 +432,7 @@ export function EnhancedDataGrid({
                 return (
                   <DraggableColumn
                     key={header.id}
-                    header={header}
+                    header={header as HeaderType}
                     cells={columnCells}
                     virtualizer={rowVirtualizer}
                   />
