@@ -7,6 +7,7 @@ import type {
   TableMeta,
 } from "~/types/grid";
 import { Input } from "~/components/ui/input";
+import { cn } from "~/lib/utils";
 
 export function EditableCell({
   getValue,
@@ -15,8 +16,11 @@ export function EditableCell({
   table,
 }: EditableCellProps) {
   const initialValue = getValue();
+  const columnDef = column as unknown as { columnDef: ColumnDefWithMeta };
+  const isNumber = columnDef.columnDef.meta?.type === "number";
   const [value, setValue] = useState<string | number>(initialValue);
   const [isEditing, setIsEditing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Reset value when the cell's actual value changes
   useEffect(() => {
@@ -25,13 +29,24 @@ export function EditableCell({
 
   const onBlur = () => {
     setIsEditing(false);
-    const columnDef = column as ColumnDefWithMeta;
+    setError(null);
 
     // Only update if value has changed
     if (value !== initialValue) {
+      // Validate number type
+      if (isNumber && typeof value === "string") {
+        const numValue = Number(value);
+        if (isNaN(numValue)) {
+          setError("Invalid number");
+          setValue(initialValue);
+          return;
+        }
+        setValue(numValue);
+      }
+
       const tableMeta = table.options.meta as TableMeta;
       if (tableMeta?.updateData) {
-        tableMeta.updateData(row.index, columnDef.id, value);
+        tableMeta.updateData(row.index, columnDef.columnDef.id, value);
       }
     }
   };
@@ -46,13 +61,24 @@ export function EditableCell({
       if (tableMeta?.handleTabNavigation) {
         tableMeta.handleTabNavigation(
           row.original.id,
-          (column as ColumnDefWithMeta).id,
+          columnDef.columnDef.id,
           e.shiftKey,
         );
       }
     } else if (e.key === "Escape") {
       setIsEditing(false);
       setValue(initialValue); // Reset to initial value on escape
+    } else if (isNumber) {
+      // Only allow valid number characters
+      if (
+        !/^[-\d.]$/.test(e.key) &&
+        !["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Tab"].includes(
+          e.key,
+        )
+      ) {
+        e.preventDefault();
+        setError("Please enter a number");
+      }
     }
   };
 
@@ -63,6 +89,11 @@ export function EditableCell({
         onClick={() => setIsEditing(true)}
       >
         <span className="truncate">{value}</span>
+        {error && (
+          <span className="ml-1 text-xs text-red-500" title={error}>
+            ⚠️
+          </span>
+        )}
       </div>
     );
   }
@@ -71,15 +102,42 @@ export function EditableCell({
     <Input
       autoFocus
       value={String(value)}
-      onChange={(e) => setValue(e.target.value)}
+      onChange={(e) => {
+        const newValue = e.target.value;
+
+        if (isNumber) {
+          // Only allow valid number characters
+          const isValidNumberInput = /^-?\d*\.?\d*$/.test(newValue);
+          if (!isValidNumberInput && newValue !== "") {
+            setError("Please enter a number");
+            return; // Ignore invalid number input
+          }
+          if (newValue === "") {
+            setValue("");
+            setError(null);
+            return;
+          }
+          const numValue = Number(newValue);
+          if (isNaN(numValue)) {
+            setError("Please enter a number");
+          } else {
+            setError(null);
+            setValue(numValue);
+          }
+        } else {
+          setError(null);
+          setValue(newValue);
+        }
+      }}
       onBlur={onBlur}
       onKeyDown={handleKeyDown}
-      type={
-        (column as ColumnDefWithMeta).meta?.type === "number"
-          ? "number"
-          : "text"
-      }
-      className="h-[22px] w-full border-0 bg-white p-0 text-sm shadow-[0_0_0_2px_#166BFF] focus:ring-0"
+      type={isNumber ? "number" : "text"}
+      placeholder={isNumber ? "Please enter a number" : undefined}
+      step="any"
+      className={cn(
+        "h-[22px] w-full border-0 bg-white p-0 text-sm shadow-[0_0_0_2px_#166BFF] focus:ring-0",
+        error && "shadow-[0_0_0_2px_#EF4444]",
+      )}
     />
   );
 }

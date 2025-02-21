@@ -36,8 +36,8 @@ import {
   MoreHorizontal,
   HelpCircle,
   ChevronDown,
-  ArrowUp,
-  ArrowDown,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useColumns } from "~/hooks/useColumns";
@@ -133,7 +133,7 @@ export function ColumnManagement({
       setNewColumnName(column.name);
     }
   };
-  
+
   return (
     <>
       <DropdownMenu modal={false} open={isOpen} onOpenChange={handleOpenChange}>
@@ -237,15 +237,15 @@ export function ColumnManagement({
                     onClick={() => onSort("asc", false)}
                     className="gap-2 text-xs"
                   >
-                    <ArrowDownAZ className="h-3.5 w-3.5" />
-                    Sort A to Z                    
+                    <ArrowDownWideNarrow className="h-3.5 w-3.5" />
+                    {column.type === "number" ? "Sort 1 to 9" : "Sort A to Z"}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => onSort("desc", false)}
                     className="gap-2 text-xs"
                   >
-                    <ArrowDownZA className="h-3.5 w-3.5" />
-                    Sort Z to A
+                    <ArrowUpNarrowWide className="h-3.5 w-3.5" />
+                    {column.type === "number" ? "Sort 9 to 1" : "Sort Z to A"}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                 </>
