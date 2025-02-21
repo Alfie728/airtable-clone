@@ -79,14 +79,8 @@ export const useColumns = (tableId: string, viewId?: string) => {
 
       const existingColumns = tableStructure?.columns ?? [];
 
-      // Generate unique name based on server state
-      let uniqueName = name;
-      let counter = 1;
-      while (existingColumns.some((col) => col.name === uniqueName)) {
-        uniqueName = `${name} ${counter}`;
-        counter++;
-      }
-
+      const uniqueName =
+        existingColumns[existingColumns.length - 1]?.name ?? name;
       // Use the same default value logic as optimistic update
       const defaultValueToUse = type === "number" ? "0" : (defaultValue ?? "");
 
