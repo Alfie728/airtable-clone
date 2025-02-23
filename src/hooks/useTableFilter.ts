@@ -13,10 +13,22 @@ interface TableFilterContext {
 export function useTableFilter(viewId: string) {
   const queryClient = useQueryClient();
 
+  // Helper function to validate UUID
+  const isValidUUID = (uuid: string) => {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
+  };
+
   // Query for initial filter state
   const { data: initialFilterState } = useQuery<FilterState>({
     queryKey: queryKeys.views.structure.configuration.filters(viewId),
     queryFn: async () => {
+      if (!viewId || viewId === "loading") return [];
+      if (!isValidUUID(viewId)) {
+        console.warn("Invalid UUID format for viewId:", viewId);
+        return [];
+      }
       const result = await getViewFilters(viewId);
       if (!result.success) {
         throw new Error(result.error ?? "Failed to get view filters");
@@ -30,6 +42,7 @@ export function useTableFilter(viewId: string) {
       }));
     },
     staleTime: 30000, // Add staleTime to prevent frequent refetches
+    enabled: Boolean(viewId) && viewId !== "loading" && isValidUUID(viewId), // Only run query if viewId exists and is not loading
   });
 
   // Mutation for updating filter state
@@ -40,6 +53,8 @@ export function useTableFilter(viewId: string) {
     TableFilterContext
   >({
     mutationFn: async (filtering) => {
+      if (!viewId || viewId === "loading" || !isValidUUID(viewId))
+        return { success: true };
       console.log("Updating filters:", filtering);
       // If filtering array is empty, we're removing all filters
       if (filtering.length === 0) {
