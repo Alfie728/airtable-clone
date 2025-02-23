@@ -32,6 +32,7 @@ import { cn } from "~/lib/utils";
 import type { FilterPreference } from "~/types/filter";
 import { Input } from "~/components/ui/input";
 import { FilterDropdown } from "./components/FilterDropdown";
+import SearchDropdown from "./components/SearchDropdown";
 
 interface GridControlsProps {
   isSidebarOpen: boolean;
@@ -41,6 +42,7 @@ interface GridControlsProps {
   onSortingChange?: (sorting: SortingState) => void;
   filtering?: FilterPreference[];
   onFilteringChange?: (filtering: FilterPreference[]) => void;
+  onSearch?: (value: string) => void;
 }
 
 export function GridControls({
@@ -51,6 +53,7 @@ export function GridControls({
   onSortingChange = (newSorting: SortingState) => void 0,
   filtering = [],
   onFilteringChange = () => void 0,
+  onSearch = () => void 0,
 }: GridControlsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [addSortOpen, setAddSortOpen] = useState(false);
@@ -373,13 +376,7 @@ export function GridControls({
 
       <div className="flex-1" />
 
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-8 gap-1.5 rounded px-2 text-sm font-normal text-gray-700 hover:bg-gray-100"
-      >
-        <Search className="h-4 w-4" />
-      </Button>
+      <SearchDropdown columns={columns} onSearch={onSearch} />
     </div>
   );
 }

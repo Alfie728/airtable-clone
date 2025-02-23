@@ -31,6 +31,11 @@ export function FilterDropdown({
 
   const filterableColumns = columns.filter((col) => col.isSearchable);
 
+  // Filter out search filters
+  const nonSearchFilters = filtering.filter(
+    (filter) => !filter.id.startsWith("search-"),
+  );
+
   const debouncedInputValues = useDebounce(inputValues, 500);
 
   // Effect to update filter values when debounced input changes
@@ -132,15 +137,15 @@ export function FilterDropdown({
           size="sm"
           className={cn(
             "h-8 gap-1.5 rounded px-2 text-sm font-normal",
-            filtering.length > 0
+            nonSearchFilters.length > 0
               ? "bg-[#FFE0CC] text-gray-700 hover:border-rose-200 hover:shadow-[inset_0px_0px_0px_2px_rgba(0,0,0,0.1)]"
               : "text-gray-700 hover:bg-gray-100",
           )}
         >
           <Filter className="h-4 w-4" />
-          {filtering.length === 0
+          {nonSearchFilters.length === 0
             ? "Filter"
-            : `${filtering.length} ${filtering.length === 1 ? "filter" : "filters"}`}
+            : `${nonSearchFilters.length} ${nonSearchFilters.length === 1 ? "filter" : "filters"}`}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -158,12 +163,18 @@ export function FilterDropdown({
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            {filtering.length > 0 && (
+            {nonSearchFilters.length > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs text-gray-500 hover:text-gray-900"
-                onClick={() => onFilteringChange([])}
+                onClick={() => {
+                  // Preserve search filters when clearing
+                  const searchFilters = filtering.filter((f) =>
+                    f.id.startsWith("search-"),
+                  );
+                  onFilteringChange(searchFilters);
+                }}
               >
                 Clear all
               </Button>
@@ -179,7 +190,7 @@ export function FilterDropdown({
           </div>
         </div>
 
-        {filtering.length === 0 ? (
+        {nonSearchFilters.length === 0 ? (
           <div className="space-y-4">
             <div className="text-sm text-gray-500">
               No filter conditions are applied
@@ -215,7 +226,7 @@ export function FilterDropdown({
           </div>
         ) : (
           <div className="space-y-2">
-            {filtering.map((filter, index) => {
+            {nonSearchFilters.map((filter, index) => {
               const column = columns.find((col) => col.id === filter.columnId);
               if (!column) return null;
 

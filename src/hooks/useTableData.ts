@@ -14,7 +14,7 @@ import {
 import { useTableSort } from "./useTableSort";
 import { useTableFilter } from "./useTableFilter";
 import type { SortingState } from "@tanstack/react-table";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import type {
   Row,
   Column,
@@ -24,8 +24,8 @@ import type {
   TableData,
 } from "~/types/table";
 import { faker } from "@faker-js/faker";
-import pages from "next/dist/build/templates/pages";
 import { useTableStructure } from "./useTableStructure";
+import type { FilterPreference } from "~/types/filter";
 
 function generateMockRow(columns: Column[]): Row {
   const row: Row = {
@@ -195,36 +195,145 @@ function isErrorResponse(
 }
 
 export function useTableData({
+  baseId,
   tableId,
   tableName,
   viewId,
-  baseId,
-}: UseTableDataParams) {
+}: {
+  baseId: string;
+  tableId: string;
+  tableName: string;
+  viewId: string;
+}) {
   const queryClient = useQueryClient();
-  const latestMutationRef = useRef<string | null>(null);
-  const pendingRowCreationsRef = useRef<Map<string, Promise<unknown>>>(
-    new Map(),
-  );
+  const previousFilterStateRef = useRef<FilterPreference[]>([]);
+  const isInitialLoadRef = useRef(true);
+  const previousViewIdRef = useRef<string | null>(null);
 
-  // Get sorting state if viewId is provided
-  const {
-    initialSortState,
-    updateSort,
-    isUpdating: isUpdatingSort,
-  } = useTableSort(viewId ?? "");
+  // States
+  const [sortState, setSortState] = useState<SortingState>([]);
+  const [filterState, setFilterState] = useState<FilterPreference[]>([]);
+  const [searchValue, setSearchValue] = useState("");
 
-  // Get filtering state if viewId is provided
   const {
     initialFilterState,
     updateFilter,
     isUpdating: isUpdatingFilter,
-  } = useTableFilter(viewId ?? "");
+  } = useTableFilter(viewId === "loading" ? "" : viewId);
 
-  // Get table structure (columns)
+  const {
+    initialSortState,
+    updateSort,
+    isUpdating: isUpdatingSort,
+  } = useTableSort(viewId === "loading" ? "" : viewId);
+
   const { data: structureData, isLoading: isLoadingStructure } =
     useTableStructure(tableId);
 
-  // Query for table data with infinite pagination
+  // Combined effect to handle both sort and filter state updates
+  useEffect(() => {
+    if (viewId === "loading") return;
+
+    const shouldUpdateFilter =
+      initialFilterState &&
+      (isInitialLoadRef.current ||
+        previousViewIdRef.current !== viewId ||
+        JSON.stringify(initialFilterState) !==
+          JSON.stringify(previousFilterStateRef.current));
+
+    const shouldUpdateSort =
+      initialSortState &&
+      (isInitialLoadRef.current ||
+        previousViewIdRef.current !== viewId ||
+        JSON.stringify(initialSortState) !== JSON.stringify(sortState));
+
+    if (shouldUpdateFilter || shouldUpdateSort) {
+      if (shouldUpdateFilter) {
+        setFilterState(initialFilterState ?? []);
+        previousFilterStateRef.current = initialFilterState ?? [];
+      }
+
+      if (shouldUpdateSort) {
+        setSortState(initialSortState ?? []);
+      }
+
+      if (isInitialLoadRef.current || previousViewIdRef.current !== viewId) {
+        isInitialLoadRef.current = false;
+        previousViewIdRef.current = viewId;
+      }
+    }
+  }, [initialFilterState, initialSortState, viewId, sortState]);
+
+  // Reset refs when tableId changes
+  useEffect(() => {
+    isInitialLoadRef.current = true;
+    previousViewIdRef.current = null;
+    previousFilterStateRef.current = [];
+    setFilterState([]);
+    setSortState([]);
+    setSearchValue("");
+  }, [tableId]);
+
+  // Memoize the filter change handler with stable dependencies
+  const handleFilterChange = useCallback(
+    async (newFiltering: FilterPreference[]) => {
+      const prevFiltering = previousFilterStateRef.current;
+
+      // Skip if no actual change
+      if (JSON.stringify(newFiltering) === JSON.stringify(prevFiltering)) {
+        return;
+      }
+
+      try {
+        // Update state first
+        setFilterState(newFiltering);
+        previousFilterStateRef.current = newFiltering;
+
+        if (viewId) {
+          // Update server
+          await updateFilter(newFiltering);
+
+          // Only invalidate after successful server update
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.views.data.withConfig(tableId, viewId, {
+              sorts: JSON.stringify(sortState),
+              filters: JSON.stringify(newFiltering),
+              search: searchValue,
+              page: 1,
+            }),
+          });
+        }
+      } catch (error) {
+        // Revert on error
+        setFilterState(prevFiltering);
+        previousFilterStateRef.current = prevFiltering;
+      }
+    },
+    [tableId, viewId, sortState, searchValue, updateFilter, queryClient],
+  );
+
+  // Memoize search change handler
+  const handleSearchChange = useCallback(
+    (newSearchValue: string) => {
+      if (newSearchValue !== searchValue) {
+        setSearchValue(newSearchValue);
+      }
+    },
+    [searchValue],
+  );
+
+  // Memoize the query key to prevent unnecessary updates
+  const queryKey = useMemo(() => {
+    return viewId
+      ? queryKeys.views.data.withConfig(tableId, viewId, {
+          sorts: JSON.stringify(sortState),
+          filters: JSON.stringify(filterState),
+          search: searchValue,
+          page: 1,
+        })
+      : queryKeys.tables.data.root(tableId);
+  }, [tableId, viewId, sortState, filterState, searchValue]);
+
   const {
     data: pages,
     fetchNextPage,
@@ -233,19 +342,14 @@ export function useTableData({
     isLoading: isLoadingData,
     error,
   } = useInfiniteQuery<TableResponse, Error>({
-    queryKey: viewId
-      ? queryKeys.views.data.withConfig(tableId, viewId, {
-          sorts: JSON.stringify(initialSortState),
-          filters: JSON.stringify(initialFilterState),
-          page: 1,
-        })
-      : queryKeys.tables.data.root(tableId),
+    queryKey,
     queryFn: async ({ pageParam }): Promise<TableResponse> => {
       const response = await getTableDataWithSort({
         tableId,
         tableName,
-        sorting: viewId ? initialSortState : undefined,
-        filtering: viewId ? initialFilterState : undefined,
+        sorting: initialSortState,
+        filtering: filterState,
+        globalSearch: searchValue,
         page: pageParam as number,
       });
 
@@ -302,20 +406,10 @@ export function useTableData({
   const addRowMutation = useMutation<AddRowResponse, Error, Row, AddRowContext>(
     {
       mutationFn: async (optimisticRow) => {
-        latestMutationRef.current = "addRow";
         const promise = addRow(tableId, optimisticRow);
-        pendingRowCreationsRef.current.set(optimisticRow.id, promise);
         return promise;
       },
       onMutate: async (optimisticRow): Promise<AddRowContext> => {
-        const queryKey = viewId
-          ? queryKeys.views.data.withConfig(tableId, viewId, {
-              sorts: JSON.stringify(initialSortState),
-              filters: JSON.stringify(initialFilterState),
-              page: 1,
-            })
-          : queryKeys.tables.data.root(tableId);
-
         await queryClient.cancelQueries({ queryKey });
         const previousData =
           queryClient.getQueryData<InfiniteTableData>(queryKey);
@@ -351,16 +445,8 @@ export function useTableData({
       },
       onError: (err, variables, context) => {
         if (context?.previousData) {
-          const queryKey = viewId
-            ? queryKeys.views.data.withConfig(tableId, viewId, {
-                sorts: JSON.stringify(initialSortState),
-                filters: JSON.stringify(initialFilterState),
-                page: 1,
-              })
-            : queryKeys.tables.data.root(tableId);
           queryClient.setQueryData(queryKey, context.previousData);
         }
-        pendingRowCreationsRef.current.delete(variables.id);
       },
     },
   );
@@ -379,14 +465,6 @@ export function useTableData({
 
       while (retryCount < MAX_RETRIES) {
         try {
-          const pendingCreation = pendingRowCreationsRef.current.get(
-            params.rowId,
-          );
-          if (pendingCreation) {
-            await pendingCreation;
-          }
-
-          latestMutationRef.current = "updateCell";
           const result = await addCell(
             params.rowId,
             params.columnId,
@@ -427,18 +505,7 @@ export function useTableData({
       throw new Error("Max retries exceeded");
     },
     onMutate: async (params): Promise<UpdateCellContext> => {
-      const queryKey = viewId
-        ? queryKeys.views.data.withConfig(tableId, viewId, {
-            sorts: JSON.stringify(initialSortState),
-            filters: JSON.stringify(initialFilterState),
-            page: 1,
-          })
-        : queryKeys.tables.data.root(tableId);
-
-      if (!pendingRowCreationsRef.current.has(params.rowId)) {
-        await queryClient.cancelQueries({ queryKey });
-      }
-
+      await queryClient.cancelQueries({ queryKey });
       const previousData =
         queryClient.getQueryData<InfiniteTableData>(queryKey);
 
@@ -475,13 +542,6 @@ export function useTableData({
     },
     onError: (err, variables, context) => {
       if (context?.previousData) {
-        const queryKey = viewId
-          ? queryKeys.views.data.withConfig(tableId, viewId, {
-              sorts: JSON.stringify(initialSortState),
-              filters: JSON.stringify(initialFilterState),
-              page: 1,
-            })
-          : queryKeys.tables.data.root(tableId);
         queryClient.setQueryData(queryKey, context.previousData);
       }
     },
@@ -495,22 +555,10 @@ export function useTableData({
     AddBulkRowsContext
   >({
     mutationFn: async (params) => {
-      latestMutationRef.current = "addBulkRows";
       const promise = addBulkRows(tableId, params.optimisticRows);
-      params.optimisticRows.forEach((row) => {
-        pendingRowCreationsRef.current.set(row.id, promise);
-      });
       return promise;
     },
     onMutate: async (params): Promise<AddBulkRowsContext> => {
-      const queryKey = viewId
-        ? queryKeys.views.data.withConfig(tableId, viewId, {
-            sorts: JSON.stringify(initialSortState),
-            filters: JSON.stringify(initialFilterState),
-            page: 1,
-          })
-        : queryKeys.tables.data.root(tableId);
-
       await queryClient.cancelQueries({ queryKey });
       const previousData =
         queryClient.getQueryData<InfiniteTableData>(queryKey);
@@ -549,17 +597,12 @@ export function useTableData({
     },
     onError: (err, variables, context) => {
       if (context?.previousData) {
-        const queryKey = viewId
-          ? queryKeys.views.data.withConfig(tableId, viewId, {
-              sorts: JSON.stringify(initialSortState),
-              filters: JSON.stringify(initialFilterState),
-              page: 1,
-            })
-          : queryKeys.tables.data.root(tableId);
         queryClient.setQueryData(queryKey, context.previousData);
       }
       variables.optimisticRows.forEach((row) => {
-        pendingRowCreationsRef.current.delete(row.id);
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.tables.data.root(tableId),
+        });
       });
     },
   });
@@ -572,7 +615,6 @@ export function useTableData({
     RenameTableContext
   >({
     mutationFn: async (newName: string) => {
-      latestMutationRef.current = "renameTable";
       const result = await renameTable(tableId, newName);
       if (!result.success) {
         throw new Error(result.error ?? "Failed to rename table");
@@ -640,10 +682,12 @@ export function useTableData({
     isBatchAdding: addBulkRowsMutation.isPending,
     renameTable: (newName: string) => renameMutation.mutateAsync(newName),
     isRenaming: renameMutation.isPending,
-    sortState: initialSortState ?? [],
+    sortState,
     handleSortChange: updateSort,
-    filterState: initialFilterState ?? [],
-    handleFilterChange: updateFilter,
+    filterState,
+    handleFilterChange,
+    searchValue,
+    handleSearchChange,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,

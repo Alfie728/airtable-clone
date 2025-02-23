@@ -29,6 +29,7 @@ import type { FilterPreference } from "~/types/filter";
 interface ExtendedTableConfigProps extends TableConfigProps {
   filtering: FilterPreference[];
   onFilteringChange: (filtering: FilterPreference[]) => void;
+  globalSearch: string;
 }
 
 const useTableConfig = ({
@@ -38,6 +39,7 @@ const useTableConfig = ({
   tableId,
   sorting,
   filtering,
+  globalSearch,
   columnOrder,
   onSortingChangeAction,
   onFilteringChange,
@@ -121,11 +123,26 @@ const useTableConfig = ({
     );
   };
 
+  // Global search function
+  const globalFilterFn: FilterFn<Row> = (
+    row,
+    _columnId,
+    filterValue: string,
+  ) => {
+    if (!filterValue) return true;
+
+    // Search across all searchable columns
+    const searchableColumns = columns.filter((col) => col.isSearchable);
+    return searchableColumns.some((column) => {
+      const value = String(row.original[column.id] ?? "");
+      return value.toLowerCase().includes(filterValue.toLowerCase());
+    });
+  };
+
   const table = useReactTable({
     data,
     columns: tableColumns,
     getCoreRowModel: getCoreRowModel(),
-    // getSortedRowModel: getSortedRowModel(),
     manualSorting: true,
     manualFiltering: true,
     isMultiSortEvent: () => true,
@@ -138,6 +155,7 @@ const useTableConfig = ({
         id: f.columnId,
         value: { value: f.value, operator: f.operator },
       })),
+      globalFilter: globalSearch,
     },
     onSortingChange: (updater) => {
       const newSorting =
@@ -210,6 +228,8 @@ const useTableConfig = ({
     defaultColumn: {
       filterFn: "custom" as unknown as FilterFnOption<Row>,
     },
+    globalFilterFn,
+    getFilteredRowModel: getFilteredRowModel(),
     meta: {
       updateData: async (
         rowIndex: number,
