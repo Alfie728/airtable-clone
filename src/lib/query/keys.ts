@@ -2,18 +2,19 @@ export const queryKeys = {
   bases: {
     root: ["bases"] as const,
     list: () => ["bases"] as const,
-    detail: (baseId: string) => ["bases", baseId] as const,
+    detail: (baseId: string) => ["base", baseId] as const,
     info: (baseId: string) =>
       [...queryKeys.bases.detail(baseId), "info"] as const,
     tables: {
-      list: (baseId: string) => ["bases", baseId, "tables"] as const,
+      list: (baseId: string) => ["base", baseId, "tables"] as const,
       detail: (baseId: string, tableId: string) =>
         [...queryKeys.bases.detail(baseId), "tables", tableId] as const,
     },
   },
   tables: {
     root: ["tables"] as const,
-    detail: (tableId: string) => ["tables", tableId] as const,
+    list: () => ["tables"] as const,
+    detail: (tableId: string) => ["table", tableId] as const,
     structure: {
       root: (tableId: string) => ["tables", tableId, "structure"] as const,
       columns: (tableId: string) =>
@@ -22,15 +23,24 @@ export const queryKeys = {
         ["tables", tableId, "structure", "metadata"] as const,
     },
     data: {
-      root: (tableId: string) => ["tables", tableId, "data"] as const,
+      root: (tableId: string) => ["table", tableId, "data"] as const,
       paginated: (tableId: string, page: number) =>
         ["tables", tableId, "data", "page", page] as const,
+      withConfig: (
+        tableId: string,
+        config: {
+          sorts?: string;
+          filters?: string;
+          search?: string;
+          page?: number;
+        },
+      ) => ["table", tableId, "data", config] as const,
     },
   },
   views: {
     root: ["views"] as const,
-    list: (tableId: string) => ["tables", tableId, "views"] as const,
-    detail: (viewId: string) => ["views", viewId] as const,
+    list: (tableId: string) => ["table", tableId, "views"] as const,
+    detail: (viewId: string) => ["view", viewId] as const,
     structure: {
       root: (viewId: string) => ["views", viewId, "structure"] as const,
       metadata: (viewId: string) => ["views", viewId, "metadata"] as const,
@@ -46,16 +56,17 @@ export const queryKeys = {
     },
     data: {
       root: (tableId: string, viewId: string) =>
-        ["tables", tableId, "views", viewId, "data"] as const,
+        ["table", tableId, "view", viewId, "data"] as const,
       withConfig: (
         tableId: string,
         viewId: string,
         config: {
           sorts?: string;
           filters?: string;
+          search?: string;
           page?: number;
         },
-      ) => ["tables", tableId, "views", viewId, "data", config] as const,
+      ) => ["table", tableId, "view", viewId, "data", config] as const,
     },
   },
   user: {

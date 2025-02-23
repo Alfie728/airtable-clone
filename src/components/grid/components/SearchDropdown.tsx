@@ -6,76 +6,26 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Search, X } from "lucide-react";
 import type { Column } from "~/types/table";
-import type { FilterPreference } from "~/types/filter";
-import { useDebounce } from "~/hooks/useDebounce";
 import { cn } from "~/lib/utils";
+import { useTableSearch } from "~/hooks/useTableSearch";
 
 interface SearchDropdownProps {
   columns: Column[];
-  filtering: FilterPreference[];
-  onFilteringChange: (filtering: FilterPreference[]) => void;
+  onSearch: (value: string) => void;
 }
 
-const SearchDropdown = ({
-  columns,
-  filtering,
-  onFilteringChange,
-}: SearchDropdownProps) => {
+const SearchDropdown = ({ columns, onSearch }: SearchDropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchValue, setSearchValue] = useState("");
-  const debouncedSearchValue = useDebounce(searchValue, 500);
+  const { searchValue, setSearchValue, debouncedSearchValue } =
+    useTableSearch(columns);
 
-  // Use ref to track the last applied search term to prevent unnecessary updates
-  const lastAppliedSearchRef = useRef("");
-
-  // Initialize search value from filters on mount
+  // Effect to propagate search changes
   useEffect(() => {
-    const searchFilter = filtering.find((f) => f.id.startsWith("search-"));
-    if (searchFilter && !searchValue) {
-      setSearchValue(searchFilter.value);
-      lastAppliedSearchRef.current = searchFilter.value;
-    }
-  }, []); // Run only on mount
-
-  // Handle search updates
-  useEffect(() => {
-    // Skip if the search term hasn't changed
-    if (debouncedSearchValue === lastAppliedSearchRef.current) {
-      return;
-    }
-
-    // Update the last applied search term
-    lastAppliedSearchRef.current = debouncedSearchValue;
-
-    // Get non-search filters
-    const nonSearchFilters = filtering.filter(
-      (filter) => !filter.id.startsWith("search-"),
-    );
-
-    // If no search term, just remove search filters
-    if (!debouncedSearchValue) {
-      onFilteringChange(nonSearchFilters);
-      return;
-    }
-
-    // Get searchable columns
-    const searchableColumns = columns.filter((col) => col.isSearchable);
-
-    // Create search filters
-    const searchFilters = searchableColumns.map((column, index) => ({
-      id: `search-${column.id}`,
-      columnId: column.id,
-      operator: "contains" as const,
-      value: debouncedSearchValue,
-      order: nonSearchFilters.length + index,
-    }));
-
-    // Update filters
-    onFilteringChange([...nonSearchFilters, ...searchFilters]);
-  }, [debouncedSearchValue, columns, filtering, onFilteringChange]);
+    onSearch(debouncedSearchValue);
+  }, [debouncedSearchValue, onSearch]);
 
   // Handle clearing the search
   const handleClear = () => {

@@ -229,14 +229,21 @@ export async function getTableDataWithSort(params: {
   tableName: string;
   sorting?: SortingState;
   filtering?: FilterPreference[];
+  globalSearch?: string;
   page?: number;
   pageSize?: number;
 }): Promise<TableResponse> {
+  console.log("getTableDataWithSort params:", {
+    filtering: params.filtering,
+    globalSearch: params.globalSearch
+  });
+
   const {
     tableId,
     tableName,
     sorting = [],
     filtering = [],
+    globalSearch = "",
     page = 1,
     pageSize = 250,
   } = params;
@@ -245,57 +252,90 @@ export async function getTableDataWithSort(params: {
   if (!user) throw new Error("Unauthorized");
 
   try {
-    // Get all columns for this table (common for both cases)
+    // Get all columns for this table
     const tableColumns = await db
       .select()
       .from(columns)
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
 
-    // Build filter conditions
-    const filterConditions = filtering
-      .map((filter) => {
-        const column = tableColumns.find((col) => col.id === filter.columnId);
-        if (!column) return undefined;
+    // Base condition: table ID must match
+    const whereConditions: SQL<unknown>[] = [sql`r.table_id = ${tableId}`];
 
-        switch (filter.operator) {
-          case "equals":
-            return sql`c.column_id = ${column.id} AND c.value = ${filter.value}`;
-          case "not_equals":
-            return sql`c.column_id = ${column.id} AND c.value != ${filter.value}`;
-          case "contains":
-            return sql`c.column_id = ${column.id} AND c.value ILIKE ${`%${filter.value}%`}`;
-          case "not_contains":
-            return sql`c.column_id = ${column.id} AND c.value NOT ILIKE ${`%${filter.value}%`}`;
-          case "greater_than":
-            return sql`c.column_id = ${column.id} AND CAST(c.value AS NUMERIC) > ${filter.value}`;
-          case "less_than":
-            return sql`c.column_id = ${column.id} AND CAST(c.value AS NUMERIC) < ${filter.value}`;
-          case "is_empty":
-            return sql`(c.column_id = ${column.id} AND (c.value IS NULL OR c.value = ''))`;
-          case "is_not_empty":
-            return sql`(c.column_id = ${column.id} AND c.value IS NOT NULL AND c.value != '')`;
-          default:
-            return undefined;
-        }
-      })
-      .filter((x): x is SQL<unknown> => x !== undefined);
+    // Add each column filter as a separate EXISTS condition
+    filtering.forEach((filter) => {
+      const column = tableColumns.find((col) => col.id === filter.columnId);
+      if (!column) return;
 
-    // Get total count with filters
+      let filterCondition: SQL<unknown>;
+      switch (filter.operator) {
+        case "equals":
+          filterCondition = sql`c.column_id = ${column.id} AND c.value = ${filter.value}`;
+          break;
+        case "not_equals":
+          filterCondition = sql`c.column_id = ${column.id} AND c.value != ${filter.value}`;
+          break;
+        case "contains":
+          filterCondition = sql`c.column_id = ${column.id} AND c.value ILIKE ${`%${filter.value}%`}`;
+          break;
+        case "not_contains":
+          filterCondition = sql`c.column_id = ${column.id} AND c.value NOT ILIKE ${`%${filter.value}%`}`;
+          break;
+        case "greater_than":
+          filterCondition = sql`c.column_id = ${column.id} AND CAST(c.value AS NUMERIC) > ${filter.value}`;
+          break;
+        case "less_than":
+          filterCondition = sql`c.column_id = ${column.id} AND CAST(c.value AS NUMERIC) < ${filter.value}`;
+          break;
+        case "is_empty":
+          filterCondition = sql`c.column_id = ${column.id} AND (c.value IS NULL OR c.value = '')`;
+          break;
+        case "is_not_empty":
+          filterCondition = sql`c.column_id = ${column.id} AND c.value IS NOT NULL AND c.value != ''`;
+          break;
+        default:
+          return;
+      }
+
+      whereConditions.push(sql`EXISTS (
+        SELECT 1 FROM "airtable-clone_cells" c 
+        WHERE c.row_id = r.id 
+        AND ${filterCondition}
+      )`);
+    });
+
+    // Add global search condition if present
+    if (globalSearch) {
+      const searchableColumns = tableColumns.filter((col) => col.isSearchable);
+      const searchConditions = searchableColumns.map(
+        (col) =>
+          sql`(c.column_id = ${col.id} AND c.value ILIKE ${`%${globalSearch}%`})`,
+      );
+
+      if (searchConditions.length > 0) {
+        whereConditions.push(sql`EXISTS (
+          SELECT 1 FROM "airtable-clone_cells" c 
+          WHERE c.row_id = r.id 
+          AND (${sql.join(searchConditions, sql` OR `)})
+        )`);
+      }
+    }
+
+    // Calculate offset for pagination
+    const offset = (page - 1) * pageSize;
+
+    // Get total count with all filters applied
     const countQuery = sql`
       WITH filtered_rows AS (
         SELECT DISTINCT r.id
         FROM "airtable-clone_rows" r
-        LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
-        WHERE r.table_id = ${tableId}
-        ${filterConditions.length > 0 ? sql`AND (${sql.join(filterConditions, sql` OR `)})` : sql``}
+        WHERE ${sql.join(whereConditions, sql` AND `)}
       )
       SELECT COUNT(*) as count FROM filtered_rows
     `;
 
     const countResult = await db.execute<{ count: number }>(countQuery);
     const totalCount = Number(countResult.rows[0]?.count ?? 0);
-    const offset = (page - 1) * pageSize;
 
     // If sorting is requested, use the sorting logic
     if (sorting.length > 0) {
@@ -315,14 +355,11 @@ export async function getTableDataWithSort(params: {
         })
         .filter((x): x is SQL<unknown> => x !== undefined);
 
-      // Use the CTE approach for sorted and filtered data
       const sortedQuery = sql`
         WITH filtered_rows AS (
           SELECT DISTINCT r.id
           FROM "airtable-clone_rows" r
-          LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
-          WHERE r.table_id = ${tableId}
-          ${filterConditions.length > 0 ? sql`AND (${sql.join(filterConditions, sql` OR `)})` : sql``}
+          WHERE ${sql.join(whereConditions, sql` AND `)}
         ),
         sorted_rows AS (
           SELECT r.id, r.order, ROW_NUMBER() OVER (
@@ -338,7 +375,7 @@ export async function getTableDataWithSort(params: {
         JOIN "airtable-clone_rows" r ON r.id = sr.id
         LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
         WHERE sr.row_num > ${offset} AND sr.row_num <= ${offset + pageSize}
-        ORDER BY sr.row_num;
+        ORDER BY sr.row_num
       `;
 
       const { rows: sortedRows } = await db.execute<QueryResult>(sortedQuery);
@@ -351,14 +388,12 @@ export async function getTableDataWithSort(params: {
       });
     }
 
-    // For unsorted data, use the chunked approach with filters
+    // For unsorted data, use simpler query with just filters
     const paginatedQuery = sql`
       WITH filtered_rows AS (
         SELECT DISTINCT r.id
         FROM "airtable-clone_rows" r
-        LEFT JOIN "airtable-clone_cells" c ON c.row_id = r.id
-        WHERE r.table_id = ${tableId}
-        ${filterConditions.length > 0 ? sql`AND (${sql.join(filterConditions, sql` OR `)})` : sql``}
+        WHERE ${sql.join(whereConditions, sql` AND `)}
       )
       SELECT r.id, r.order
       FROM filtered_rows fr
@@ -373,6 +408,7 @@ export async function getTableDataWithSort(params: {
       order: number;
     }>(paginatedQuery);
 
+    // Fetch cells for paginated rows in chunks
     const CHUNK_SIZE = 50;
     const allRowsWithCells = [];
 
@@ -393,7 +429,7 @@ export async function getTableDataWithSort(params: {
       allRowsWithCells.push(...rowsWithCells);
     }
 
-    const result = transformResults(
+    return transformResults(
       allRowsWithCells.map((record) => ({
         row_id: record.row.id,
         row_order: record.row.order,
@@ -411,16 +447,10 @@ export async function getTableDataWithSort(params: {
         hasMore: offset + paginatedRows.length < totalCount,
       },
     );
-
-    if (!result.success) {
-      return { success: false as const, error: result.error };
-    }
-
-    return { success: true as const, table: result.table };
   } catch (error) {
     console.error("[getTableDataWithSort] Error:", error);
     return {
-      success: false as const,
+      success: false,
       error:
         error instanceof Error ? error.message : "Failed to get table data",
     };

@@ -12,6 +12,7 @@ export interface TableConfigProps {
   tableId: string;
   sorting: SortingState;
   filtering: FilterPreference[];
+  globalSearch: string;
   columnOrder: string[];
   onSortingChangeAction: (sorting: SortingState) => void;
   onFilteringChange: (filtering: FilterPreference[]) => void;

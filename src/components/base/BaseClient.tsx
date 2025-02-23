@@ -19,6 +19,8 @@ import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
 import { queryKeys } from "~/lib/query/keys";
 import { prefetchTable } from "~/lib/query/prefetch";
 import { useTableStructure } from "~/hooks/useTableStructure";
+import { type SortingState } from "@tanstack/react-table";
+import type { FilterPreference } from "~/types/filter";
 
 interface BaseClientProps {
   baseId: string;
@@ -69,11 +71,11 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     handleSortChange,
     filterState,
     handleFilterChange,
+    searchValue,
+    handleSearchChange,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-    isUpdatingSort,
-    isUpdatingFilter,
   } = useTableData({ baseId, tableId, tableName, viewId });
 
   const {
@@ -288,7 +290,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       </div>
     );
   }
-  
+
   return (
     <div className="flex h-screen flex-col bg-white">
       <BaseTopNavigation baseName={baseName} baseId={baseId} />
@@ -325,6 +327,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           onSortingChange={handleSortChange}
           filtering={filterState}
           onFilteringChange={handleFilterChange}
+          onSearch={handleSearchChange}
         />
 
         {!isAddingTable && (
@@ -393,6 +396,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   onSortingChangeAction={handleSortChange}
                   filtering={filterState}
                   onFilteringChangeAction={handleFilterChange}
+                  globalSearch={searchValue}
                   fetchNextPage={fetchNextPage}
                   hasNextPage={hasNextPage}
                   isFetchingNextPage={isFetchingNextPage}

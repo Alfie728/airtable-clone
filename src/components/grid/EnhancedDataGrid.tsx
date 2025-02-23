@@ -29,7 +29,7 @@ import { RowManagement } from "./RowManagement";
 import { Checkbox } from "~/components/ui/checkbox";
 import { DraggableColumn } from "./DraggableColumn";
 import { useTableConfig } from "./hooks/useTableConfig";
-import { HeaderType, type CellType } from "~/types/grid";
+import { type HeaderType, type CellType } from "~/types/grid";
 import { AddField } from "./components/AddField";
 import { GridFooter } from "./components/GridFooter";
 import type { FilterPreference } from "~/types/filter";
@@ -55,6 +55,7 @@ interface EnhancedDataGridProps {
   onSortingChangeAction: (sorting: SortingState) => void;
   filtering: FilterPreference[];
   onFilteringChangeAction: (filtering: FilterPreference[]) => void;
+  globalSearch: string;
   fetchNextPage: () => void;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
@@ -96,6 +97,7 @@ export function EnhancedDataGrid({
   fetchNextPage,
   hasNextPage,
   isFetchingNextPage,
+  globalSearch,
 }: EnhancedDataGridProps) {
   const [columnOrder, setColumnOrder] = useState<string[]>(() =>
     (initialColumns ?? [])
@@ -207,6 +209,7 @@ export function EnhancedDataGrid({
       tableId,
       sorting,
       filtering,
+      globalSearch,
       columnOrder,
       onSortingChangeAction,
       onFilteringChange: onFilteringChangeAction,

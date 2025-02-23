@@ -14,7 +14,7 @@ import {
 import { useTableSort } from "./useTableSort";
 import { useTableFilter } from "./useTableFilter";
 import type { SortingState } from "@tanstack/react-table";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import type {
   Row,
   Column,
@@ -26,6 +26,7 @@ import type {
 import { faker } from "@faker-js/faker";
 import pages from "next/dist/build/templates/pages";
 import { useTableStructure } from "./useTableStructure";
+import type { FilterPreference } from "~/types/filter";
 
 function generateMockRow(columns: Column[]): Row {
   const row: Row = {
@@ -195,34 +196,110 @@ function isErrorResponse(
 }
 
 export function useTableData({
+  baseId,
   tableId,
   tableName,
   viewId,
-  baseId,
-}: UseTableDataParams) {
+}: {
+  baseId: string;
+  tableId: string;
+  tableName: string;
+  viewId: string;
+}) {
   const queryClient = useQueryClient();
   const latestMutationRef = useRef<string | null>(null);
   const pendingRowCreationsRef = useRef<Map<string, Promise<unknown>>>(
     new Map(),
   );
+  const previousFilterStateRef = useRef<FilterPreference[]>([]);
 
-  // Get sorting state if viewId is provided
-  const {
-    initialSortState,
-    updateSort,
-    isUpdating: isUpdatingSort,
-  } = useTableSort(viewId ?? "");
+  // Move all hooks to the top level
+  const [sortState, setSortState] = useState<SortingState>([]);
+  const [filterState, setFilterState] = useState<FilterPreference[]>([]);
+  const [searchValue, setSearchValue] = useState("");
 
-  // Get filtering state if viewId is provided
   const {
     initialFilterState,
     updateFilter,
     isUpdating: isUpdatingFilter,
-  } = useTableFilter(viewId ?? "");
+  } = useTableFilter(viewId);
 
-  // Get table structure (columns)
+  const {
+    initialSortState,
+    updateSort,
+    isUpdating: isUpdatingSort,
+  } = useTableSort(viewId);
+
   const { data: structureData, isLoading: isLoadingStructure } =
     useTableStructure(tableId);
+
+  // Use useEffect with proper dependency comparison
+  useEffect(() => {
+    if (
+      initialFilterState &&
+      JSON.stringify(initialFilterState) !==
+        JSON.stringify(previousFilterStateRef.current)
+    ) {
+      previousFilterStateRef.current = initialFilterState;
+      setFilterState(initialFilterState);
+    }
+  }, [initialFilterState]);
+
+  useEffect(() => {
+    if (initialSortState) {
+      setSortState(initialSortState);
+    }
+  }, [initialSortState]);
+
+  // Memoize the filter change handler
+  const handleFilterChange = useCallback(
+    async (newFiltering: FilterPreference[]) => {
+      // Only update if the filter actually changed
+      if (JSON.stringify(newFiltering) !== JSON.stringify(filterState)) {
+        setFilterState(newFiltering);
+
+        if (viewId) {
+          try {
+            await updateFilter(newFiltering);
+
+            // Use a ref to track the latest filter update
+            previousFilterStateRef.current = newFiltering;
+
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.views.data.withConfig(tableId, viewId, {
+                sorts: JSON.stringify(sortState),
+                filters: JSON.stringify(newFiltering),
+                search: searchValue,
+                page: 1,
+              }),
+            });
+          } catch (error) {
+            // Revert to previous state on error
+            setFilterState(previousFilterStateRef.current);
+          }
+        }
+      }
+    },
+    [
+      tableId,
+      viewId,
+      sortState,
+      searchValue,
+      updateFilter,
+      queryClient,
+      filterState,
+    ],
+  );
+
+  // Memoize search change handler
+  const handleSearchChange = useCallback(
+    (newSearchValue: string) => {
+      if (newSearchValue !== searchValue) {
+        setSearchValue(newSearchValue);
+      }
+    },
+    [searchValue],
+  );
 
   // Query for table data with infinite pagination
   const {
@@ -236,7 +313,8 @@ export function useTableData({
     queryKey: viewId
       ? queryKeys.views.data.withConfig(tableId, viewId, {
           sorts: JSON.stringify(initialSortState),
-          filters: JSON.stringify(initialFilterState),
+          filters: JSON.stringify(filterState),
+          search: searchValue,
           page: 1,
         })
       : queryKeys.tables.data.root(tableId),
@@ -244,8 +322,9 @@ export function useTableData({
       const response = await getTableDataWithSort({
         tableId,
         tableName,
-        sorting: viewId ? initialSortState : undefined,
-        filtering: viewId ? initialFilterState : undefined,
+        sorting: initialSortState,
+        filtering: filterState,
+        globalSearch: searchValue,
         page: pageParam as number,
       });
 
@@ -311,7 +390,8 @@ export function useTableData({
         const queryKey = viewId
           ? queryKeys.views.data.withConfig(tableId, viewId, {
               sorts: JSON.stringify(initialSortState),
-              filters: JSON.stringify(initialFilterState),
+              filters: JSON.stringify(filterState),
+              search: searchValue,
               page: 1,
             })
           : queryKeys.tables.data.root(tableId);
@@ -354,7 +434,8 @@ export function useTableData({
           const queryKey = viewId
             ? queryKeys.views.data.withConfig(tableId, viewId, {
                 sorts: JSON.stringify(initialSortState),
-                filters: JSON.stringify(initialFilterState),
+                filters: JSON.stringify(filterState),
+                search: searchValue,
                 page: 1,
               })
             : queryKeys.tables.data.root(tableId);
@@ -430,7 +511,8 @@ export function useTableData({
       const queryKey = viewId
         ? queryKeys.views.data.withConfig(tableId, viewId, {
             sorts: JSON.stringify(initialSortState),
-            filters: JSON.stringify(initialFilterState),
+            filters: JSON.stringify(filterState),
+            search: searchValue,
             page: 1,
           })
         : queryKeys.tables.data.root(tableId);
@@ -478,7 +560,8 @@ export function useTableData({
         const queryKey = viewId
           ? queryKeys.views.data.withConfig(tableId, viewId, {
               sorts: JSON.stringify(initialSortState),
-              filters: JSON.stringify(initialFilterState),
+              filters: JSON.stringify(filterState),
+              search: searchValue,
               page: 1,
             })
           : queryKeys.tables.data.root(tableId);
@@ -506,7 +589,8 @@ export function useTableData({
       const queryKey = viewId
         ? queryKeys.views.data.withConfig(tableId, viewId, {
             sorts: JSON.stringify(initialSortState),
-            filters: JSON.stringify(initialFilterState),
+            filters: JSON.stringify(filterState),
+            search: searchValue,
             page: 1,
           })
         : queryKeys.tables.data.root(tableId);
@@ -552,7 +636,8 @@ export function useTableData({
         const queryKey = viewId
           ? queryKeys.views.data.withConfig(tableId, viewId, {
               sorts: JSON.stringify(initialSortState),
-              filters: JSON.stringify(initialFilterState),
+              filters: JSON.stringify(filterState),
+              search: searchValue,
               page: 1,
             })
           : queryKeys.tables.data.root(tableId);
@@ -640,10 +725,12 @@ export function useTableData({
     isBatchAdding: addBulkRowsMutation.isPending,
     renameTable: (newName: string) => renameMutation.mutateAsync(newName),
     isRenaming: renameMutation.isPending,
-    sortState: initialSortState ?? [],
+    sortState,
     handleSortChange: updateSort,
-    filterState: initialFilterState ?? [],
-    handleFilterChange: updateFilter,
+    filterState,
+    handleFilterChange,
+    searchValue,
+    handleSearchChange,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,

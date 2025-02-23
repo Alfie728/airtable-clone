@@ -42,6 +42,7 @@ interface GridControlsProps {
   onSortingChange?: (sorting: SortingState) => void;
   filtering?: FilterPreference[];
   onFilteringChange?: (filtering: FilterPreference[]) => void;
+  onSearch?: (value: string) => void;
 }
 
 export function GridControls({
@@ -52,6 +53,7 @@ export function GridControls({
   onSortingChange = (newSorting: SortingState) => void 0,
   filtering = [],
   onFilteringChange = () => void 0,
+  onSearch = () => void 0,
 }: GridControlsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [addSortOpen, setAddSortOpen] = useState(false);
@@ -133,11 +135,6 @@ export function GridControls({
       <div className="h-4 w-px bg-gray-200" />
 
       <div className="flex items-center gap-0.5">
-        <SearchDropdown
-          columns={columns}
-          filtering={filtering}
-          onFilteringChange={onFilteringChange}
-        />
         <Button
           variant="ghost"
           size="sm"
@@ -379,11 +376,7 @@ export function GridControls({
 
       <div className="flex-1" />
 
-      <SearchDropdown
-        columns={columns}
-        filtering={filtering}
-        onFilteringChange={onFilteringChange}
-      />
+      <SearchDropdown columns={columns} onSearch={onSearch} />
     </div>
   );
 }
