@@ -32,6 +32,7 @@ import { cn } from "~/lib/utils";
 import type { FilterPreference } from "~/types/filter";
 import { Input } from "~/components/ui/input";
 import { FilterDropdown } from "./components/FilterDropdown";
+import SearchDropdown from "./components/SearchDropdown";
 
 interface GridControlsProps {
   isSidebarOpen: boolean;
@@ -132,6 +133,11 @@ export function GridControls({
       <div className="h-4 w-px bg-gray-200" />
 
       <div className="flex items-center gap-0.5">
+        <SearchDropdown
+          columns={columns}
+          filtering={filtering}
+          onFilteringChange={onFilteringChange}
+        />
         <Button
           variant="ghost"
           size="sm"
@@ -373,13 +379,11 @@ export function GridControls({
 
       <div className="flex-1" />
 
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-8 gap-1.5 rounded px-2 text-sm font-normal text-gray-700 hover:bg-gray-100"
-      >
-        <Search className="h-4 w-4" />
-      </Button>
+      <SearchDropdown
+        columns={columns}
+        filtering={filtering}
+        onFilteringChange={onFilteringChange}
+      />
     </div>
   );
 }
