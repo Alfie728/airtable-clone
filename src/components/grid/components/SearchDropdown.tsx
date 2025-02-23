@@ -11,6 +11,7 @@ import { Search, X } from "lucide-react";
 import type { Column } from "~/types/table";
 import type { FilterPreference } from "~/types/filter";
 import { useDebounce } from "~/hooks/useDebounce";
+import { cn } from "~/lib/utils";
 
 interface SearchDropdownProps {
   columns: Column[];
@@ -76,14 +77,36 @@ const SearchDropdown = ({
     onFilteringChange([...nonSearchFilters, ...searchFilters]);
   }, [debouncedSearchValue, columns, filtering, onFilteringChange]);
 
+  // Handle clearing the search
+  const handleClear = () => {
+    setSearchValue("");
+    setIsOpen(false);
+  };
+
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm">
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            "h-8 gap-1.5 rounded px-2 text-sm font-normal",
+            searchValue
+              ? "bg-[#FFE0CC] text-gray-700 hover:border-rose-200 hover:shadow-[inset_0px_0px_0px_2px_rgba(0,0,0,0.1)]"
+              : "text-gray-700 hover:bg-gray-100",
+          )}
+        >
           <Search className="h-4 w-4" />
+          {searchValue && (
+            <span className="max-w-[100px] truncate">{searchValue}</span>
+          )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-[300px] p-0" align="start">
+      <DropdownMenuContent
+        className="w-[300px] p-0"
+        align="start"
+        sideOffset={0}
+      >
         <div className="flex items-center px-2 py-2">
           <Search className="mr-2 h-4 w-4 flex-shrink-0 text-muted-foreground" />
           <Input
@@ -96,10 +119,7 @@ const SearchDropdown = ({
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0 hover:bg-muted"
-            onClick={() => {
-              setSearchValue("");
-              setIsOpen(false);
-            }}
+            onClick={handleClear}
           >
             <X className="h-4 w-4" />
           </Button>
