@@ -230,40 +230,39 @@ export function useTableData({
   const { data: structureData, isLoading: isLoadingStructure } =
     useTableStructure(tableId);
 
-  // Only update filter state on initial load or when explicitly changed
+  // Combined effect to handle both sort and filter state updates
   useEffect(() => {
-    if (!initialFilterState || viewId === "loading") return;
+    if (viewId === "loading") return;
 
-    // Skip if values are the same
-    if (
-      JSON.stringify(initialFilterState) ===
-      JSON.stringify(previousFilterStateRef.current)
-    ) {
-      return;
+    const shouldUpdateFilter =
+      initialFilterState &&
+      (isInitialLoadRef.current ||
+        previousViewIdRef.current !== viewId ||
+        JSON.stringify(initialFilterState) !==
+          JSON.stringify(previousFilterStateRef.current));
+
+    const shouldUpdateSort =
+      initialSortState &&
+      (isInitialLoadRef.current ||
+        previousViewIdRef.current !== viewId ||
+        JSON.stringify(initialSortState) !== JSON.stringify(sortState));
+
+    if (shouldUpdateFilter || shouldUpdateSort) {
+      if (shouldUpdateFilter) {
+        setFilterState(initialFilterState ?? []);
+        previousFilterStateRef.current = initialFilterState ?? [];
+      }
+
+      if (shouldUpdateSort) {
+        setSortState(initialSortState ?? []);
+      }
+
+      if (isInitialLoadRef.current || previousViewIdRef.current !== viewId) {
+        isInitialLoadRef.current = false;
+        previousViewIdRef.current = viewId;
+      }
     }
-
-    // Only set on initial load or when viewId changes
-    if (isInitialLoadRef.current || previousViewIdRef.current !== viewId) {
-      isInitialLoadRef.current = false;
-      previousViewIdRef.current = viewId;
-      setFilterState(initialFilterState);
-      previousFilterStateRef.current = initialFilterState;
-    }
-  }, [initialFilterState, viewId]);
-
-  useEffect(() => {
-    if (!initialSortState || viewId === "loading") return;
-
-    // Skip if values are the same
-    if (JSON.stringify(initialSortState) === JSON.stringify(sortState)) {
-      return;
-    }
-
-    // Only set on initial load or when viewId changes
-    if (isInitialLoadRef.current || previousViewIdRef.current !== viewId) {
-      setSortState(initialSortState);
-    }
-  }, [initialSortState, viewId, sortState]);
+  }, [initialFilterState, initialSortState, viewId, sortState]);
 
   // Reset refs when tableId changes
   useEffect(() => {
