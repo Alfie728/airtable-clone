@@ -4,6 +4,7 @@ import {
   deleteView,
   renameView,
   getTableViews,
+  getDefaultView,
 } from "~/lib/actions/views.action";
 import { queryKeys, getViewRelatedQueryKeys } from "~/lib/query/keys";
 import type { views } from "~/server/db/schema";
@@ -24,6 +25,45 @@ export function useViews(tableId: string) {
     },
     staleTime: 5 * 1000,
   });
+
+  // Query for fetching default view ID
+  const { data: defaultViewId, isLoading: isLoadingDefaultView } = useQuery({
+    queryKey: queryKeys.views.default(tableId),
+    queryFn: async () => {
+      const result = await getDefaultView(tableId);
+      if (!result.viewId) {
+        throw new Error(result.error ?? "Failed to get default view");
+      }
+      return result.viewId;
+    },
+    staleTime: 5 * 1000, // Cache for 5 seconds
+    retry: 1, // Only retry once to avoid infinite loops
+  });
+
+  // Function to get default view ID with proper error handling
+  const getDefaultViewId = async () => {
+    try {
+      // Try to get from cache first
+      const cachedId = queryClient.getQueryData<string>(
+        queryKeys.views.default(tableId),
+      );
+      if (cachedId) return { viewId: cachedId };
+
+      // If not in cache, fetch it
+      const result = await getDefaultView(tableId);
+      if (!result.viewId) {
+        throw new Error(result.error ?? "Failed to get default view");
+      }
+
+      // Cache the result
+      queryClient.setQueryData(queryKeys.views.default(tableId), result.viewId);
+      return { viewId: result.viewId };
+    } catch (err) {
+      const error =
+        err instanceof Error ? err.message : "Failed to get default view";
+      return { error };
+    }
+  };
 
   // Mutation for creating views
   const { mutateAsync: createViewMutation, isPending: isCreatingView } =
@@ -145,5 +185,8 @@ export function useViews(tableId: string) {
     isDeletingView,
     renameView: renameViewMutation,
     isRenamingView,
+    getDefaultViewId,
+    defaultViewId,
+    isLoadingDefaultView,
   };
 }
