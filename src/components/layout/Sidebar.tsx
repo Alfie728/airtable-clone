@@ -72,8 +72,16 @@ export function Sidebar({
         <div className="flex-1 overflow-y-auto p-1">
           <div className="space-y-0.5">
             {isLoadingViews ? (
-              <div className="px-2 py-1 text-sm text-gray-500">
-                Loading views...
+              <div className="space-y-2 px-2 py-1">
+                {[1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="flex h-7 animate-pulse items-center gap-2 rounded bg-gray-100 px-2"
+                  >
+                    <div className="h-3.5 w-3.5 rounded bg-gray-200" />
+                    <div className="h-3 w-24 rounded bg-gray-200" />
+                  </div>
+                ))}
               </div>
             ) : !Array.isArray(views) || views.length === 0 ? (
               <div className="px-2 py-1 text-sm text-gray-500">No views</div>

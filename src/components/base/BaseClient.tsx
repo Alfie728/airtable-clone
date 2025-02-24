@@ -13,7 +13,11 @@ import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getDefaultView, createView } from "~/lib/actions/views.action";
+import {
+  getDefaultView,
+  createView,
+  getTableViews,
+} from "~/lib/actions/views.action";
 import { useViews } from "~/hooks/useViews";
 import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
 import { queryKeys } from "~/lib/query/keys";
@@ -161,16 +165,28 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     setIsHandlingNavigation(true);
 
     try {
-      // Start prefetching table data
-      const prefetchPromise = !queryClient.getQueryData(
-        queryKeys.tables.detail(newTableId),
-      )
-        ? prefetchTable(
-            queryClient,
-            newTableId,
-            baseTables?.find((t) => t.id === newTableId)?.name ?? "",
-          )
-        : Promise.resolve();
+      // Start prefetching table data and views in parallel
+      const prefetchPromises = [
+        !queryClient.getQueryData(queryKeys.tables.detail(newTableId))
+          ? prefetchTable(
+              queryClient,
+              newTableId,
+              baseTables?.find((t) => t.id === newTableId)?.name ?? "",
+            )
+          : Promise.resolve(),
+        // Also prefetch views list to prevent empty sidebar
+        queryClient.prefetchQuery({
+          queryKey: queryKeys.views.list(newTableId),
+          queryFn: async () => {
+            const viewsResult = await getTableViews(newTableId);
+            if (!viewsResult.success) {
+              throw new Error(viewsResult.error ?? "Failed to get views");
+            }
+            return viewsResult.views;
+          },
+          staleTime: 5 * 1000,
+        }),
+      ];
 
       // Try to get from cache first
       const cachedId = queryClient.getQueryData<string>(
@@ -179,7 +195,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
       if (cachedId) {
         // Wait for prefetch to complete
-        await prefetchPromise;
+        await Promise.all(prefetchPromises);
         // Set pending view before navigation
         setPendingActiveViewId(cachedId);
         // Navigate
@@ -201,7 +217,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       }
 
       // Wait for prefetch to complete
-      await prefetchPromise;
+      await Promise.all(prefetchPromises);
 
       // Set pending view before navigation
       setPendingActiveViewId(viewId);
