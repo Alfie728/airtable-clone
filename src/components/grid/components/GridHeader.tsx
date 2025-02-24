@@ -35,13 +35,8 @@ export function GridHeader({
           <Text className="h-4 w-4 text-gray-400" />
         )}
         <span>{column.name}</span>
-        {headerContext.column.getCanSort() && (
-          <div
-            className={cn(
-              "text-gray-400",
-              headerContext.column.getIsSorted() && "text-blue-600",
-            )}
-          >
+        {/* {headerContext.column.getCanSort() && (
+          <div className="text-gray-400">
             {headerContext.column.getIsSorted() === "asc" ? (
               <div className="flex items-center">
                 <ArrowUp className="h-4 w-4" />
@@ -60,7 +55,7 @@ export function GridHeader({
               <ArrowUpDown className="h-4 w-4" />
             )}
           </div>
-        )}
+        )} */}
       </div>
       <ColumnManagement
         tableId={tableId}

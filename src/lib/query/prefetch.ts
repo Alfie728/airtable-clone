@@ -1,5 +1,5 @@
 import { type QueryClient } from "@tanstack/react-query";
-import { getTables, getTableDataWithSort } from "~/lib/actions/tables.action";
+import { getTables, getTableData } from "~/lib/actions/tables.action";
 import { getBaseById } from "~/lib/actions/bases.action";
 import type { BaseResponse } from "~/types/base";
 import { type tables } from "~/server/db/schema";
@@ -52,7 +52,7 @@ export async function prefetchTable(
   // Prefetch table data
   await queryClient.prefetchQuery({
     queryKey: queryKeys.tables.data.root(tableId),
-    queryFn: () => getTableDataWithSort({ tableId, tableName }),
+    queryFn: () => getTableData({ tableId, tableName }),
     staleTime: 5 * 1000,
   });
 
@@ -120,7 +120,7 @@ export async function prefetchBaseTables(
             queryClient.prefetchQuery({
               queryKey: queryKeys.tables.data.root(table.id),
               queryFn: () =>
-                getTableDataWithSort({
+                getTableData({
                   tableId: table.id,
                   tableName: table.name,
                 }),
