@@ -333,7 +333,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         {!isAddingTable && (
           <div
             className={cn(
-              "absolute bottom-0 left-0 top-[136px] z-20 w-60 border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
+              "absolute bottom-0 left-0 top-[136px] z-20 w-[282px] border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
               !isSidebarOpen && "-translate-x-full",
             )}
           >
@@ -357,7 +357,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           <div
             className={cn(
               "flex-1 transition-[margin] duration-200 ease-in-out",
-              isSidebarOpen && !isAddingTable && "ml-60",
+              isSidebarOpen && !isAddingTable && "ml-[282px]",
             )}
           >
             {isAddingTable ||
