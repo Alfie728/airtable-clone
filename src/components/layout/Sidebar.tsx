@@ -21,6 +21,7 @@ import { Input } from "~/components/ui/input";
 import type { views } from "~/server/db/schema";
 import { cn } from "~/lib/utils";
 import { Separator } from "@radix-ui/react-separator";
+import { ViewOptionsDropdown } from "~/components/view/ViewOptionsDropdown";
 
 interface SidebarProps {
   views: (typeof views.$inferSelect)[] | undefined;
@@ -30,6 +31,10 @@ interface SidebarProps {
   pendingActiveViewId?: string | null;
   isLoading?: boolean;
   onCreateView?: (type: "grid") => Promise<void>;
+  onRenameView?: (viewId: string, name: string) => Promise<void>;
+  onDeleteView?: (viewId: string) => Promise<void>;
+  isRenamingView?: boolean;
+  isDeletingView?: boolean;
 }
 
 export function Sidebar({
@@ -40,15 +45,16 @@ export function Sidebar({
   pendingActiveViewId,
   isLoading = false,
   onCreateView,
+  onRenameView,
+  onDeleteView,
+  isRenamingView,
+  isDeletingView,
 }: SidebarProps) {
   const [isViewsOpen, setIsViewsOpen] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  // Determine if we're in a loading state
-  const isLoadingViews =
-    isLoading ||
-    (pendingActiveViewId !== null && pendingActiveViewId !== currentViewId) ||
-    currentViewId === "loading";
+  // Only show loading state when we're actually loading the views data
+  const isLoadingViews = isLoading || currentViewId === "loading";
 
   return (
     <div className="flex h-full w-full flex-col border-gray-200 bg-gray-50/50 px-3">
@@ -73,24 +79,39 @@ export function Sidebar({
               <div className="px-2 py-1 text-sm text-gray-500">No views</div>
             ) : (
               views.map((view) => (
-                <Button
+                <div
                   key={view.id}
-                  variant={currentViewId === view.id ? "secondary" : "ghost"}
-                  className={cn(
-                    "h-7 w-full justify-start gap-2 rounded px-2 text-xs font-normal",
-                    isAddingView && views.indexOf(view) === views.length - 1
-                      ? "bg-blue-50 text-blue-700"
-                      : view.id === pendingActiveViewId ||
-                          (!pendingActiveViewId && currentViewId === view.id)
-                        ? "bg-blue-50 text-blue-700"
-                        : "bg-gray-50 text-gray-500",
-                  )}
-                  onClick={() => onViewSelect(view.id)}
-                  disabled={isLoadingViews}
+                  className="group flex items-center justify-between gap-1"
                 >
-                  <Grid className="h-3.5 w-3.5" />
-                  {view.name}
-                </Button>
+                  <Button
+                    variant={currentViewId === view.id ? "secondary" : "ghost"}
+                    className={cn(
+                      "h-7 w-full justify-start gap-2 rounded px-2 text-xs font-normal",
+                      isAddingView && views.indexOf(view) === views.length - 1
+                        ? "bg-blue-50 text-blue-700"
+                        : view.id === pendingActiveViewId ||
+                            (!pendingActiveViewId && currentViewId === view.id)
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-gray-50 text-gray-500",
+                    )}
+                    onClick={() => onViewSelect(view.id)}
+                    disabled={isLoadingViews}
+                  >
+                    <Grid className="h-3.5 w-3.5" />
+                    {view.name}
+                  </Button>
+                  <div className="opacity-0 transition-opacity group-hover:opacity-100">
+                    <ViewOptionsDropdown
+                      viewId={view.id}
+                      viewName={view.name}
+                      isDefault={view.isDefault}
+                      onRename={onRenameView ?? (() => Promise.resolve())}
+                      onDelete={onDeleteView ?? (() => Promise.resolve())}
+                      isRenaming={isRenamingView}
+                      isDeleting={isDeletingView}
+                    />
+                  </div>
+                </div>
               ))
             )}
           </div>

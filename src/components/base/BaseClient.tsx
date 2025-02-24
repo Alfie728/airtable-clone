@@ -84,6 +84,10 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     error: viewsError,
     createView,
     isCreatingView,
+    deleteView,
+    isDeletingView,
+    renameView,
+    isRenamingView,
   } = useViews(tableId);
 
   const [isHandlingNavigation, setIsHandlingNavigation] = useState(false);
@@ -284,6 +288,37 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     }
   };
 
+  const handleDeleteView = async (viewToDeleteId: string) => {
+    try {
+      await deleteView(viewToDeleteId);
+      // If we're deleting the current view, navigate to another view
+      if (viewToDeleteId === viewId) {
+        const remainingViews = tableViews?.filter(
+          (v) => v.id !== viewToDeleteId,
+        );
+        const defaultView = remainingViews?.find((v) => v.isDefault);
+        if (defaultView) {
+          setPendingActiveViewId(defaultView.id);
+          router.push(`/${baseId}/${tableId}/${defaultView.id}`, {
+            scroll: false,
+          });
+        }
+      }
+    } catch (error) {
+      // Error handling is done in the hook
+      console.error("Error in handleDeleteView:", error);
+    }
+  };
+
+  const handleRenameView = async (viewToRenameId: string, newName: string) => {
+    try {
+      await renameView({ viewId: viewToRenameId, name: newName });
+    } catch (error) {
+      // Error handling is done in the hook
+      console.error("Error in handleRenameView:", error);
+    }
+  };
+
   if (baseError) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -364,7 +399,11 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                 });
               }}
               onCreateView={handleCreateView}
+              onRenameView={handleRenameView}
+              onDeleteView={handleDeleteView}
               isAddingView={isCreatingView}
+              isRenamingView={isRenamingView}
+              isDeletingView={isDeletingView}
               isLoading={isViewsLoading}
             />
           </div>

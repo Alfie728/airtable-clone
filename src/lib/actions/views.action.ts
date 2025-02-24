@@ -2,7 +2,7 @@
 
 import { and, eq } from "drizzle-orm";
 import { db } from "~/server/db";
-import { views, columns } from "~/server/db/schema";
+import { views, columns, viewFilters } from "~/server/db/schema";
 
 export async function createDefaultView(
   tableId: string,
@@ -130,6 +130,67 @@ export async function createView(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to create view",
+    };
+  }
+}
+
+export async function deleteView(
+  viewId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Check if it's not the default view
+    const view = await db
+      .select()
+      .from(views)
+      .where(eq(views.id, viewId))
+      .limit(1);
+
+    if (!view[0]) {
+      return { success: false, error: "View not found" };
+    }
+
+    if (view[0].isDefault) {
+      return { success: false, error: "Cannot delete default view" };
+    }
+
+    // First, delete all related view filters
+    await db.delete(viewFilters).where(eq(viewFilters.viewId, viewId));
+
+    // Then delete the view
+    await db.delete(views).where(eq(views.id, viewId));
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to delete view",
+    };
+  }
+}
+
+export async function renameView(
+  viewId: string,
+  name: string,
+): Promise<{
+  success: boolean;
+  view?: typeof views.$inferSelect;
+  error?: string;
+}> {
+  try {
+    const [updatedView] = await db
+      .update(views)
+      .set({ name })
+      .where(eq(views.id, viewId))
+      .returning();
+
+    if (!updatedView) {
+      return { success: false, error: "Failed to rename view" };
+    }
+
+    return { success: true, view: updatedView };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to rename view",
     };
   }
 }
