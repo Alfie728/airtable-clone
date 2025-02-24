@@ -29,6 +29,7 @@ interface SidebarProps {
   isAddingView?: boolean;
   pendingActiveViewId?: string | null;
   isLoading?: boolean;
+  onCreateView?: (type: "grid") => Promise<void>;
 }
 
 export function Sidebar({
@@ -38,6 +39,7 @@ export function Sidebar({
   onViewSelect,
   pendingActiveViewId,
   isLoading = false,
+  onCreateView,
 }: SidebarProps) {
   const [isViewsOpen, setIsViewsOpen] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -128,6 +130,7 @@ export function Sidebar({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-gray-500"
+                  onClick={() => onCreateView?.("grid")}
                 >
                   <Plus className="h-4 w-4" />
                 </Button>

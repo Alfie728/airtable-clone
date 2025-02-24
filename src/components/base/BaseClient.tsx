@@ -13,7 +13,7 @@ import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getDefaultView } from "~/lib/actions/views.action";
+import { getDefaultView, createView } from "~/lib/actions/views.action";
 import { useViews } from "~/hooks/useViews";
 import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
 import { queryKeys } from "~/lib/query/keys";
@@ -82,6 +82,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     views: tableViews,
     isLoading: isViewsLoading,
     error: viewsError,
+    createView,
+    isCreatingView,
   } = useViews(tableId);
 
   const [isHandlingNavigation, setIsHandlingNavigation] = useState(false);
@@ -268,6 +270,20 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     }
   };
 
+  const handleCreateView = async (type: "grid") => {
+    try {
+      const newView = await createView(type);
+      // Navigate to the new view
+      setPendingActiveViewId(newView.id);
+      router.push(`/${baseId}/${tableId}/${newView.id}`, {
+        scroll: false,
+      });
+    } catch (error) {
+      // Error handling is done in the hook
+      console.error("Error in handleCreateView:", error);
+    }
+  };
+
   if (baseError) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -347,7 +363,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   scroll: false,
                 });
               }}
-              isAddingView={false}
+              onCreateView={handleCreateView}
+              isAddingView={isCreatingView}
               isLoading={isViewsLoading}
             />
           </div>

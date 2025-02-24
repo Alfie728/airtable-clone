@@ -91,3 +91,45 @@ export async function getTableViews(tableId: string) {
     };
   }
 }
+
+export async function createView(
+  tableId: string,
+  name: string,
+): Promise<{
+  success: boolean;
+  view?: typeof views.$inferSelect;
+  error?: string;
+}> {
+  try {
+    // Get all columns for the table to set up the view
+    const tableColumns = await db
+      .select()
+      .from(columns)
+      .where(eq(columns.tableId, tableId))
+      .orderBy(columns.order);
+
+    // Create a new view
+    const [newView] = await db
+      .insert(views)
+      .values({
+        name,
+        tableId,
+        isDefault: false,
+        columnsOrder: tableColumns.map((col) => col.id),
+        hiddenColumns: [],
+        rowsPerPage: 100,
+      })
+      .returning();
+
+    if (!newView) {
+      return { success: false, error: "Failed to create view" };
+    }
+
+    return { success: true, view: newView };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create view",
+    };
+  }
+}
