@@ -1,43 +1,9 @@
 import { type QueryClient } from "@tanstack/react-query";
 import { getTables, getTableData } from "~/lib/actions/tables.action";
 import { getBaseById } from "~/lib/actions/bases.action";
-import type { BaseResponse } from "~/types/base";
-import { type tables } from "~/server/db/schema";
 import { queryKeys } from "./keys";
 import { getUserBases } from "~/lib/actions/bases.action";
 import { getDefaultView, getTableViews } from "~/lib/actions/views.action";
-import { getViewSorts } from "~/lib/actions/sort.action";
-import type { TableResponse } from "~/types/table";
-
-type TableType = typeof tables.$inferSelect;
-
-interface TableColumn {
-  id: string;
-  name: string;
-  type: string;
-  order: number;
-  width: number;
-  isSearchable: boolean;
-  isSortable: boolean;
-  isVisible: boolean;
-}
-
-type GetTablesResponse = {
-  success: boolean;
-  tables?: TableType[];
-  error?: string;
-};
-
-type GetTableDataResponse = {
-  success: boolean;
-  table?: {
-    id: string;
-    name: string;
-    columns: TableColumn[];
-    data: Record<string, string | number>[];
-  };
-  error?: string;
-};
 
 /**
  * Prefetches a single table's data
@@ -126,22 +92,6 @@ export async function prefetchBaseTables(
                     queryKeys.views.detail(viewId),
                     viewId,
                   );
-
-                  // Prefetch sorts for the default view
-                  void queryClient.prefetchQuery({
-                    queryKey:
-                      queryKeys.views.structure.configuration.sorts(viewId),
-                    queryFn: async () => {
-                      const result = await getViewSorts(viewId);
-                      if (!result.success) {
-                        throw new Error(
-                          result.error ?? "Failed to get view sorts",
-                        );
-                      }
-                      return result.sorts;
-                    },
-                    staleTime: 5 * 1000,
-                  });
                 }
 
                 if (viewsResult.success && viewsResult.views) {
