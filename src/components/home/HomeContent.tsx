@@ -88,7 +88,7 @@ export function HomeContent({ bases: initialBases }: HomeContentProps) {
         onMenuToggle={setIsSidebarOpen}
       />
       <div className="flex flex-1">
-        <HomeSidebar isOpen={isSidebarOpen} />
+        <HomeSidebar isOpen={isSidebarOpen} handleCreateBase={handleCreateBase} />
         <main
           className={cn(
             "flex-1 p-6 transition-all duration-300",

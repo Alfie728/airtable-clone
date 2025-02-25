@@ -19,6 +19,7 @@ import NextLink from "next/link";
 interface HomeSidebarProps {
   isOpen: boolean;
   onToggle?: () => void;
+  handleCreateBase: () => void;
 }
 
 type OpenSection = "home" | "workspaces" | null;
@@ -39,7 +40,11 @@ function MiniSidebar({ onToggle }: { onToggle?: () => void }) {
   );
 }
 
-export function HomeSidebar({ isOpen, onToggle }: HomeSidebarProps) {
+export function HomeSidebar({
+  isOpen,
+  onToggle,
+  handleCreateBase,
+}: HomeSidebarProps) {
   const [openSection, setOpenSection] = useState<OpenSection>("workspaces");
 
   const toggleSection = (section: OpenSection) => {
@@ -166,7 +171,10 @@ export function HomeSidebar({ isOpen, onToggle }: HomeSidebarProps) {
             </NextLink>
           </div>
           <div className="px-2 pb-2">
-            <Button className="h-9 w-full gap-2 bg-[rgb(45,127,249)] text-sm font-semibold hover:bg-[rgb(41,122,241)]">
+            <Button
+              className="h-9 w-full gap-2 bg-[rgb(45,127,249)] text-sm font-semibold hover:bg-[rgb(41,122,241)]"
+              onClick={handleCreateBase}
+            >
               <Plus className="h-4 w-4" />
               Create
             </Button>
