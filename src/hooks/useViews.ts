@@ -31,7 +31,7 @@ export function useViews(tableId: string) {
     queryKey: queryKeys.views.default(tableId),
     queryFn: async () => {
       const result = await getDefaultView(tableId);
-      if (!result.viewId) {
+      if (!result.viewId || typeof result.viewId !== "string") {
         throw new Error(result.error ?? "Failed to get default view");
       }
       return result.viewId;
@@ -47,11 +47,11 @@ export function useViews(tableId: string) {
       const cachedId = queryClient.getQueryData<string>(
         queryKeys.views.default(tableId),
       );
-      if (cachedId) return { viewId: cachedId };
+      if (typeof cachedId === "string") return { viewId: cachedId };
 
       // If not in cache, fetch it
       const result = await getDefaultView(tableId);
-      if (!result.viewId) {
+      if (!result.viewId || typeof result.viewId !== "string") {
         throw new Error(result.error ?? "Failed to get default view");
       }
 

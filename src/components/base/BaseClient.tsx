@@ -193,7 +193,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         queryKeys.views.default(newTableId),
       );
 
-      if (cachedId) {
+      if (typeof cachedId === "string") {
         // Wait for prefetch to complete
         await Promise.all(prefetchPromises);
         // Set pending view before navigation
@@ -212,8 +212,8 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         throw new Error(error);
       }
 
-      if (!viewId) {
-        throw new Error("No default view found");
+      if (!viewId || typeof viewId !== "string") {
+        throw new Error("No default view found or invalid view ID");
       }
 
       // Wait for prefetch to complete
