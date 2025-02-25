@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { useAuth } from "@clerk/nextjs";
 import { Button } from "../ui/button";
 import { useRouter } from "next/navigation";
-import router from "next/router";
+
 
 interface HomeContentProps {
   bases: SerializedBase[];

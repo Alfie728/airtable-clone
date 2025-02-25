@@ -89,23 +89,25 @@ export function Sidebar({
               views.map((view) => (
                 <div
                   key={view.id}
-                  className="group flex items-center justify-between gap-1"
+                  className={cn(
+                    "group flex items-center justify-between gap-1 rounded px-2 py-1",
+                    isAddingView && views.indexOf(view) === views.length - 1
+                      ? "bg-[#c4ecffb3] text-[#1d1f25] hover:bg-[#c4ecff]"
+                      : view.id === pendingActiveViewId ||
+                          (!pendingActiveViewId && currentViewId === view.id)
+                        ? "bg-[#c4ecffb3] text-[#1d1f25] hover:bg-[#c4ecff]"
+                        : "bg-gray-50 text-gray-500 hover:bg-gray-100",
+                  )}
                 >
                   <Button
                     variant={currentViewId === view.id ? "secondary" : "ghost"}
                     className={cn(
-                      "h-7 w-full justify-start gap-2 rounded px-2 text-xs font-normal",
-                      isAddingView && views.indexOf(view) === views.length - 1
-                        ? "bg-blue-50 text-blue-700"
-                        : view.id === pendingActiveViewId ||
-                            (!pendingActiveViewId && currentViewId === view.id)
-                          ? "bg-blue-50 text-blue-700"
-                          : "bg-gray-50 text-gray-500",
+                      "h-7 w-full justify-start gap-2 rounded border-none bg-transparent px-2 text-xs font-normal shadow-none hover:bg-transparent",
                     )}
                     onClick={() => onViewSelect(view.id)}
                     disabled={isLoadingViews}
                   >
-                    <Grid className="h-3.5 w-3.5" />
+                    <Grid className="h-3.5 w-3.5 text-[#166ee1]" />
                     {view.name}
                   </Button>
                   <div className="opacity-0 transition-opacity group-hover:opacity-100">
