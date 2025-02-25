@@ -11,12 +11,21 @@ import { prefetchBaseTables } from "~/lib/query/prefetch";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { BaseCard } from "~/components/home/BaseCard";
 import { queryKeys } from "~/lib/query/keys";
+import { getDefaultView } from "~/lib/actions/views.action";
+import { createBase } from "~/lib/actions/bases.action";
+import { toast } from "sonner";
+import { useAuth } from "@clerk/nextjs";
+import { Button } from "../ui/button";
+import { useRouter } from "next/navigation";
+import router from "next/router";
 
 interface HomeContentProps {
   bases: SerializedBase[];
 }
 
 export function HomeContent({ bases: initialBases }: HomeContentProps) {
+  const { userId } = useAuth();
+  const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -36,6 +45,40 @@ export function HomeContent({ bases: initialBases }: HomeContentProps) {
   const handleBaseHover = async (baseId: string) => {
     console.log("Hovering over base:", baseId);
     await prefetchBaseTables(queryClient, baseId);
+  };
+  
+  function uniqueBaseName() {
+    let count = 0;
+    let baseName = "Untitled Base";
+    while (bases.some((base) => base.name === baseName)) {
+      count++;
+      baseName = `Untitled Base ${count}`;
+    }
+    return baseName;
+  }
+
+  const handleCreateBase = async () => {
+    try {
+      const formData = new FormData();
+      formData.append("name", uniqueBaseName());
+      formData.append("userId", userId ?? "");
+
+      const result = await createBase(formData);
+      if (!result) {
+        throw new Error("Failed to create base");
+      }
+
+      toast.success("Base created successfully");
+
+      const { viewId, error } = await getDefaultView(result.defaultTableId);
+      if (!viewId) {
+        throw new Error(error ?? "Failed to get default view");
+      }
+
+      router.push(`/${result.baseId}/${result.defaultTableId}/${viewId}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to create base");
+    }
   };
 
   return (
@@ -57,13 +100,13 @@ export function HomeContent({ bases: initialBases }: HomeContentProps) {
               <h1 className="text-2xl font-semibold text-gray-900">
                 Your bases
               </h1>
-              <Link
-                href="/new-base"
+              <Button
+                onClick={handleCreateBase}
                 className="inline-flex items-center gap-x-2 rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               >
                 <Plus className="h-5 w-5" />
                 Create new base
-              </Link>
+              </Button>
             </div>
 
             <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

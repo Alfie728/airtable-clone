@@ -224,7 +224,7 @@ export async function renameTable(
   }
 }
 
-export async function getTableDataWithSort(params: {
+export async function getTableData(params: {
   tableId: string;
   tableName: string;
   sorting?: SortingState;
@@ -233,9 +233,9 @@ export async function getTableDataWithSort(params: {
   page?: number;
   pageSize?: number;
 }): Promise<TableResponse> {
-  console.log("getTableDataWithSort params:", {
+  console.log("getTableData params:", {
     filtering: params.filtering,
-    globalSearch: params.globalSearch
+    globalSearch: params.globalSearch,
   });
 
   const {
@@ -448,7 +448,7 @@ export async function getTableDataWithSort(params: {
       },
     );
   } catch (error) {
-    console.error("[getTableDataWithSort] Error:", error);
+    console.error("[getTableData] Error:", error);
     return {
       success: false,
       error:
@@ -906,7 +906,7 @@ function transformResults(
 }
 
 export async function getTableStructure(tableId: string) {
-  const result = await getTableDataWithSort({ tableId, tableName: "" });
+  const result = await getTableData({ tableId, tableName: "" });
   if (!result.success) {
     return { success: false, error: result.error };
   }

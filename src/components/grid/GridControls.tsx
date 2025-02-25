@@ -31,7 +31,7 @@ import { useState, useCallback, useEffect } from "react";
 import { cn } from "~/lib/utils";
 import type { FilterPreference } from "~/types/filter";
 import { Input } from "~/components/ui/input";
-import { FilterDropdown } from "./components/FilterDropdown";
+import FilterDropdown from "./components/FilterDropdown";
 import SearchDropdown from "./components/SearchDropdown";
 
 interface GridControlsProps {

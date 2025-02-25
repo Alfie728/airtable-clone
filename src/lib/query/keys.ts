@@ -41,6 +41,7 @@ export const queryKeys = {
     root: ["views"] as const,
     list: (tableId: string) => ["table", tableId, "views"] as const,
     detail: (viewId: string) => ["view", viewId] as const,
+    default: (tableId: string) => ["table", tableId, "defaultView"] as const,
     structure: {
       root: (viewId: string) => ["views", viewId, "structure"] as const,
       metadata: (viewId: string) => ["views", viewId, "metadata"] as const,

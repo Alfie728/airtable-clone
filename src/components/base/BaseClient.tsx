@@ -13,7 +13,11 @@ import { cn } from "~/lib/utils";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { getDefaultView } from "~/lib/actions/views.action";
+import {
+  getDefaultView,
+  createView,
+  getTableViews,
+} from "~/lib/actions/views.action";
 import { useViews } from "~/hooks/useViews";
 import { useLocalStorageBoolean } from "~/hooks/useLocalStorage";
 import { queryKeys } from "~/lib/query/keys";
@@ -82,6 +86,13 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     views: tableViews,
     isLoading: isViewsLoading,
     error: viewsError,
+    createView,
+    isCreatingView,
+    deleteView,
+    isDeletingView,
+    renameView,
+    isRenamingView,
+    getDefaultViewId,
   } = useViews(tableId);
 
   const [isHandlingNavigation, setIsHandlingNavigation] = useState(false);
@@ -149,6 +160,84 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     }
   }, [isHandlingNavigation]);
 
+  const handleTableSelect = async (newTableId: string) => {
+    setPendingActiveTableId(null);
+    setIsHandlingNavigation(true);
+
+    try {
+      // Start prefetching table data and views in parallel
+      const prefetchPromises = [
+        !queryClient.getQueryData(queryKeys.tables.detail(newTableId))
+          ? prefetchTable(
+              queryClient,
+              newTableId,
+              baseTables?.find((t) => t.id === newTableId)?.name ?? "",
+            )
+          : Promise.resolve(),
+        // Also prefetch views list to prevent empty sidebar
+        queryClient.prefetchQuery({
+          queryKey: queryKeys.views.list(newTableId),
+          queryFn: async () => {
+            const viewsResult = await getTableViews(newTableId);
+            if (!viewsResult.success) {
+              throw new Error(viewsResult.error ?? "Failed to get views");
+            }
+            return viewsResult.views;
+          },
+          staleTime: 5 * 1000,
+        }),
+      ];
+
+      // Try to get from cache first
+      const cachedId = queryClient.getQueryData<string>(
+        queryKeys.views.default(newTableId),
+      );
+
+      if (typeof cachedId === "string") {
+        // Wait for prefetch to complete
+        await Promise.all(prefetchPromises);
+        // Set pending view before navigation
+        setPendingActiveViewId(cachedId);
+        // Navigate
+        router.replace(`/${baseId}/${newTableId}/${cachedId}`, {
+          scroll: false,
+        });
+        return;
+      }
+
+      // If not in cache, fetch it directly
+      const { viewId, error } = await getDefaultView(newTableId);
+
+      if (error) {
+        throw new Error(error);
+      }
+
+      if (!viewId || typeof viewId !== "string") {
+        throw new Error("No default view found or invalid view ID");
+      }
+
+      // Wait for prefetch to complete
+      await Promise.all(prefetchPromises);
+
+      // Set pending view before navigation
+      setPendingActiveViewId(viewId);
+      // Cache the view ID
+      queryClient.setQueryData(queryKeys.views.default(newTableId), viewId);
+      // Navigate
+      router.replace(`/${baseId}/${newTableId}/${viewId}`, { scroll: false });
+    } catch (error) {
+      console.error("Error during table selection:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load table view",
+      );
+      // Reset navigation state
+      setIsHandlingNavigation(false);
+      setPendingActiveViewId(null);
+    } finally {
+      setIsHandlingNavigation(false);
+    }
+  };
+
   const handleTableCreated = async (
     newTable: typeof tables.$inferSelect & { defaultViewId?: string },
   ) => {
@@ -161,36 +250,32 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         queryClient.invalidateQueries({ queryKey: queryKeys.bases.list() }),
         queryClient.invalidateQueries({ queryKey: ["table", newTable.id] }),
       ]);
-      console.log("newTable.defaultViewId", newTable.defaultViewId);
-      // Now redirect to the new table with its default view
+
+      // If we have a defaultViewId from table creation, use it
       if (newTable.defaultViewId) {
-        // Set pending view ID before navigation
         setPendingActiveViewId(newTable.defaultViewId);
         router.replace(`/${baseId}/${newTable.id}/${newTable.defaultViewId}`, {
           scroll: false,
         });
-      } else {
-        // Show loading state while getting default view
-        router.replace(`/${baseId}/${newTable.id}/loading`, {
-          scroll: false,
-        });
-
-        // Fallback to getting the default view if not provided
-        const { viewId, error } = await getDefaultView(newTable.id);
-        if (!viewId) {
-          console.error("Failed to get or create default view:", error);
-          toast.error(
-            "Failed to load table view. Please contact support if this persists.",
-          );
-          return;
-        }
-
-        // Set pending view ID before navigation
-        setPendingActiveViewId(viewId);
-        router.replace(`/${baseId}/${newTable.id}/${viewId}`, {
-          scroll: false,
-        });
+        return;
       }
+
+      // Get default view with improved error handling
+      const { viewId, error } = await getDefaultViewId();
+
+      if (error) {
+        throw new Error(error);
+      }
+
+      if (!viewId) {
+        throw new Error("No default view found");
+      }
+
+      // Set pending view before navigation
+      setPendingActiveViewId(viewId);
+      router.replace(`/${baseId}/${newTable.id}/${viewId}`, {
+        scroll: false,
+      });
     } catch (err) {
       const error =
         err instanceof Error ? err.message : "Unknown error occurred";
@@ -201,70 +286,48 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
     }
   };
 
-  const handleTableSelect = async (tableId: string) => {
-    setPendingActiveTableId(null);
-    setIsHandlingNavigation(true);
-
-    // Get cached view
-    const cachedView = queryClient.getQueryData<string>(
-      queryKeys.views.detail("default"),
-    );
-
-    if (cachedView) {
-      // Set pending view before navigation
-      setPendingActiveViewId(cachedView);
-      // Navigate immediately
-      router.push(`/${baseId}/${tableId}/${cachedView}`, {
+  const handleCreateView = async (type: "grid") => {
+    try {
+      const newView = await createView(type);
+      // Navigate to the new view
+      setPendingActiveViewId(newView.id);
+      router.push(`/${baseId}/${tableId}/${newView.id}`, {
         scroll: false,
       });
-      setIsHandlingNavigation(false);
-      return;
-    }
-
-    // If no cached view, start loading state immediately
-    router.push(`/${baseId}/${tableId}/loading`, { scroll: false });
-
-    try {
-      // Start prefetching table data in parallel with getting default view
-      const prefetchPromise = !queryClient.getQueryData(
-        queryKeys.tables.detail(tableId),
-      )
-        ? prefetchTable(
-            queryClient,
-            tableId,
-            baseTables?.find((t) => t.id === tableId)?.name ?? "",
-          )
-        : Promise.resolve();
-
-      const viewPromise = getDefaultView(tableId);
-
-      // Wait for both operations in parallel
-      const [_, { viewId, error }] = await Promise.all([
-        prefetchPromise,
-        viewPromise,
-      ]);
-
-      if (!viewId) {
-        console.error("Failed to get or create default view:", error);
-        toast.error(
-          "Failed to load table view. Please contact support if this persists.",
-        );
-        setIsHandlingNavigation(false);
-        setPendingActiveViewId(null);
-        return;
-      }
-
-      // Set pending view before navigation
-      setPendingActiveViewId(viewId);
-      // Cache the view ID and navigate
-      queryClient.setQueryData(queryKeys.views.detail("default"), viewId);
-      router.replace(`/${baseId}/${tableId}/${viewId}`, { scroll: false });
-      setIsHandlingNavigation(false);
     } catch (error) {
-      console.error("Error during table selection:", error);
-      toast.error("Failed to load table. Please try again.");
-      setIsHandlingNavigation(false);
-      setPendingActiveViewId(null);
+      // Error handling is done in the hook
+      console.error("Error in handleCreateView:", error);
+    }
+  };
+
+  const handleDeleteView = async (viewToDeleteId: string) => {
+    try {
+      await deleteView(viewToDeleteId);
+      // If we're deleting the current view, navigate to another view
+      if (viewToDeleteId === viewId) {
+        const remainingViews = tableViews?.filter(
+          (v) => v.id !== viewToDeleteId,
+        );
+        const defaultView = remainingViews?.find((v) => v.isDefault);
+        if (defaultView) {
+          setPendingActiveViewId(defaultView.id);
+          router.push(`/${baseId}/${tableId}/${defaultView.id}`, {
+            scroll: false,
+          });
+        }
+      }
+    } catch (error) {
+      // Error handling is done in the hook
+      console.error("Error in handleDeleteView:", error);
+    }
+  };
+
+  const handleRenameView = async (viewToRenameId: string, newName: string) => {
+    try {
+      await renameView({ viewId: viewToRenameId, name: newName });
+    } catch (error) {
+      // Error handling is done in the hook
+      console.error("Error in handleRenameView:", error);
     }
   };
 
@@ -333,7 +396,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         {!isAddingTable && (
           <div
             className={cn(
-              "absolute bottom-0 left-0 top-[136px] z-20 w-60 border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
+              "absolute bottom-0 left-0 top-[136px] z-20 w-[282px] border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out",
               !isSidebarOpen && "-translate-x-full",
             )}
           >
@@ -347,7 +410,12 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                   scroll: false,
                 });
               }}
-              isAddingView={false}
+              onCreateView={handleCreateView}
+              onRenameView={handleRenameView}
+              onDeleteView={handleDeleteView}
+              isAddingView={isCreatingView}
+              isRenamingView={isRenamingView}
+              isDeletingView={isDeletingView}
               isLoading={isViewsLoading}
             />
           </div>
@@ -357,7 +425,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           <div
             className={cn(
               "flex-1 transition-[margin] duration-200 ease-in-out",
-              isSidebarOpen && !isAddingTable && "ml-60",
+              isSidebarOpen && !isAddingTable && "ml-[282px]",
             )}
           >
             {isAddingTable ||

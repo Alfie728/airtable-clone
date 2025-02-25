@@ -5,7 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { queryKeys } from "~/lib/query/keys";
 import {
-  getTableDataWithSort,
+  getTableData,
   addRow,
   addBulkRows,
   addCell,
@@ -344,7 +344,7 @@ export function useTableData({
   } = useInfiniteQuery<TableResponse, Error>({
     queryKey,
     queryFn: async ({ pageParam }): Promise<TableResponse> => {
-      const response = await getTableDataWithSort({
+      const response = await getTableData({
         tableId,
         tableName,
         sorting: initialSortState,

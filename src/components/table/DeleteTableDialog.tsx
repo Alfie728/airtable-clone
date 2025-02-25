@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "~/lib/query/keys";
 import { deleteTableAction } from "~/lib/actions/tables.action";
+import { getDefaultView } from "~/lib/actions/views.action";
 
 interface DeleteTableDialogProps {
   baseId: string;
@@ -77,7 +78,7 @@ export function DeleteTableDialog({
 
       if (!result.success) {
         // Rollback on error
-        console.error("[UI] Server action failed:", result.error);
+        console.log("[UI] Server action failed:", result.error);
         if (previousTablesData) {
           queryClient.setQueryData(
             queryKeys.bases.tables.list(baseId),
@@ -98,29 +99,27 @@ export function DeleteTableDialog({
         ? previousTablesData.tables.filter((t) => t.id !== tableId)
         : [];
 
-      const firstTable = remainingTables[0];
-
       // Show success message
       toast.success("Table deleted successfully");
 
       // Navigate based on remaining tables
-      if (firstTable) {
-        console.log("[UI] Navigating to first remaining table:", firstTable);
-        // Check for cached view first
-        const cachedView = queryClient.getQueryData<string>(
-          queryKeys.views.list(firstTable.id),
-        );
-
-        if (cachedView) {
-          // Use replace instead of push to avoid history stack issues
-          router.replace(`/${baseId}/${firstTable.id}/${cachedView}`);
-        } else {
-          // If no cached view, redirect to base page
-          router.replace(`/${baseId}/${firstTable.id}`);
-        }
-      } else {
-        console.log("[UI] No tables remaining, navigating to home");
+      if (remainingTables.length === 0) {
+        console.log("[UI] No tables remaining, navigating to base list");
         router.replace("/");
+      } else {
+        const firstTable = remainingTables[0];
+        if (!firstTable) {
+          throw new Error("No table found for navigation");
+        }
+
+        console.log("[UI] Navigating to first remaining table:", firstTable);
+        // Get default view for the first table
+        const { viewId, error } = await getDefaultView(firstTable.id);
+        if (!viewId) {
+          throw new Error(error ?? "Failed to get default view");
+        }
+
+        router.replace(`/${baseId}/${firstTable.id}/${viewId}`);
       }
     } catch (error) {
       console.error("[UI] Error in handleDelete:", {

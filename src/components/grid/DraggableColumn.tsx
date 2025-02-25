@@ -28,6 +28,7 @@ export function DraggableColumn({
   };
 
   const isSorted = header.column.getIsSorted();
+  const isFiltered = header.column.getIsFiltered();
 
   return (
     <div
@@ -38,12 +39,14 @@ export function DraggableColumn({
         isDragging && "shadow-xl ring-1 ring-gray-200",
         !isDragging && "cursor-default",
         isSorted && "bg-[#FCF8F6]",
+        isFiltered && "bg-[#ebfbec4d]",
       )}
     >
       <div
         className={cn(
           "sticky top-0 z-20 border-b border-gray-300 bg-gray-50 shadow-sm",
           isSorted && "bg-[#FCF8F6]",
+          isFiltered && "bg-[#ebfbec4d]",
         )}
       >
         <div className="group flex h-8 items-center px-2 text-left text-xs font-medium text-gray-600">
@@ -69,7 +72,7 @@ export function DraggableColumn({
           height: `${virtualizer.getTotalSize()}px`,
           position: "relative",
         }}
-        className={cn(isSorted && "bg-[#FFF2EA]")}
+        className={cn(isSorted && "bg-[#FFF2EA]", isFiltered && "bg-[#CFF5D1]")}
       >
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const cell = cells[virtualRow.index];

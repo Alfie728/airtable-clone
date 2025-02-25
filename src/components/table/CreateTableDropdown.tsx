@@ -32,7 +32,6 @@ export function CreateTableDropdown({
         >
           <div>
             <Plus className="h-3.5 w-3.5" />
-            Add or import
           </div>
         </Button>
       </DropdownMenuTrigger>

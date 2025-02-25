@@ -18,6 +18,7 @@ import { TableOptionsDropdown } from "../table/TableOptionsDropdown";
 import { CreateTableDropdown } from "../table/CreateTableDropdown";
 import { useQueryClient } from "@tanstack/react-query";
 import { prefetchTable } from "~/lib/query/prefetch";
+import { table } from "console";
 
 interface SecondaryNavigationProps {
   tables?: Array<typeof tables.$inferSelect>;
@@ -125,10 +126,6 @@ export function SecondaryNavigation({
     }
   };
 
-  const filteredTables = tables.filter((table) =>
-    table.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-
   const handleCreateTable = async () => {
     let nextNumber = lastUsedNumber + 1;
     let nameToCreate = `Table ${nextNumber}`;
@@ -156,10 +153,17 @@ export function SecondaryNavigation({
         }
         onTableCreated?.({
           ...result.table,
+          createdAt: new Date(result.table.createdAt),
+          updatedAt: result.table.updatedAt
+            ? new Date(result.table.updatedAt)
+            : null,
           defaultViewId: result.defaultViewId,
         });
       } else {
-        const errorMessage = result?.error ?? "Failed to create table";
+        const errorMessage =
+          !result?.success && "error" in result
+            ? result.error
+            : "Failed to create table";
         toast.error(errorMessage, {
           id: loadingToast,
         });
@@ -181,8 +185,11 @@ export function SecondaryNavigation({
 
   return (
     <>
-      <div className="flex h-8 items-center overflow-hidden border-gray-200 bg-[#575C65] px-2">
-        <div className="relative flex items-center">
+      <div className="flex h-8 items-center overflow-hidden border-gray-200 bg-[#616670]">
+        <div
+          className="relative flex flex-1 items-center bg-[#575C65] pl-2"
+          style={{ borderTopRightRadius: "6px" }}
+        >
           <div className="flex items-center">
             <div className="flex items-center">
               {tables.map((table, index) => {
@@ -190,7 +197,6 @@ export function SecondaryNavigation({
                   ? isAddingTable && index === tables.length - 1
                   : table.id === pendingActiveTableId ||
                     (!pendingActiveTableId && currentTableId === table.id);
-
                 return (
                   <Button
                     key={table.id}
@@ -261,19 +267,22 @@ export function SecondaryNavigation({
             />
           </div>
         </div>
-        <div className="flex-1" />
-        <div className="flex items-center gap-2">
+        <div className="h-full w-[8px]" />
+        <div
+          className="flex w-[165.58px] items-center bg-[#575C65]"
+          style={{ borderTopLeftRadius: "6px" }}
+        >
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 gap-1 rounded-md bg-[#575C65] px-3 text-[13px] font-normal leading-[18px] text-[rgba(255,255,255,0.85)] hover:text-[rgba(255,255,255,0.95)]"
+            className="h-8 gap-1 px-3 text-[13px] font-normal leading-[18px] text-[rgba(255,255,255,0.85)] hover:text-[rgba(255,255,255,0.95)]"
           >
             Extensions
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 gap-1 rounded-md bg-[#575C65] px-3 text-[13px] font-normal leading-[18px] text-[rgba(255,255,255,0.85)] hover:text-[rgba(255,255,255,0.95)]"
+            className="h-8 gap-1 px-3 text-[13px] font-normal leading-[18px] text-[rgba(255,255,255,0.85)] hover:text-[rgba(255,255,255,0.95)]"
           >
             Tools
             <ChevronDown className="h-3.5 w-3.5" />

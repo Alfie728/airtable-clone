@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import type { SerializedBase } from "~/types/base";
+import type { SerializedTable } from "~/types/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +28,9 @@ import { useBase } from "~/hooks/useBase";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { prefetchBaseTables } from "~/lib/query/prefetch";
+import { useRouter } from "next/navigation";
+import { queryKeys } from "~/lib/query/keys";
+import { getDefaultView } from "~/lib/actions/views.action";
 
 interface BaseCardProps {
   base: SerializedBase;
@@ -35,10 +38,10 @@ interface BaseCardProps {
 }
 
 export function BaseCard({ base, onHover }: BaseCardProps) {
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const { renameBase, isRenaming } = useBase(base.id);
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const handleRename = async (newName: string) => {
     try {

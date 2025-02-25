@@ -102,49 +102,58 @@ export function EditableBaseName({
       e.preventDefault();
       void (async () => {
         try {
+          // Cancel any in-flight queries for this base EXCEPT views queries
+          await queryClient.cancelQueries({
+            predicate: (query) => {
+              const queryKey = Array.isArray(query.queryKey)
+                ? query.queryKey
+                : [];
+              // Only cancel base and table queries, not views
+              return (
+                (queryKey[0] === "base" || queryKey[0] === "table") &&
+                queryKey.some((key) => key === baseId)
+              );
+            },
+          });
+
           // Get cached tables data
           const tablesResult = queryClient.getQueryData<{
             success: boolean;
             tables: SerializedTable[];
           }>(queryKeys.bases.tables.list(baseId));
 
-          if (!tablesResult?.success || !tablesResult.tables?.length) {
-            router.push("/");
-            return;
+          // If we have cached data, try to use it for faster navigation
+          if (tablesResult?.success && tablesResult.tables?.length > 0) {
+            const firstTable = tablesResult.tables[0];
+            if (firstTable?.id) {
+              // Check for cached default view
+              const cachedId = queryClient.getQueryData<string>(
+                queryKeys.views.default(firstTable.id),
+              );
+              if (typeof cachedId === "string") {
+                // Use cached ID for navigation
+                router.push(`/${baseId}/${firstTable.id}/${cachedId}`);
+                return;
+              }
+
+              // If no cached view, get the default view
+              const { viewId, error } = await getDefaultView(firstTable.id);
+              if (!viewId || typeof viewId !== "string") {
+                throw new Error("No default view found or invalid view ID");
+              }
+              router.push(`/${baseId}/${firstTable.id}/${viewId}`);
+              return;
+            }
           }
 
-          const firstTable = tablesResult.tables[0];
-          if (!firstTable?.id) {
-            throw new Error("Invalid table data");
-          }
-
-          // Check for cached view first
-          const cachedView = queryClient.getQueryData<string>(
-            queryKeys.views.list(firstTable.id),
-          );
-
-          if (cachedView) {
-            router.push(`/${baseId}/${firstTable.id}/${cachedView}`);
-            return;
-          }
-
-          // If no cached view, fetch from server
-          const { viewId, error: viewError } = await getDefaultView(
-            firstTable.id,
-          );
-          if (!viewId) {
-            throw new Error(viewError ?? "Failed to get default view");
-          }
-
-          // Cache the view ID for future use
-          queryClient.setQueryData(queryKeys.views.list(firstTable.id), viewId);
-
-          router.push(`/${baseId}/${firstTable.id}/${viewId}`);
+          // Fallback route if no tables or views found
+          router.push(`/${baseId}/tables/default`);
         } catch (err) {
           const error =
             err instanceof Error ? err.message : "Failed to navigate";
           console.error("Error navigating to base:", error);
           toast.error(error);
+          router.push(`/${baseId}/tables/default`);
         }
       })();
     }
