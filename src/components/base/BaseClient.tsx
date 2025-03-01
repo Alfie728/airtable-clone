@@ -406,6 +406,13 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
               pendingActiveViewId={pendingActiveViewId}
               onViewSelect={(selectedViewId) => {
                 setPendingActiveViewId(selectedViewId);
+                // Invalidate view and table data to ensure consistency
+                void queryClient.invalidateQueries({
+                  queryKey: queryKeys.views.data.root(tableId, selectedViewId),
+                });
+                void queryClient.invalidateQueries({
+                  queryKey: queryKeys.tables.data.root(tableId),
+                });
                 router.push(`/${baseId}/${tableId}/${selectedViewId}`, {
                   scroll: false,
                 });

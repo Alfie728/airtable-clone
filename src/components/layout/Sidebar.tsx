@@ -22,6 +22,8 @@ import type { views } from "~/server/db/schema";
 import { cn } from "~/lib/utils";
 import { Separator } from "@radix-ui/react-separator";
 import { ViewOptionsDropdown } from "~/components/view/ViewOptionsDropdown";
+import { queryClient } from "~/lib/query";
+import { getViewSpecificTableKeys } from "~/lib/query/keys";
 
 interface SidebarProps {
   views: (typeof views.$inferSelect)[] | undefined;
@@ -50,7 +52,6 @@ export function Sidebar({
   isRenamingView,
   isDeletingView,
 }: SidebarProps) {
-  const [isViewsOpen, setIsViewsOpen] = useState(true);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   // Only show loading state when we're actually loading the views data
@@ -98,6 +99,9 @@ export function Sidebar({
                         ? "bg-[#c4ecffb3] text-[#1d1f25] hover:bg-[#c4ecff]"
                         : "bg-gray-50 text-gray-500 hover:bg-gray-100",
                   )}
+                  onClick={() => {
+                    onViewSelect(view.id);
+                  }}
                 >
                   <Button
                     variant={currentViewId === view.id ? "secondary" : "ghost"}
