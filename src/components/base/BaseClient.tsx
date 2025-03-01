@@ -134,16 +134,27 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
         // If no cached view, get the default view
         getDefaultView(firstTable.id)
-          .then(({ viewId, error }) => {
-            if (viewId) {
+          .then((result) => {
+            console.log("[UI] Default view response in useEffect:", result);
+
+            if (result.viewId && typeof result.viewId === "string") {
+              // Ensure viewId is a string
+              const viewIdString = String(result.viewId);
+              console.log(
+                "[UI] Using viewId:",
+                viewIdString,
+                "type:",
+                typeof viewIdString,
+              );
+
               // Cache the view ID for future use
               queryClient.setQueryData(
                 queryKeys.views.default(firstTable.id),
-                viewId,
+                viewIdString,
               );
-              router.replace(`/${baseId}/${firstTable.id}/${viewId}`);
+              router.replace(`/${baseId}/${firstTable.id}/${viewIdString}`);
             } else {
-              console.error("Failed to get default view:", error);
+              console.error("Failed to get default view:", result.error);
               // Fallback to base page
               router.replace(`/${baseId}`);
             }
@@ -216,10 +227,25 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       if (typeof cachedId === "string") {
         // Wait for prefetch to complete
         await Promise.all(prefetchPromises);
+
+        // Ensure cachedId is a string
+        const viewIdString = String(cachedId);
+        console.log(
+          "[UI] Using cached viewId:",
+          viewIdString,
+          "type:",
+          typeof viewIdString,
+        );
+
         // Set pending view before navigation
-        setPendingActiveViewId(cachedId);
+        setPendingActiveViewId(viewIdString);
+
+        // Ensure we're using a string in the URL
+        const url = `/${baseId}/${newTableId}/${viewIdString}`;
+        console.log("[UI] Navigating to URL:", url);
+
         // Navigate
-        router.replace(`/${baseId}/${newTableId}/${cachedId}`, {
+        router.replace(url, {
           scroll: false,
         });
         return;
@@ -256,15 +282,19 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
       // Set pending view before navigation
       setPendingActiveViewId(viewIdString);
+
       // Cache the view ID
       queryClient.setQueryData(
         queryKeys.views.default(newTableId),
         viewIdString,
       );
+
+      // Ensure we're using a string in the URL
+      const url = `/${baseId}/${newTableId}/${viewIdString}`;
+      console.log("[UI] Navigating to URL:", url);
+
       // Navigate
-      router.replace(`/${baseId}/${newTableId}/${viewIdString}`, {
-        scroll: false,
-      });
+      router.replace(url, { scroll: false });
     } catch (error) {
       console.error("Error during table selection:", error);
       toast.error(
@@ -335,7 +365,12 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
       // Set pending view before navigation
       setPendingActiveViewId(viewIdString);
-      router.replace(`/${baseId}/${newTable.id}/${viewIdString}`, {
+
+      // Ensure we're using a string in the URL
+      const url = `/${baseId}/${newTable.id}/${viewIdString}`;
+      console.log("[UI] Navigating to URL:", url);
+
+      router.replace(url, {
         scroll: false,
       });
     } catch (err) {
@@ -358,12 +393,17 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         "[UI] Created new view:",
         viewIdString,
         "type:",
-        typeof viewIdString,
+        typeof viewIdString
       );
 
       // Navigate to the new view
       setPendingActiveViewId(viewIdString);
-      router.push(`/${baseId}/${tableId}/${viewIdString}`, {
+      
+      // Ensure we're using a string in the URL
+      const url = `/${baseId}/${tableId}/${viewIdString}`;
+      console.log("[UI] Navigating to URL:", url);
+      
+      router.push(url, {
         scroll: false,
       });
     } catch (error) {
@@ -392,7 +432,12 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           );
 
           setPendingActiveViewId(viewIdString);
-          router.push(`/${baseId}/${tableId}/${viewIdString}`, {
+
+          // Ensure we're using a string in the URL
+          const url = `/${baseId}/${tableId}/${viewIdString}`;
+          console.log("[UI] Navigating to URL:", url);
+
+          router.push(url, {
             scroll: false,
           });
         }
@@ -503,7 +548,12 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
                 void queryClient.invalidateQueries({
                   queryKey: queryKeys.tables.data.root(tableId),
                 });
-                router.push(`/${baseId}/${tableId}/${viewIdString}`, {
+
+                // Ensure we're using a string in the URL
+                const url = `/${baseId}/${tableId}/${viewIdString}`;
+                console.log("[UI] Navigating to URL:", url);
+
+                router.push(url, {
                   scroll: false,
                 });
               }}
