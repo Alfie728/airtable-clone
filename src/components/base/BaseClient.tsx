@@ -122,7 +122,7 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
 
         // Try to get the cached view first
         const cachedView = queryClient.getQueryData<string>(
-          queryKeys.views.detail("default"),
+          queryKeys.views.default(firstTable.id),
         );
 
         if (cachedView) {
@@ -132,9 +132,29 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
           return;
         }
 
-        // If no cached view, redirect to base page
-        router.replace(`/${baseId}`);
-        setIsHandlingNavigation(false);
+        // If no cached view, get the default view
+        getDefaultView(firstTable.id)
+          .then(({ viewId, error }) => {
+            if (viewId) {
+              // Cache the view ID for future use
+              queryClient.setQueryData(
+                queryKeys.views.default(firstTable.id),
+                viewId,
+              );
+              router.replace(`/${baseId}/${firstTable.id}/${viewId}`);
+            } else {
+              console.error("Failed to get default view:", error);
+              // Fallback to base page
+              router.replace(`/${baseId}`);
+            }
+          })
+          .catch((err) => {
+            console.error("Error getting default view:", err);
+            router.replace(`/${baseId}`);
+          })
+          .finally(() => {
+            setIsHandlingNavigation(false);
+          });
       }
     } else if (!isBaseLoading && (!baseTables || baseTables.length === 0)) {
       // Handle empty base case
@@ -206,25 +226,45 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       }
 
       // If not in cache, fetch it directly
-      const { viewId, error } = await getDefaultView(newTableId);
+      const result = await getDefaultView(newTableId);
+      console.log("[UI] Default view response in handleTableSelect:", result);
 
-      if (error) {
-        throw new Error(error);
+      // Handle case where the table doesn't exist
+      if (result.error?.includes("does not exist")) {
+        console.log("[UI] Table not found, navigating to base page");
+        router.replace(`/${baseId}`);
+        return;
       }
 
-      if (!viewId || typeof viewId !== "string") {
-        throw new Error("No default view found or invalid view ID");
+      if (!result.viewId || typeof result.viewId !== "string") {
+        throw new Error(
+          result.error ?? "Failed to get default view or invalid view ID",
+        );
       }
+
+      // Ensure viewId is a string
+      const viewIdString = String(result.viewId);
+      console.log(
+        "[UI] Got valid viewId as string:",
+        viewIdString,
+        "type:",
+        typeof viewIdString,
+      );
 
       // Wait for prefetch to complete
       await Promise.all(prefetchPromises);
 
       // Set pending view before navigation
-      setPendingActiveViewId(viewId);
+      setPendingActiveViewId(viewIdString);
       // Cache the view ID
-      queryClient.setQueryData(queryKeys.views.default(newTableId), viewId);
+      queryClient.setQueryData(
+        queryKeys.views.default(newTableId),
+        viewIdString,
+      );
       // Navigate
-      router.replace(`/${baseId}/${newTableId}/${viewId}`, { scroll: false });
+      router.replace(`/${baseId}/${newTableId}/${viewIdString}`, {
+        scroll: false,
+      });
     } catch (error) {
       console.error("Error during table selection:", error);
       toast.error(
@@ -252,28 +292,50 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
       ]);
 
       // If we have a defaultViewId from table creation, use it
-      if (newTable.defaultViewId) {
-        setPendingActiveViewId(newTable.defaultViewId);
-        router.replace(`/${baseId}/${newTable.id}/${newTable.defaultViewId}`, {
+      if (
+        newTable.defaultViewId &&
+        typeof newTable.defaultViewId === "string"
+      ) {
+        const viewIdString = String(newTable.defaultViewId);
+        setPendingActiveViewId(viewIdString);
+        router.replace(`/${baseId}/${newTable.id}/${viewIdString}`, {
           scroll: false,
         });
         return;
       }
 
       // Get default view with improved error handling
-      const { viewId, error } = await getDefaultViewId();
+      const result = await getDefaultViewId();
+      console.log("[UI] Default view response in handleTableCreated:", result);
 
-      if (error) {
-        throw new Error(error);
+      // Handle case where the table doesn't exist
+      if (
+        result.error?.includes("does not exist") ||
+        result.error === "TABLE_NOT_FOUND"
+      ) {
+        console.log("[UI] Table not found, navigating to base page");
+        router.replace(`/${baseId}`);
+        return;
       }
 
-      if (!viewId) {
-        throw new Error("No default view found");
+      if (!result.viewId || typeof result.viewId !== "string") {
+        throw new Error(
+          result.error ?? "Failed to get default view or invalid view ID",
+        );
       }
+
+      // Ensure viewId is a string
+      const viewIdString = String(result.viewId);
+      console.log(
+        "[UI] Got valid viewId as string:",
+        viewIdString,
+        "type:",
+        typeof viewIdString,
+      );
 
       // Set pending view before navigation
-      setPendingActiveViewId(viewId);
-      router.replace(`/${baseId}/${newTable.id}/${viewId}`, {
+      setPendingActiveViewId(viewIdString);
+      router.replace(`/${baseId}/${newTable.id}/${viewIdString}`, {
         scroll: false,
       });
     } catch (err) {
@@ -289,9 +351,19 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
   const handleCreateView = async (type: "grid") => {
     try {
       const newView = await createView(type);
+
+      // Ensure viewId is a string
+      const viewIdString = String(newView.id);
+      console.log(
+        "[UI] Created new view:",
+        viewIdString,
+        "type:",
+        typeof viewIdString,
+      );
+
       // Navigate to the new view
-      setPendingActiveViewId(newView.id);
-      router.push(`/${baseId}/${tableId}/${newView.id}`, {
+      setPendingActiveViewId(viewIdString);
+      router.push(`/${baseId}/${tableId}/${viewIdString}`, {
         scroll: false,
       });
     } catch (error) {
@@ -310,8 +382,17 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
         );
         const defaultView = remainingViews?.find((v) => v.isDefault);
         if (defaultView) {
-          setPendingActiveViewId(defaultView.id);
-          router.push(`/${baseId}/${tableId}/${defaultView.id}`, {
+          // Ensure viewId is a string
+          const viewIdString = String(defaultView.id);
+          console.log(
+            "[UI] Navigating to default view after deletion:",
+            viewIdString,
+            "type:",
+            typeof viewIdString,
+          );
+
+          setPendingActiveViewId(viewIdString);
+          router.push(`/${baseId}/${tableId}/${viewIdString}`, {
             scroll: false,
           });
         }
@@ -405,15 +486,24 @@ export function BaseClient({ baseId, tableId, viewId }: BaseClientProps) {
               currentViewId={viewId}
               pendingActiveViewId={pendingActiveViewId}
               onViewSelect={(selectedViewId) => {
-                setPendingActiveViewId(selectedViewId);
+                // Ensure selectedViewId is a string
+                const viewIdString = String(selectedViewId);
+                console.log(
+                  "[UI] View selected:",
+                  viewIdString,
+                  "type:",
+                  typeof viewIdString,
+                );
+
+                setPendingActiveViewId(viewIdString);
                 // Invalidate view and table data to ensure consistency
                 void queryClient.invalidateQueries({
-                  queryKey: queryKeys.views.data.root(tableId, selectedViewId),
+                  queryKey: queryKeys.views.data.root(tableId, viewIdString),
                 });
                 void queryClient.invalidateQueries({
                   queryKey: queryKeys.tables.data.root(tableId),
                 });
-                router.push(`/${baseId}/${tableId}/${selectedViewId}`, {
+                router.push(`/${baseId}/${tableId}/${viewIdString}`, {
                   scroll: false,
                 });
               }}

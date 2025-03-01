@@ -9,6 +9,7 @@ import {
 import { queryKeys, getViewRelatedQueryKeys } from "~/lib/query/keys";
 import type { views } from "~/server/db/schema";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 export function useViews(tableId: string) {
   const queryClient = useQueryClient();
@@ -24,10 +25,40 @@ export function useViews(tableId: string) {
       return result.views;
     },
     staleTime: 5 * 1000,
+    // Add retry and error handling for table deletion scenarios
+    retry: (failureCount, error) => {
+      // Don't retry if the table might have been deleted
+      if (
+        error instanceof Error &&
+        (error.message.includes("not found") ||
+          error.message.includes("does not exist"))
+      ) {
+        return false;
+      }
+      // Otherwise retry a few times
+      return failureCount < 2;
+    },
   });
 
+  // Add error handling for views
+  useEffect(() => {
+    if (error instanceof Error) {
+      const errorMessage = error.message;
+      if (
+        !errorMessage.includes("not found") &&
+        !errorMessage.includes("does not exist")
+      ) {
+        toast.error(`Failed to load views: ${errorMessage}`);
+      }
+    }
+  }, [error]);
+
   // Query for fetching default view ID
-  const { data: defaultViewId, isLoading: isLoadingDefaultView } = useQuery({
+  const {
+    data: defaultViewId,
+    isLoading: isLoadingDefaultView,
+    error: defaultViewError,
+  } = useQuery({
     queryKey: queryKeys.views.default(tableId),
     queryFn: async () => {
       const result = await getDefaultView(tableId);
@@ -37,8 +68,36 @@ export function useViews(tableId: string) {
       return result.viewId;
     },
     staleTime: 5 * 1000, // Cache for 5 seconds
-    retry: 1, // Only retry once to avoid infinite loops
+    retry: (failureCount, error) => {
+      // Don't retry if the table might have been deleted
+      if (
+        error instanceof Error &&
+        (error.message.includes("not found") ||
+          error.message.includes("does not exist"))
+      ) {
+        return false;
+      }
+      // Otherwise retry once
+      return failureCount < 1;
+    },
   });
+
+  // Add error handling for default view
+  useEffect(() => {
+    if (defaultViewError instanceof Error) {
+      const errorMessage = defaultViewError.message;
+      if (
+        !errorMessage.includes("not found") &&
+        !errorMessage.includes("does not exist")
+      ) {
+        toast.error(`Failed to load default view: ${errorMessage}`);
+      } else {
+        // If the table doesn't exist, we should handle it gracefully
+        console.log("[UI] Table or view does not exist:", errorMessage);
+        // Consider navigating to a fallback route if needed
+      }
+    }
+  }, [defaultViewError]);
 
   // Function to get default view ID with proper error handling
   const getDefaultViewId = async () => {
@@ -51,13 +110,26 @@ export function useViews(tableId: string) {
 
       // If not in cache, fetch it
       const result = await getDefaultView(tableId);
-      if (!result.viewId || typeof result.viewId !== "string") {
+
+      // Log the result for debugging
+      console.log("getDefaultViewId result:", result);
+
+      if (!result.viewId) {
+        // Check if the error indicates the table doesn't exist
+        if (result.error?.includes("does not exist")) {
+          console.log("[UI] Table does not exist:", result.error);
+          // Return a specific error for table not found
+          return { error: "TABLE_NOT_FOUND" };
+        }
         throw new Error(result.error ?? "Failed to get default view");
       }
 
+      // Ensure viewId is a string
+      const viewIdString = String(result.viewId);
+
       // Cache the result
-      queryClient.setQueryData(queryKeys.views.default(tableId), result.viewId);
-      return { viewId: result.viewId };
+      queryClient.setQueryData(queryKeys.views.default(tableId), viewIdString);
+      return { viewId: viewIdString };
     } catch (err) {
       const error =
         err instanceof Error ? err.message : "Failed to get default view";

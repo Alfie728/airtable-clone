@@ -2,18 +2,38 @@
 
 import { and, eq } from "drizzle-orm";
 import { db } from "~/server/db";
-import { views, columns, viewFilters } from "~/server/db/schema";
+import { views, columns, viewFilters, tables } from "~/server/db/schema";
 
 export async function createDefaultView(
   tableId: string,
 ): Promise<{ viewId: string | null; error?: string }> {
   try {
+    console.log("[SERVER] createDefaultView called for tableId:", tableId);
+
+    // First check if the table exists
+    const tableExists = await db.query.tables.findFirst({
+      where: eq(tables.id, tableId),
+    });
+
+    if (!tableExists) {
+      console.log("[SERVER] Table does not exist, cannot create default view");
+      return {
+        viewId: null,
+        error: `Table with ID ${tableId} does not exist`,
+      };
+    }
+
     // Get all columns for the table to set up the default view
     const tableColumns = await db
       .select()
       .from(columns)
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
+
+    console.log(
+      "[SERVER] Found columns for default view:",
+      tableColumns.length,
+    );
 
     // Create a new default view
     const [defaultView] = await db
@@ -29,11 +49,14 @@ export async function createDefaultView(
       .returning();
 
     if (!defaultView) {
+      console.log("[SERVER] Failed to create default view");
       return { viewId: null, error: "Failed to create default view" };
     }
 
-    return { viewId: defaultView.id };
+    console.log("[SERVER] Created default view with ID:", defaultView.id);
+    return { viewId: String(defaultView.id) };
   } catch (error) {
+    console.error("[SERVER] Error in createDefaultView:", error);
     return {
       viewId: null,
       error:
@@ -48,24 +71,45 @@ export async function getDefaultView(
   tableId: string,
 ): Promise<{ viewId: string | null; error?: string }> {
   try {
+    console.log("[SERVER] getDefaultView called for tableId:", tableId);
+
+    // First check if the table exists
+    const tableExists = await db.query.tables.findFirst({
+      where: eq(tables.id, tableId),
+    });
+
+    if (!tableExists) {
+      console.log("[SERVER] Table does not exist, cannot get default view");
+      return {
+        viewId: null,
+        error: `Table with ID ${tableId} does not exist`,
+      };
+    }
+
     const defaultView = await db
       .select()
       .from(views)
       .where(and(eq(views.tableId, tableId), eq(views.isDefault, true)))
       .limit(1);
 
+    console.log("[SERVER] defaultView query result:", defaultView);
+
     if (defaultView.length === 0) {
       // If no default view exists, create one
+      console.log("[SERVER] No default view found, creating one");
       return createDefaultView(tableId);
     }
 
     const viewId = defaultView[0]?.id;
     if (!viewId) {
+      console.log("[SERVER] Invalid view data, viewId is falsy");
       return { viewId: null, error: "Invalid view data" };
     }
 
-    return { viewId };
+    console.log("[SERVER] Returning viewId:", viewId);
+    return { viewId: String(viewId) };
   } catch (error) {
+    console.error("[SERVER] Error in getDefaultView:", error);
     return {
       viewId: null,
       error:
