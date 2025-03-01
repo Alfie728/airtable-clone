@@ -2,18 +2,40 @@
 
 import { and, eq } from "drizzle-orm";
 import { db } from "~/server/db";
-import { views, columns, viewFilters } from "~/server/db/schema";
+import { views, columns, viewFilters, tables } from "~/server/db/schema";
 
 export async function createDefaultView(
   tableId: string,
 ): Promise<{ viewId: string | null; error?: string }> {
   try {
+    // First check if the table exists
+    const tableExists = await db
+      .select({ id: tables.id })
+      .from(tables)
+      .where(eq(tables.id, tableId))
+      .limit(1);
+
+    if (tableExists.length === 0) {
+      return { viewId: null, error: "Table not found" };
+    }
+
     // Get all columns for the table to set up the default view
     const tableColumns = await db
       .select()
       .from(columns)
       .where(eq(columns.tableId, tableId))
       .orderBy(columns.order);
+
+    // Check if we already have a default view (double-check)
+    const existingDefaultView = await db
+      .select()
+      .from(views)
+      .where(and(eq(views.tableId, tableId), eq(views.isDefault, true)))
+      .limit(1);
+
+    if (existingDefaultView.length > 0 && existingDefaultView[0]?.id) {
+      return { viewId: existingDefaultView[0].id };
+    }
 
     // Create a new default view
     const [defaultView] = await db
@@ -34,6 +56,7 @@ export async function createDefaultView(
 
     return { viewId: defaultView.id };
   } catch (error) {
+    console.error("Error in createDefaultView:", error);
     return {
       viewId: null,
       error:
@@ -48,6 +71,18 @@ export async function getDefaultView(
   tableId: string,
 ): Promise<{ viewId: string | null; error?: string }> {
   try {
+    // First check if the table exists
+    const tableExists = await db
+      .select({ id: tables.id })
+      .from(tables)
+      .where(eq(tables.id, tableId))
+      .limit(1);
+
+    if (tableExists.length === 0) {
+      return { viewId: null, error: "Table not found" };
+    }
+
+    // Then check for existing default view
     const defaultView = await db
       .select()
       .from(views)
@@ -66,6 +101,7 @@ export async function getDefaultView(
 
     return { viewId };
   } catch (error) {
+    console.error("Error in getDefaultView:", error);
     return {
       viewId: null,
       error:

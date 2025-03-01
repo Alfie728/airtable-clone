@@ -100,27 +100,25 @@ export async function createBase(formData: FormData) {
       throw new Error("Failed to create table");
     }
 
+    const defaultColumns = [
+      { name: "Name", type: "text" as const, order: 0 },
+      { name: "Notes", type: "text" as const, order: 1 },
+      { name: "Assignee", type: "text" as const, order: 2 },
+      { name: "Status", type: "text" as const, order: 3 },
+    ] as const;
+
     // Create default columns
-    await db.insert(columns).values([
-      {
-        name: "Name",
-        type: "text",
+    await db.insert(columns).values(
+      defaultColumns.map((col) => ({
+        name: col.name,
+        type: col.type,
         tableId: newTable.id,
-        order: 1,
+        order: col.order,
         isSearchable: true,
         isSortable: true,
         isVisible: true,
-      },
-      {
-        name: "Notes",
-        type: "text",
-        tableId: newTable.id,
-        order: 2,
-        isSearchable: true,
-        isSortable: true,
-        isVisible: true,
-      },
-    ]);
+      })),
+    );
 
     revalidatePath("/");
     return { baseId: newBase.id, defaultTableId: newTable.id };

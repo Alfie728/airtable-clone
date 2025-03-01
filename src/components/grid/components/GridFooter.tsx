@@ -5,7 +5,7 @@ import { Button } from "~/components/ui/button";
 import { toast } from "sonner";
 import { useRows } from "~/hooks/useRows";
 
-const BULK_ADD_ROWS_COUNT = 100;
+const BULK_ADD_ROWS_COUNT = 15000;
 
 interface GridFooterProps {
   tableId: string;

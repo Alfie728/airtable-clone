@@ -49,15 +49,11 @@ function generateTextValue(columnName: string): string {
     case "name":
       return faker.person.fullName();
     case "notes":
-      return faker.lorem.sentence();
-    case "email":
-      return faker.internet.email();
-    case "phone":
-      return faker.phone.number({ style: "national" });
-    case "company":
-      return faker.company.name();
-    case "city":
-      return faker.location.city();
+      return faker.git.commitMessage();
+    case "assignee":
+      return faker.person.fullName();
+    case "status":
+      return faker.git.branch();
     default:
       return faker.lorem.word();
   }

@@ -113,13 +113,24 @@ export function DeleteTableDialog({
         }
 
         console.log("[UI] Navigating to first remaining table:", firstTable);
-        // Get default view for the first table
-        const { viewId, error } = await getDefaultView(firstTable.id);
-        if (!viewId) {
-          throw new Error(error ?? "Failed to get default view");
-        }
 
-        router.replace(`/${baseId}/${firstTable.id}/${viewId}`);
+        try {
+          // First navigate to the base to avoid race conditions with view operations
+          router.replace(`/${baseId}`);
+
+          // Then fetch the view ID and update the URL
+          const { viewId, error } = await getDefaultView(firstTable.id);
+          if (!viewId) {
+            throw new Error(error ?? "Failed to get default view");
+          }
+
+          // Use push instead of replace to avoid race conditions
+          router.push(`/${baseId}/${firstTable.id}/${viewId}`);
+        } catch (viewError) {
+          console.error("[UI] Error getting view:", viewError);
+          // Fallback to just navigating to the base if view retrieval fails
+          router.replace(`/${baseId}`);
+        }
       }
     } catch (error) {
       console.error("[UI] Error in handleDelete:", {

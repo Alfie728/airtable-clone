@@ -64,11 +64,9 @@ export async function createTable(
     const defaultColumns = [
       { name: "Name", type: "text" as const, order: 0 },
       { name: "Notes", type: "text" as const, order: 1 },
-      { name: "Email", type: "text" as const, order: 2 },
-      { name: "Phone", type: "text" as const, order: 3 },
-      { name: "Company", type: "text" as const, order: 4 },
-      { name: "City", type: "text" as const, order: 5 },
-    ];
+      { name: "Assignee", type: "text" as const, order: 2 },
+      { name: "Status", type: "text" as const, order: 3 },
+    ] as const;
 
     // Insert the columns without any data
     const createdColumns = await db
@@ -736,77 +734,84 @@ export async function deleteTableAction(
 
     console.log(`[${Date.now() - startTime}ms] Starting cascading delete`);
 
-    // Delete view filters first
-    console.log(`[${Date.now() - startTime}ms] Deleting view filters`);
-    await db.execute(sql`
-      DELETE FROM "airtable-clone_view_filters"
-      WHERE view_id IN (
-        SELECT id FROM "airtable-clone_views"
-        WHERE table_id = ${tableId}
+    try {
+      // Delete view filters first
+      console.log(`[${Date.now() - startTime}ms] Deleting view filters`);
+      await db.execute(sql`
+        DELETE FROM "airtable-clone_view_filters"
+        WHERE view_id IN (
+          SELECT id FROM "airtable-clone_views"
+          WHERE table_id = ${tableId}
+        );
+      `);
+
+      // Delete view sorts
+      console.log(`[${Date.now() - startTime}ms] Deleting view sorts`);
+      await db.execute(sql`
+        DELETE FROM "airtable-clone_view_sorts"
+        WHERE view_id IN (
+          SELECT id FROM "airtable-clone_views"
+          WHERE table_id = ${tableId}
+        );
+      `);
+
+      // Delete views
+      console.log(`[${Date.now() - startTime}ms] Deleting views`);
+      await db.execute(sql`
+        DELETE FROM "airtable-clone_views"
+        WHERE table_id = ${tableId};
+      `);
+
+      // Delete cells
+      console.log(`[${Date.now() - startTime}ms] Deleting cells`);
+      await db.execute(sql`
+        DELETE FROM "airtable-clone_cells"
+        WHERE row_id IN (
+          SELECT id FROM "airtable-clone_rows"
+          WHERE table_id = ${tableId}
+        )
+        OR column_id IN (
+          SELECT id FROM "airtable-clone_columns"
+          WHERE table_id = ${tableId}
+        );
+      `);
+
+      // Delete rows
+      console.log(`[${Date.now() - startTime}ms] Deleting rows`);
+      await db.execute(sql`
+        DELETE FROM "airtable-clone_rows"
+        WHERE table_id = ${tableId};
+      `);
+
+      // Delete columns
+      console.log(`[${Date.now() - startTime}ms] Deleting columns`);
+      await db.execute(sql`
+        DELETE FROM "airtable-clone_columns"
+        WHERE table_id = ${tableId};
+      `);
+
+      // Finally delete the table
+      console.log(`[${Date.now() - startTime}ms] Deleting table`);
+      const [deletedTable] = await db
+        .delete(tables)
+        .where(eq(tables.id, tableId))
+        .returning();
+
+      if (!deletedTable) {
+        throw new Error("Table not found during deletion");
+      }
+
+      console.log(`[${Date.now() - startTime}ms] All deletions completed`);
+      console.log(`[${Date.now() - startTime}ms] Operation complete`);
+
+      return { success: true };
+    } catch (deleteError) {
+      console.error(
+        `[${Date.now() - startTime}ms] Deletion failed:`,
+        deleteError,
       );
-    `);
-
-    // Delete view sorts
-    console.log(`[${Date.now() - startTime}ms] Deleting view sorts`);
-    await db.execute(sql`
-      DELETE FROM "airtable-clone_view_sorts"
-      WHERE view_id IN (
-        SELECT id FROM "airtable-clone_views"
-        WHERE table_id = ${tableId}
-      );
-    `);
-
-    // Delete views
-    console.log(`[${Date.now() - startTime}ms] Deleting views`);
-    await db.execute(sql`
-      DELETE FROM "airtable-clone_views"
-      WHERE table_id = ${tableId};
-    `);
-
-    // Delete cells
-    console.log(`[${Date.now() - startTime}ms] Deleting cells`);
-    await db.execute(sql`
-      DELETE FROM "airtable-clone_cells"
-      WHERE row_id IN (
-        SELECT id FROM "airtable-clone_rows"
-        WHERE table_id = ${tableId}
-      )
-      OR column_id IN (
-        SELECT id FROM "airtable-clone_columns"
-        WHERE table_id = ${tableId}
-      );
-    `);
-
-    // Delete rows
-    console.log(`[${Date.now() - startTime}ms] Deleting rows`);
-    await db.execute(sql`
-      DELETE FROM "airtable-clone_rows"
-      WHERE table_id = ${tableId};
-    `);
-
-    // Delete columns
-    console.log(`[${Date.now() - startTime}ms] Deleting columns`);
-    await db.execute(sql`
-      DELETE FROM "airtable-clone_columns"
-      WHERE table_id = ${tableId};
-    `);
-
-    // Finally delete the table
-    console.log(`[${Date.now() - startTime}ms] Deleting table`);
-    const [deletedTable] = await db
-      .delete(tables)
-      .where(eq(tables.id, tableId))
-      .returning();
-
-    if (!deletedTable) {
-      throw new Error("Table not found during deletion");
+      throw deleteError;
     }
-
-    console.log(`[${Date.now() - startTime}ms] All deletions completed`);
-
-    console.log(`[${Date.now() - startTime}ms] Operation complete`);
-
-    return { success: true };
   } catch (error) {
     console.error(`[${Date.now() - startTime}ms] Operation failed:`, error);
     return {
